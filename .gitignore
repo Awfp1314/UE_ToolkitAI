@@ -1,0 +1,57 @@
+# Python 编译文件
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# 虚拟环境
+venv/
+env/
+ENV/
+.venv
+
+# IDE 配置
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# 操作系统文件
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# 日志文件
+*.log
+logs/
+
+# 临时文件
+*.tmp
+*.temp
+temp/
+tmp/
+tempCodeRunnerFile.py
+
+# 构建输出
+build/
+dist/
+*.spec
+*.exe
+
+# 用户数据（不提交用户配置和数据）
+user_data/
+
+# 测试覆盖率
+.coverage
+htmlcov/
+.pytest_cache/
+
+# PyInstaller
+*.manifest
+*.spec
+
+# 备份文件
+*.bak
+backup/
+

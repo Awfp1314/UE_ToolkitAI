@@ -1,0 +1,12 @@
+{
+  "_version": "1.0.0",
+  "app_name": "UE Toolkit",
+  "debug": false,
+  "log_level": "INFO",
+  "auto_check_update": true,
+  "language": "zh_CN",
+  "github_token": "",
+  "gitee_token": "",
+  "embedding_model_type": "bge-small",
+  "embedding_model_path": ""
+}

@@ -1,0 +1,327 @@
+/* ===== 主窗口 ===== */
+QMainWindow {
+    background: transparent;
+}
+
+/* ===== 主容器（圆角 + 统一边框） ===== */
+#MainContainer {
+    background: qlineargradient(
+        x1:0, y1:0, x2:1, y2:1,
+        stop:0 ${bg_gradient_start},
+        stop:1 ${bg_gradient_end}
+    );
+    border: 1px solid ${border_primary};
+    border-radius: 16px;
+}
+
+/* ===== 标题栏（现代化，极简风格，顶部圆角） ===== */
+#TitleBar {
+    background: ${bg_secondary};
+    border: none;
+    border-top-left-radius: 16px;
+    border-top-right-radius: 16px;
+    border-bottom: 1px solid ${border_tertiary};
+}
+
+/* ===== 标题栏标签（程序名称+版本号） ===== */
+#TitleBarLabel {
+    font-size: 13px;
+    font-weight: 500;
+    background: transparent;
+}
+
+/* ===== Logo图标后备样式 ===== */
+#LogoIconFallback {
+    font-size: 20px;
+    background: transparent;
+    color: ${primary};
+}
+
+/* ===== 窗口控制按钮（现代化设计） ===== */
+#WindowButton {
+    background: transparent;
+    border: none;
+    border-radius: 6px;
+    color: ${text_secondary};
+    font-size: 14px;
+    font-weight: 300;
+}
+
+#WindowButton:hover {
+    background: ${window_button_hover};
+    border-radius: 6px;
+    color: ${text_primary};
+}
+
+/* 禁用的窗口按钮 */
+#WindowButtonDisabled {
+    background: transparent;
+    border: none;
+    border-radius: 6px;
+    color: ${text_disabled};
+    font-size: 14px;
+    font-weight: 300;
+}
+
+#WindowButtonDisabled:disabled {
+    background: transparent;
+    color: ${text_very_disabled};
+}
+
+#CloseButton {
+    background: transparent;
+    border: none;
+    border-radius: 6px;
+    color: ${text_secondary};
+    font-size: 15px;
+    font-weight: 300;
+}
+
+#CloseButton:hover {
+    background: ${close_button_hover};
+    border-radius: 6px;
+    color: ${text_primary};
+}
+
+/* ===== 左侧导航面板 - 深色渐变背景 + 右侧分隔线 ===== */
+#LeftPanel {
+    background: qlineargradient(
+        x1:0, y1:0, x2:0, y2:1,
+        stop:0 ${sidebar_gradient_start},
+        stop:0.5 ${sidebar_gradient_mid},
+        stop:1 ${sidebar_gradient_end}
+    );
+    border: none;
+    border-bottom-left-radius: 16px;
+    border-left: 1px solid ${border_secondary};
+    border-right: 2px solid ${border_quaternary};
+    border-bottom: 1px solid ${border_secondary};
+}
+
+/* ===== Logo容器 ===== */
+#LogoContainer {
+    background: transparent;
+}
+
+/* ===== Logo文字 ===== */
+#LogoText {
+    color: qlineargradient(
+        x1:0, y1:0, x2:0, y2:1,
+        stop:0 ${logo_gradient_start},
+        stop:1 ${logo_gradient_end}
+    );
+    font-size: 15px;
+    font-weight: 600;
+    letter-spacing: 1px;
+    line-height: 1.6;
+    background: transparent;
+}
+
+/* ===== 导航按钮容器 ===== */
+#NavContainer {
+    background: transparent;
+}
+
+#Separator {
+    background: qlineargradient(
+        x1:0, y1:0, x2:1, y2:0,
+        stop:0 ${separator_gradient_start},
+        stop:0.5 ${separator_gradient_mid},
+        stop:1 ${separator_gradient_end}
+    );
+    border: none;
+}
+
+/* ===== 导航按钮 - 现代化高级设计 ===== */
+#NavTextButton {
+    background: transparent;
+    border: none;
+    border-radius: 10px;
+    color: ${text_tertiary};
+    font-size: 14px;
+    font-weight: 500;
+    text-align: left;
+    padding-left: 20px;
+    letter-spacing: 0.3px;
+}
+
+/* 悬停效果 - 柔和的发光渐变 */
+#NavTextButton:hover {
+    background: qlineargradient(
+        x1:0, y1:0, x2:1, y2:0,
+        stop:0 ${nav_hover_gradient_start},
+        stop:0.5 ${nav_hover_gradient_mid},
+        stop:1 ${nav_hover_gradient_end}
+    );
+    border: 1px solid ${nav_border_hover};
+    border-radius: 10px;
+    color: ${text_hover};
+}
+
+/* 选中状态 - 整个按钮高亮 */
+#NavTextButton:checked {
+    background: qlineargradient(
+        x1:0, y1:0, x2:1, y2:0,
+        stop:0 ${nav_checked_gradient_start},
+        stop:0.5 ${nav_checked_gradient_mid},
+        stop:1 ${nav_checked_gradient_end}
+    );
+    border: 1px solid ${nav_border_checked};
+    border-radius: 10px;
+    color: ${text_primary};
+    font-weight: 600;
+    letter-spacing: 0.5px;
+}
+
+/* 选中状态悬停 - 增强的高亮效果 */
+#NavTextButton:checked:hover {
+    background: qlineargradient(
+        x1:0, y1:0, x2:1, y2:0,
+        stop:0 ${nav_checked_hover_gradient_start},
+        stop:0.5 ${nav_checked_hover_gradient_mid},
+        stop:1 ${nav_checked_hover_gradient_end}
+    );
+    border: 1px solid ${nav_border_checked_hover};
+    color: ${text_primary};
+}
+
+/* 按下效果 */
+#NavTextButton:pressed {
+    background: qlineargradient(
+        x1:0, y1:0, x2:1, y2:0,
+        stop:0 ${nav_pressed_gradient_start},
+        stop:1 ${nav_pressed_gradient_end}
+    );
+    border: 1px solid ${nav_border_pressed};
+}
+
+/* ===== 右侧面板（渐变背景 + 右下圆角） ===== */
+#RightPanel {
+    background: transparent;
+    border-bottom-right-radius: 16px;
+    border-right: 1px solid ${border_secondary};
+    border-bottom: 1px solid ${border_secondary};
+}
+
+/* ===== 标题容器（底部边框） ===== */
+#TitleContainer {
+    background: transparent;
+    border-bottom: 1px solid ${border_secondary};
+}
+
+/* ===== 副标题（优化：更突出的主标题） ===== */
+#SubTitle {
+    color: ${text_primary};
+    font-size: 20px;
+    font-weight: 600;
+    letter-spacing: 0.8px;
+    background: transparent;
+}
+
+/* ===== 主题切换按钮（右侧标题区） ===== */
+#ThemeToggleButton {
+    background: transparent;
+    border: none;
+    border-radius: 8px;
+    color: ${text_secondary};
+    font-size: 18px;
+    font-weight: 300;
+    padding: 8px;
+    outline: none;
+}
+
+#ThemeToggleButton:hover {
+    background: ${bg_hover};
+    color: ${text_primary};
+}
+
+#ThemeToggleButton:pressed {
+    background: ${bg_active};
+    padding-top: 9px;
+    padding-bottom: 7px;
+}
+
+#ThemeToggleButton:focus {
+    outline: none;
+}
+
+/* ===== 设置图标按钮（右侧标题区） ===== */
+#SettingsIconButton {
+    background: transparent;
+    border: none;
+    border-radius: 8px;
+    color: ${text_secondary};
+    font-size: 18px;
+    font-weight: 300;
+    padding: 8px;
+    outline: none;
+}
+
+#SettingsIconButton:hover {
+    background: ${bg_hover};
+    color: ${text_primary};
+}
+
+#SettingsIconButton:pressed {
+    background: ${bg_active};
+    padding-top: 9px;
+    padding-bottom: 7px;
+}
+
+#SettingsIconButton:focus {
+    outline: none;
+}
+
+/* ===== 内容堆栈 ===== */
+#ContentStack {
+    background: transparent;
+}
+
+/* ===== 状态标签（优化：醒目标签） ===== */
+#StatusTag {
+    color: ${status_tag_color};
+    font-size: 12px;
+    font-weight: 500;
+    background: ${status_tag_bg};
+    padding: 5px 16px;
+    border-radius: 14px;
+    border: 1px solid ${status_tag_border};
+    letter-spacing: 1px;
+}
+
+/* ===== 占位页面元素 - 深色 ===== */
+#PlaceholderPage {
+    background: transparent;
+}
+
+#PlaceholderIcon {
+    font-size: 80px;
+    background: transparent;
+}
+
+#PlaceholderTitle {
+    color: ${text_primary};
+    font-size: 36px;
+    font-weight: 300;
+    letter-spacing: 2px;
+    background: transparent;
+}
+
+#PlaceholderDesc {
+    color: ${text_quaternary};
+    font-size: 14px;
+    font-weight: 300;
+    letter-spacing: 1px;
+    background: transparent;
+}
+
+#DotsContainer {
+    background: transparent;
+}
+
+#ProgressDot {
+    color: ${progress_dot_color};
+    font-size: 24px;
+    background: transparent;
+}
+

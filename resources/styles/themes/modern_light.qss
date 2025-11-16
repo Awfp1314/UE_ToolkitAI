@@ -1,0 +1,982 @@
+
+/* ===== base.qss ===== */
+
+/* ========================================
+   基础样式 - Base Styles
+   ======================================== */
+
+/* ===== 全局重置 ===== */
+* {
+    outline: none;
+}
+
+/* ===== 默认字体 ===== */
+QWidget {
+    font-family: "Microsoft YaHei UI", "Segoe UI", sans-serif;
+    font-size: 14px;
+}
+
+
+
+/* ===== components.qss ===== */
+
+/* ========================================
+   通用组件样式 - Common Components
+   ======================================== */
+
+/* 此文件用于定义通用组件样式（按钮、输入框、滚动条等）
+   目前主窗口样式已在 widgets/main_window.qss 中定义
+   未来可在此添加更多通用组件样式 */
+
+
+
+
+/* ===== confirm_dialog.qss ===== */
+
+/* ===== 确认对话框样式 ===== */
+
+/* 对话框本身 */
+#ConfirmDialog {
+    background-color: #f8f8f8;
+    border: 1px solid rgba(0, 0, 0, 0.2);
+    border-radius: 8px;
+}
+
+/* 消息文本 */
+#ConfirmDialogMessage {
+    color: #1a1a1a;
+    font-size: 15px;
+    font-weight: bold;
+    padding: 10px 5px;
+}
+
+/* 详细信息文本 */
+#ConfirmDialogDetails {
+    color: rgba(0, 0, 0, 0.7);
+    font-size: 12px;
+    padding: 10px;
+    background-color: #ffffff;
+    border-radius: 4px;
+    border: 1px solid rgba(0, 0, 0, 0.2);
+}
+
+/* 确认按钮 */
+#ConfirmDialogOkButton {
+    background-color: #4a9eff;
+    color: white;
+    border: none;
+    padding: 10px 28px;
+    border-radius: 5px;
+    font-size: 13px;
+    min-width: 80px;
+    font-weight: bold;
+}
+
+#ConfirmDialogOkButton:hover {
+    background-color: #5aa9ff;
+}
+
+#ConfirmDialogOkButton:pressed {
+    background-color: #3a8eef;
+}
+
+/* 取消按钮 */
+#ConfirmDialogCancelButton {
+    background-color: #f0f0f0;
+    color: #1a1a1a;
+    border: none;
+    padding: 10px 28px;
+    border-radius: 5px;
+    font-size: 13px;
+    min-width: 80px;
+    font-weight: bold;
+}
+
+#ConfirmDialogCancelButton:hover {
+    background-color: rgba(0, 0, 0, 0.05);
+}
+
+#ConfirmDialogCancelButton:pressed {
+    background-color: rgba(0, 0, 0, 0.1);
+}
+
+
+
+/* ===== main_window.qss ===== */
+
+/* ===== 主窗口 ===== */
+QMainWindow {
+    background: transparent;
+}
+
+/* ===== 主容器（圆角 + 统一边框） ===== */
+#MainContainer {
+    background: qlineargradient(
+        x1:0, y1:0, x2:1, y2:1,
+        stop:0 #f5f5f5,
+        stop:1 #e8e8e8
+    );
+    border: 1px solid rgba(0, 0, 0, 0.2);
+    border-radius: 16px;
+}
+
+/* ===== 标题栏（现代化，极简风格，顶部圆角） ===== */
+#TitleBar {
+    background: #f8f8f8;
+    border: none;
+    border-top-left-radius: 16px;
+    border-top-right-radius: 16px;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+/* ===== 标题栏标签（程序名称+版本号） ===== */
+#TitleBarLabel {
+    font-size: 13px;
+    font-weight: 500;
+    background: transparent;
+}
+
+/* ===== Logo图标后备样式 ===== */
+#LogoIconFallback {
+    font-size: 20px;
+    background: transparent;
+    color: #4a9eff;
+}
+
+/* ===== 窗口控制按钮（现代化设计） ===== */
+#WindowButton {
+    background: transparent;
+    border: none;
+    border-radius: 6px;
+    color: rgba(0, 0, 0, 0.7);
+    font-size: 14px;
+    font-weight: 300;
+}
+
+#WindowButton:hover {
+    background: rgba(0, 0, 0, 0.15);
+    border-radius: 6px;
+    color: #1a1a1a;
+}
+
+/* 禁用的窗口按钮 */
+#WindowButtonDisabled {
+    background: transparent;
+    border: none;
+    border-radius: 6px;
+    color: rgba(0, 0, 0, 0.3);
+    font-size: 14px;
+    font-weight: 300;
+}
+
+#WindowButtonDisabled:disabled {
+    background: transparent;
+    color: rgba(0, 0, 0, 0.2);
+}
+
+#CloseButton {
+    background: transparent;
+    border: none;
+    border-radius: 6px;
+    color: rgba(0, 0, 0, 0.7);
+    font-size: 15px;
+    font-weight: 300;
+}
+
+#CloseButton:hover {
+    background: #e81123;
+    border-radius: 6px;
+    color: #1a1a1a;
+}
+
+/* ===== 左侧导航面板 - 深色渐变背景 + 右侧分隔线 ===== */
+#LeftPanel {
+    background: qlineargradient(
+        x1:0, y1:0, x2:0, y2:1,
+        stop:0 #fafafa,
+        stop:0.5 #f5f5f5,
+        stop:1 #f0f0f0
+    );
+    border: none;
+    border-bottom-left-radius: 16px;
+    border-left: 1px solid rgba(0, 0, 0, 0.15);
+    border-right: 2px solid rgba(0, 0, 0, 0.08);
+    border-bottom: 1px solid rgba(0, 0, 0, 0.15);
+}
+
+/* ===== Logo容器 ===== */
+#LogoContainer {
+    background: transparent;
+}
+
+/* ===== Logo文字 ===== */
+#LogoText {
+    color: qlineargradient(
+        x1:0, y1:0, x2:0, y2:1,
+        stop:0 #1a1a1a,
+        stop:1 rgba(0, 0, 0, 0.7)
+    );
+    font-size: 15px;
+    font-weight: 600;
+    letter-spacing: 1px;
+    line-height: 1.6;
+    background: transparent;
+}
+
+/* ===== 导航按钮容器 ===== */
+#NavContainer {
+    background: transparent;
+}
+
+#Separator {
+    background: qlineargradient(
+        x1:0, y1:0, x2:1, y2:0,
+        stop:0 transparent,
+        stop:0.5 rgba(0, 0, 0, 0.15),
+        stop:1 transparent
+    );
+    border: none;
+}
+
+/* ===== 导航按钮 - 现代化高级设计 ===== */
+#NavTextButton {
+    background: transparent;
+    border: none;
+    border-radius: 10px;
+    color: rgba(0, 0, 0, 0.55);
+    font-size: 14px;
+    font-weight: 500;
+    text-align: left;
+    padding-left: 20px;
+    letter-spacing: 0.3px;
+}
+
+/* 悬停效果 - 柔和的发光渐变 */
+#NavTextButton:hover {
+    background: qlineargradient(
+        x1:0, y1:0, x2:1, y2:0,
+        stop:0 rgba(74, 158, 255, 0.15),
+        stop:0.5 rgba(74, 158, 255, 0.08),
+        stop:1 rgba(74, 158, 255, 0.03)
+    );
+    border: 1px solid rgba(74, 158, 255, 0.3);
+    border-radius: 10px;
+    color: rgba(0, 0, 0, 0.95);
+}
+
+/* 选中状态 - 整个按钮高亮 */
+#NavTextButton:checked {
+    background: qlineargradient(
+        x1:0, y1:0, x2:1, y2:0,
+        stop:0 rgba(74, 158, 255, 0.4),
+        stop:0.5 rgba(74, 158, 255, 0.25),
+        stop:1 rgba(74, 158, 255, 0.15)
+    );
+    border: 1px solid rgba(74, 158, 255, 0.6);
+    border-radius: 10px;
+    color: #1a1a1a;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+}
+
+/* 选中状态悬停 - 增强的高亮效果 */
+#NavTextButton:checked:hover {
+    background: qlineargradient(
+        x1:0, y1:0, x2:1, y2:0,
+        stop:0 rgba(74, 158, 255, 0.5),
+        stop:0.5 rgba(74, 158, 255, 0.35),
+        stop:1 rgba(74, 158, 255, 0.2)
+    );
+    border: 1px solid rgba(74, 158, 255, 0.8);
+    color: #1a1a1a;
+}
+
+/* 按下效果 */
+#NavTextButton:pressed {
+    background: qlineargradient(
+        x1:0, y1:0, x2:1, y2:0,
+        stop:0 rgba(74, 158, 255, 0.3),
+        stop:1 rgba(74, 158, 255, 0.15)
+    );
+    border: 1px solid rgba(74, 158, 255, 0.5);
+}
+
+/* ===== 右侧面板（渐变背景 + 右下圆角） ===== */
+#RightPanel {
+    background: transparent;
+    border-bottom-right-radius: 16px;
+    border-right: 1px solid rgba(0, 0, 0, 0.15);
+    border-bottom: 1px solid rgba(0, 0, 0, 0.15);
+}
+
+/* ===== 标题容器（底部边框） ===== */
+#TitleContainer {
+    background: transparent;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.15);
+}
+
+/* ===== 副标题（优化：更突出的主标题） ===== */
+#SubTitle {
+    color: #1a1a1a;
+    font-size: 20px;
+    font-weight: 600;
+    letter-spacing: 0.8px;
+    background: transparent;
+}
+
+/* ===== 主题切换按钮（右侧标题区） ===== */
+#ThemeToggleButton {
+    background: transparent;
+    border: none;
+    border-radius: 8px;
+    color: rgba(0, 0, 0, 0.7);
+    font-size: 18px;
+    font-weight: 300;
+    padding: 8px;
+    outline: none;
+}
+
+#ThemeToggleButton:hover {
+    background: rgba(0, 0, 0, 0.05);
+    color: #1a1a1a;
+}
+
+#ThemeToggleButton:pressed {
+    background: rgba(0, 0, 0, 0.1);
+    padding-top: 9px;
+    padding-bottom: 7px;
+}
+
+#ThemeToggleButton:focus {
+    outline: none;
+}
+
+/* ===== 设置图标按钮（右侧标题区） ===== */
+#SettingsIconButton {
+    background: transparent;
+    border: none;
+    border-radius: 8px;
+    color: rgba(0, 0, 0, 0.7);
+    font-size: 18px;
+    font-weight: 300;
+    padding: 8px;
+    outline: none;
+}
+
+#SettingsIconButton:hover {
+    background: rgba(0, 0, 0, 0.05);
+    color: #1a1a1a;
+}
+
+#SettingsIconButton:pressed {
+    background: rgba(0, 0, 0, 0.1);
+    padding-top: 9px;
+    padding-bottom: 7px;
+}
+
+#SettingsIconButton:focus {
+    outline: none;
+}
+
+/* ===== 内容堆栈 ===== */
+#ContentStack {
+    background: transparent;
+}
+
+/* ===== 状态标签（优化：醒目标签） ===== */
+#StatusTag {
+    color: rgba(74, 158, 255, 1);
+    font-size: 12px;
+    font-weight: 500;
+    background: rgba(74, 158, 255, 0.15);
+    padding: 5px 16px;
+    border-radius: 14px;
+    border: 1px solid rgba(74, 158, 255, 0.4);
+    letter-spacing: 1px;
+}
+
+/* ===== 占位页面元素 - 深色 ===== */
+#PlaceholderPage {
+    background: transparent;
+}
+
+#PlaceholderIcon {
+    font-size: 80px;
+    background: transparent;
+}
+
+#PlaceholderTitle {
+    color: #1a1a1a;
+    font-size: 36px;
+    font-weight: 300;
+    letter-spacing: 2px;
+    background: transparent;
+}
+
+#PlaceholderDesc {
+    color: rgba(0, 0, 0, 0.5);
+    font-size: 14px;
+    font-weight: 300;
+    letter-spacing: 1px;
+    background: transparent;
+}
+
+#DotsContainer {
+    background: transparent;
+}
+
+#ProgressDot {
+    color: rgba(74, 158, 255, 0.6);
+    font-size: 24px;
+    background: transparent;
+}
+
+
+
+/* ===== project_selector_dialog.qss ===== */
+
+/* ===== 预览工程选择对话框 ===== */
+
+/* 对话框本身 - 透明背景 */
+#ProjectSelectorDialog {
+    background-color: transparent;
+}
+
+/* 容器 - 主要内容区域 */
+#ProjectSelectorContainer {
+    background-color: #f8f8f8;
+    border: 2px solid rgba(0, 0, 0, 0.2);
+    border-radius: 8px;
+}
+
+/* ===== 标题栏 ===== */
+#ProjectSelectorTitleBar {
+    background-color: #f0f0f0;
+    border-top: 1px solid rgba(0, 0, 0, 0.2);
+    border-bottom: 2px solid #909090;
+    border-radius: 8px 8px 0px 0px;
+    padding: 0px;
+}
+
+#ProjectSelectorTitleLabel {
+    color: #1a1a1a;
+    font-size: 14px;
+    font-weight: bold;
+    padding-left: 15px;
+    background-color: transparent;
+    border: none;
+}
+
+/* ===== 内容区域 ===== */
+#ProjectSelectorDialog QLabel {
+    color: #1a1a1a;
+    font-size: 14px;
+    padding: 2px 0px;
+}
+
+/* ===== 下拉框 ===== */
+#ProjectSelectorCombo {
+    background-color: #f0f0f0;
+    border: 1px solid rgba(0, 0, 0, 0.2);
+    border-radius: 4px;
+    padding: 8px 12px;
+    color: #1a1a1a;
+    font-size: 13px;
+    min-height: 32px;
+}
+
+#ProjectSelectorCombo:focus {
+    border: 1px solid rgba(0, 0, 0, 0.2);
+    outline: none;
+}
+
+/* 隐藏下拉箭头 */
+#ProjectSelectorCombo::drop-down {
+    border: none;
+    width: 0px;
+}
+
+#ProjectSelectorCombo::down-arrow {
+    image: none;
+    width: 0px;
+    height: 0px;
+}
+
+/* 下拉列表 */
+#ProjectSelectorCombo QAbstractItemView {
+    background-color: #f0f0f0;
+    border: 1px solid rgba(0, 0, 0, 0.2);
+    border-radius: 4px;
+    selection-background-color: #4a9eff;
+    selection-color: white;
+    color: #1a1a1a;
+    outline: none;
+    padding: 2px;
+    show-decoration-selected: 1;
+}
+
+/* 下拉列表项 */
+#ProjectSelectorCombo QAbstractItemView::item {
+    min-height: 28px;
+    padding: 4px 10px;
+    border: none;
+    background-color: transparent;
+}
+
+#ProjectSelectorCombo QAbstractItemView::item:selected {
+    background-color: #4a9eff;
+    color: white;
+}
+
+#ProjectSelectorCombo QAbstractItemView::item:hover {
+    background-color: #e8e8e8;
+    color: #1a1a1a;
+}
+
+/* ===== 按钮 ===== */
+#ProjectSelectorDialog QPushButton {
+    background-color: #f0f0f0;
+    color: #1a1a1a;
+    border: 1px solid rgba(0, 0, 0, 0.2);
+    padding: 6px 20px;
+    border-radius: 4px;
+    font-size: 13px;
+    min-width: 70px;
+    min-height: 28px;
+    font-weight: 500;
+}
+
+#ProjectSelectorDialog QPushButton:hover {
+    background-color: rgba(0, 0, 0, 0.05);
+}
+
+/* 确定按钮 */
+#ProjectSelectorOkBtn {
+    background-color: #4a9eff;
+    color: white;
+    border: none;
+    font-weight: bold;
+}
+
+#ProjectSelectorOkBtn:hover {
+    background-color: #5aa9ff;
+}
+
+#ProjectSelectorOkBtn:pressed {
+    background-color: #3a8eef;
+}
+
+
+
+/* ===== splash_screen.qss ===== */
+
+/* ===== 启动加载界面样式 ===== */
+
+/* ----- 主容器 ----- */
+#SplashContainer {
+    background: qlineargradient(
+        x1:0, y1:0, x2:0, y2:1,
+        stop:0 #ffffff,
+        stop:0.5 #f5f5f5,
+        stop:1 #e8e8e8
+    );
+    border: none;  /* 移除边框 */
+    border-radius: 16px;
+}
+
+/* ----- 标题 ----- */
+#SplashTitle {
+    color: #1a1a1a;
+    font-size: 26px;
+    font-weight: bold;
+    background-color: transparent;
+    letter-spacing: 1px;
+}
+
+/* ----- 图标 ----- */
+#SplashIcon {
+    background-color: transparent;
+    font-size: 56px;  /* emoji后备方案的字体大小 */
+}
+
+/* ----- 加载消息 ----- */
+#SplashMessage {
+    color: #666666;
+    font-size: 13px;
+    background-color: transparent;
+}
+
+/* ----- 百分比标签（已废弃，保留以防万一） ----- */
+#SplashPercentage {
+    color: #4a9eff;
+    font-size: 14px;
+    font-weight: 600;
+    background-color: transparent;
+}
+
+/* ----- 版本号 ----- */
+#SplashVersion {
+    color: #999999;
+    font-size: 11px;
+    background-color: transparent;
+}
+
+/* ----- 进度条（不确定模式） ----- */
+#SplashProgressBar {
+    border: none;
+    border-radius: 2px;
+    background-color: rgba(200, 200, 200, 0.5);
+}
+
+#SplashProgressBar::chunk {
+    background-color: #5aa9ff;  /* 使用纯色，避免渐变产生分段效果 */
+    border-radius: 2px;
+    width: 120px;  /* 适中的chunk宽度，平衡流畅度和连续性 */
+}
+
+
+
+
+/* ===== asset_manager\asset_card.qss ===== */
+
+/* ========================================
+   现代化资产卡片样式
+   从 modern_asset_card.py 迁移的内联样式
+   ======================================== */
+
+/* ===== 标准资产卡片 (ModernAssetCard) ===== */
+#AssetCard {
+    background: transparent;
+    border: none;
+}
+
+#AssetCard:hover {
+    background: transparent;
+    border: none;
+}
+
+/* ===== 紧凑资产卡片 (CompactAssetCard) ===== */
+#CompactAssetCard {
+    background: transparent;
+    border: none;
+}
+
+#CompactAssetCard:hover {
+    background: transparent;
+    border: none;
+}
+
+/* ===== 缩略图容器 ===== */
+#AssetCard #ThumbnailContainer,
+#CompactAssetCard #ThumbnailContainer {
+    background-color: transparent;
+}
+
+/* ===== 分类标签 ===== */
+#AssetCard #ThumbnailContainer #CategoryLabel {
+    color: #b0b0b0;
+    font-size: 12px;
+    font-weight: 400;
+    background-color: #000000;
+    border-radius: 4px;
+    padding: 5px 12px;
+}
+
+/* ===== 资产类型图标 ===== */
+#AssetCard #TypeLabel {
+    font-size: 18px;
+    background-color: transparent;
+    border: none;
+    padding: 0px;
+}
+
+#CompactAssetCard #TypeLabel {
+    font-size: 16px;
+    background-color: transparent;
+    border: none;
+    padding: 0px;
+}
+
+/* ===== 内容区域 ===== */
+#AssetCard #ContentWidget,
+#CompactAssetCard #ContentWidget {
+    background-color: transparent;
+}
+
+/* ===== 资产名称 ===== */
+#AssetCard #NameLabel {
+    color: #1a1a1a;
+    font-size: 14px;
+    font-weight: 700;
+    background-color: transparent;
+}
+
+#CompactAssetCard #NameLabel {
+    color: #1a1a1a;
+    font-size: 12px;
+    font-weight: 700;
+    background-color: transparent;
+}
+
+/* ===== 渐变分隔线 ===== */
+#AssetCard #Separator {
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+        stop:0 transparent,
+        stop:0.2 rgba(74, 158, 255, 0.4),
+        stop:0.5 rgba(74, 158, 255, 0.6),
+        stop:0.8 rgba(74, 158, 255, 0.4),
+        stop:1 transparent);
+    border: none;
+}
+
+/* ===== 信息标签（标题） ===== */
+#AssetCard #InfoTitleLabel {
+    color: #999999;
+    font-size: 9px;
+    font-weight: 400;
+    background-color: transparent;
+}
+
+/* ===== 信息标签（值） ===== */
+#AssetCard #InfoValueLabel {
+    color: #1a1a1a;
+    font-size: 9px;
+    font-weight: 600;
+    background-color: transparent;
+}
+
+/* ===== 预览按钮（标准卡片） ===== */
+#AssetCard #PreviewButton {
+    background: rgba(0, 0, 0, 0.08);
+    color: rgba(0, 0, 0, 0.8);
+    border: none;
+    border-radius: 10px;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 8px 16px;
+    outline: none;
+}
+
+#AssetCard #PreviewButton:hover {
+    background: rgba(0, 0, 0, 0.15);
+    border: none;
+    color: #1a1a1a;
+}
+
+#AssetCard #PreviewButton:pressed {
+    background: rgba(0, 0, 0, 0.20);
+    border: none;
+    padding-top: 9px;
+    padding-bottom: 7px;
+}
+
+#AssetCard #PreviewButton:focus {
+    outline: none;
+}
+
+/* ===== 预览按钮（紧凑卡片） ===== */
+#CompactAssetCard #PreviewButton {
+    background: rgba(0, 0, 0, 0.08);
+    color: rgba(0, 0, 0, 0.8);
+    border: none;
+    border-radius: 8px;
+    font-size: 10px;
+    font-weight: 600;
+    padding: 6px 12px;
+    outline: none;
+}
+
+#CompactAssetCard #PreviewButton:hover {
+    background: rgba(0, 0, 0, 0.15);
+    border: none;
+    color: #1a1a1a;
+}
+
+#CompactAssetCard #PreviewButton:pressed {
+    background: rgba(0, 0, 0, 0.20);
+    border: none;
+    padding-top: 7px;
+    padding-bottom: 5px;
+}
+
+#CompactAssetCard #PreviewButton:focus {
+    outline: none;
+}
+
+/* ===== 导入按钮（标准卡片） ===== */
+#AssetCard #ImportButton {
+    background: rgba(0, 0, 0, 0.08);
+    color: rgba(0, 0, 0, 0.8);
+    border: none;
+    border-radius: 10px;
+    font-size: 16px;
+    font-weight: 400;
+    padding: 0px;
+    outline: none;
+}
+
+#AssetCard #ImportButton:hover {
+    background: rgba(0, 0, 0, 0.15);
+    border: none;
+    color: #1a1a1a;
+}
+
+#AssetCard #ImportButton:pressed {
+    background: rgba(0, 0, 0, 0.20);
+    border: none;
+}
+
+#AssetCard #ImportButton:focus {
+    outline: none;
+}
+
+/* ===== 导入按钮（紧凑卡片） ===== */
+#CompactAssetCard #ImportButton {
+    background: rgba(0, 0, 0, 0.08);
+    color: rgba(0, 0, 0, 0.8);
+    border: none;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 400;
+    padding: 0px;
+    outline: none;
+}
+
+#CompactAssetCard #ImportButton:hover {
+    background: rgba(0, 0, 0, 0.15);
+    border: none;
+    color: #1a1a1a;
+}
+
+#CompactAssetCard #ImportButton:pressed {
+    background: rgba(0, 0, 0, 0.20);
+    border: none;
+}
+
+#CompactAssetCard #ImportButton:focus {
+    outline: none;
+}
+
+/* ===== 右键菜单 ===== */
+QMenu#AssetCardMenu {
+    background-color: #ffffff;
+    border: 1px solid rgba(0, 0, 0, 0.15);
+    border-radius: 8px;
+    padding: 4px;
+    color: rgba(0, 0, 0, 0.85);
+    font-size: 12px;
+}
+
+QMenu#AssetCardMenu::item {
+    background-color: transparent;
+    padding: 8px 16px;
+    border-radius: 4px;
+    margin: 1px;
+}
+
+QMenu#AssetCardMenu::item:selected {
+    background-color: rgba(0, 0, 0, 0.1);
+    border: 1px solid rgba(74, 158, 255, 0.3);
+}
+
+QMenu#AssetCardMenu::item:pressed {
+    background-color: rgba(74, 158, 255, 0.1);
+}
+
+QMenu#AssetCardMenu::separator {
+    height: 1px;
+    background-color: rgba(0, 0, 0, 0.1);
+    margin: 4px 8px;
+}
+
+
+/* ===== asset_manager\asset_manager_ui.qss ===== */
+
+/* ========================================
+   资产管理器主界面样式
+   ======================================== */
+
+/* ===== 透明容器 ===== */
+#AssetFilterArea,
+#AssetScrollContent,
+#AssetGridWidget {
+    background-color: transparent;
+}
+
+/* ===== 搜索框 ===== */
+#AssetSearchInput {
+    background-color: #ffffff;
+    border: 1px solid rgba(0, 0, 0, 0.12);
+    border-radius: 18px;
+    padding: 8px 16px;
+    color: #1a1a1a;
+    font-size: 14px;
+}
+
+#AssetSearchInput:focus {
+    background-color: #ffffff;
+    border: 1px solid rgba(74, 158, 255, 0.5);
+}
+
+#AssetSearchInput::placeholder {
+    color: rgba(0, 0, 0, 0.4);
+}
+
+/* ===== 视图切换按钮 ===== */
+#ViewToggleIconButton {
+    background: transparent;
+    color: rgba(0, 0, 0, 0.7);
+    border: none;
+    border-radius: 8px;
+    font-size: 28px;
+    font-weight: 300;
+    padding: 8px;
+    outline: none;
+}
+
+#ViewToggleIconButton:hover {
+    background: rgba(0, 0, 0, 0.05);
+    color: #1a1a1a;
+}
+
+#ViewToggleIconButton:pressed {
+    background: rgba(0, 0, 0, 0.1);
+    padding-top: 9px;
+    padding-bottom: 7px;
+}
+
+#ViewToggleIconButton:focus {
+    outline: none;
+}
+
+/* ===== 滚动区域 ===== */
+#AssetScrollArea {
+    border: none;
+    background-color: transparent;
+}
+
+#AssetScrollArea QScrollBar:vertical {
+    background: transparent;
+    width: 8px;
+    margin: 0px;
+}
+
+#AssetScrollArea QScrollBar::handle:vertical {
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: 4px;
+    min-height: 20px;
+}
+
+#AssetScrollArea QScrollBar::handle:vertical:hover {
+    background: rgba(0, 0, 0, 0.5);
+}
+
+#AssetScrollArea QScrollBar::add-line:vertical,
+#AssetScrollArea QScrollBar::sub-line:vertical {
+    height: 0px;
+}
+
+#AssetScrollArea QScrollBar::add-page:vertical,
+#AssetScrollArea QScrollBar::sub-page:vertical {
+    background: none;
+}

@@ -1,0 +1,64 @@
+/* ===== 启动加载界面样式 ===== */
+
+/* ----- 主容器 ----- */
+#SplashContainer {
+    background: qlineargradient(
+        x1:0, y1:0, x2:0, y2:1,
+        stop:0 ${splash_container_gradient_start},
+        stop:0.5 ${splash_container_gradient_mid},
+        stop:1 ${splash_container_gradient_end}
+    );
+    border: none;  /* 移除边框 */
+    border-radius: 16px;
+}
+
+/* ----- 标题 ----- */
+#SplashTitle {
+    color: ${splash_title_color};
+    font-size: 26px;
+    font-weight: bold;
+    background-color: transparent;
+    letter-spacing: 1px;
+}
+
+/* ----- 图标 ----- */
+#SplashIcon {
+    background-color: transparent;
+    font-size: 56px;  /* emoji后备方案的字体大小 */
+}
+
+/* ----- 加载消息 ----- */
+#SplashMessage {
+    color: ${splash_message_color};
+    font-size: 13px;
+    background-color: transparent;
+}
+
+/* ----- 百分比标签（已废弃，保留以防万一） ----- */
+#SplashPercentage {
+    color: ${splash_percentage_color};
+    font-size: 14px;
+    font-weight: 600;
+    background-color: transparent;
+}
+
+/* ----- 版本号 ----- */
+#SplashVersion {
+    color: ${splash_version_color};
+    font-size: 11px;
+    background-color: transparent;
+}
+
+/* ----- 进度条（不确定模式） ----- */
+#SplashProgressBar {
+    border: none;
+    border-radius: 2px;
+    background-color: ${splash_progress_bg};
+}
+
+#SplashProgressBar::chunk {
+    background-color: ${splash_progress_chunk_mid};  /* 使用纯色，避免渐变产生分段效果 */
+    border-radius: 2px;
+    width: 120px;  /* 适中的chunk宽度，平衡流畅度和连续性 */
+}
+

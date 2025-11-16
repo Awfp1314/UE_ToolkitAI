@@ -1,0 +1,335 @@
+# -*- coding: utf-8 -*-
+
+"""
+日志分析器
+读取和分析日志文件，帮助用户诊断问题
+"""
+
+from pathlib import Path
+from typing import List, Deque
+from datetime import datetime, timedelta
+from collections import deque
+from core.logger import get_logger
+from core.utils.path_utils import PathUtils
+from core.config.config_manager import ConfigManager
+
+logger = get_logger(__name__)
+
+# 文件大小限制（字节）
+MAX_FILE_SIZE_BYTES = 100 * 1024 * 1024  # 100MB
+
+
+class LogAnalyzer:
+    """日志文件分析器"""
+    
+    def __init__(self):
+        """初始化日志分析器"""
+        self.path_utils = PathUtils()
+        self.logger = logger
+        
+        # 获取日志目录
+        self.log_dir = self.path_utils.get_user_logs_dir()
+        
+        # 从配置读取最大日志行数
+        try:
+            config_manager = ConfigManager("ai_assistant")
+            config = config_manager.get_module_config()
+            self.max_log_lines = config.get('log_analyzer', {}).get('max_log_lines', 1000)
+        except Exception as e:
+            self.logger.warning(f"无法读取配置，使用默认值: {e}")
+            self.max_log_lines = 1000
+        
+        self.logger.info(f"日志分析器初始化，日志目录: {self.log_dir}, 最大读取行数: {self.max_log_lines}")
+    
+    def read_last_n_lines(self, file_path: Path, n: int = None) -> List[str]:
+        """读取文件的最后 N 行（内存优化版本）
+        
+        使用 collections.deque 限制内存占用，只保留最后 N 行
+        
+        Args:
+            file_path: 文件路径
+            n: 读取的行数，如果为 None 则使用 self.max_log_lines
+            
+        Returns:
+            List[str]: 文件的最后 N 行
+            
+        Raises:
+            FileNotFoundError: 文件不存在
+            PermissionError: 没有读取权限
+            UnicodeDecodeError: 文件编码错误
+        """
+        if n is None:
+            n = self.max_log_lines
+        
+        # 检查文件大小
+        try:
+            file_size = file_path.stat().st_size
+            if file_size > MAX_FILE_SIZE_BYTES:
+                self.logger.warning(
+                    f"文件大小 ({file_size / 1024 / 1024:.1f} MB) 超过 100MB，"
+                    f"将使用流式读取最后 {n} 行"
+                )
+        except OSError as e:
+            self.logger.error(f"无法获取文件大小: {e}")
+            raise
+        
+        # 使用 deque 限制内存占用
+        lines_deque: Deque[str] = deque(maxlen=n)
+        
+        try:
+            with open(file_path, 'r', encoding='utf-8') as f:
+                for line in f:
+                    lines_deque.append(line.rstrip('\n\r'))
+            
+            return list(lines_deque)
+        
+        except FileNotFoundError:
+            self.logger.error(f"文件不存在: {file_path}")
+            raise
+        except PermissionError:
+            self.logger.error(f"没有读取权限: {file_path}")
+            raise
+        except UnicodeDecodeError as e:
+            self.logger.error(f"文件编码错误: {e}")
+            raise
+        except Exception as e:
+            self.logger.error(f"读取文件失败: {e}")
+            raise
+    
+    def get_recent_logs(self, hours: int = 24) -> str:
+        """获取最近的日志文件列表
+        
+        Args:
+            hours: 时间范围（小时）
+            
+        Returns:
+            str: 日志文件列表
+        """
+        try:
+            if not self.log_dir.exists():
+                return "[警告] 日志目录不存在。"
+            
+            log_files = []
+            cutoff_time = datetime.now() - timedelta(hours=hours)
+            
+            for log_file in self.log_dir.glob('*.log'):
+                mtime = datetime.fromtimestamp(log_file.stat().st_mtime)
+                if mtime > cutoff_time:
+                    log_files.append({
+                        'name': log_file.name,
+                        'path': log_file,
+                        'mtime': mtime,
+                        'size': log_file.stat().st_size
+                    })
+            
+            if not log_files:
+                return f"[日志] 最近 {hours} 小时内没有新的日志文件。"
+            
+            # 按修改时间排序
+            log_files.sort(key=lambda x: x['mtime'], reverse=True)
+            
+            # 格式化输出
+            result = [f"[日志] **最近 {hours} 小时的日志文件**:\n"]
+            for log in log_files:
+                size_kb = log['size'] / 1024
+                time_str = log['mtime'].strftime('%Y-%m-%d %H:%M:%S')
+                result.append(f"  - **{log['name']}** ({size_kb:.1f} KB, {time_str})")
+            
+            return "\n".join(result)
+        
+        except Exception as e:
+            self.logger.error(f"获取日志列表失败: {e}", exc_info=True)
+            return f"[错误] 获取日志列表时出错: {str(e)}"
+    
+    def analyze_errors(self, max_lines: int = None) -> str:
+        """分析最新日志文件中的错误
+        
+        Args:
+            max_lines: 分析的最大行数（从文件末尾开始），如果为 None 则使用配置的 max_log_lines
+            
+        Returns:
+            str: 错误分析结果
+        """
+        try:
+            if not self.log_dir.exists():
+                return "[警告] 日志目录不存在。"
+            
+            # 获取最新的日志文件
+            log_files = list(self.log_dir.glob('*.log'))
+            if not log_files:
+                return "[日志] 没有找到日志文件。"
+            
+            latest_log = max(log_files, key=lambda f: f.stat().st_mtime)
+            
+            # 使用优化的读取方法
+            if max_lines is None:
+                max_lines = self.max_log_lines
+            
+            recent_lines = self.read_last_n_lines(latest_log, max_lines)
+            
+            # 查找错误和警告
+            errors = []
+            warnings = []
+            
+            for line in recent_lines:
+                line_lower = line.lower()
+                if 'error' in line_lower or '错误' in line_lower:
+                    errors.append(line)
+                elif 'warning' in line_lower or '警告' in line_lower:
+                    warnings.append(line)
+            
+            # 格式化输出
+            if not errors and not warnings:
+                return f"[成功] 最近 {len(recent_lines)} 行日志中没有发现错误或警告。\n日志文件: {latest_log.name}"
+            
+            result = [f"[日志] **日志分析结果** ({latest_log.name}, 分析了最后 {len(recent_lines)} 行)\n"]
+            
+            if errors:
+                result.append(f"[错误] **发现 {len(errors)} 个错误**:")
+                for error in errors[:10]:  # 最多显示 10 个
+                    result.append(f"  {error}")
+                if len(errors) > 10:
+                    result.append(f"  ... 还有 {len(errors) - 10} 个错误")
+            
+            if warnings:
+                result.append(f"\n[警告] **发现 {len(warnings)} 个警告**:")
+                for warning in warnings[:5]:  # 最多显示 5 个
+                    result.append(f"  {warning}")
+                if len(warnings) > 5:
+                    result.append(f"  ... 还有 {len(warnings) - 5} 个警告")
+            
+            return "\n".join(result)
+        
+        except FileNotFoundError:
+            return f"[错误] 日志文件不存在或已被删除。"
+        except PermissionError:
+            return f"[错误] 没有权限读取日志文件，请检查文件权限。"
+        except UnicodeDecodeError:
+            return f"[错误] 日志文件编码错误，无法读取。请确保文件使用 UTF-8 编码。"
+        except Exception as e:
+            self.logger.error(f"分析日志失败: {e}", exc_info=True)
+            return f"[错误] 分析日志时出错: {str(e)}"
+    
+    def search_in_logs(self, keyword: str, max_results: int = 20) -> str:
+        """在日志中搜索关键词
+        
+        Args:
+            keyword: 搜索关键词
+            max_results: 最大结果数
+            
+        Returns:
+            str: 搜索结果
+        """
+        try:
+            if not self.log_dir.exists():
+                return "[警告] 日志目录不存在。"
+            
+            # 获取最新的日志文件
+            log_files = sorted(
+                self.log_dir.glob('*.log'),
+                key=lambda f: f.stat().st_mtime,
+                reverse=True
+            )
+            
+            if not log_files:
+                return "[日志] 没有找到日志文件。"
+            
+            # 只搜索最新的日志文件
+            latest_log = log_files[0]
+            keyword_lower = keyword.lower()
+            
+            # 使用优化的读取方法
+            lines = self.read_last_n_lines(latest_log, self.max_log_lines)
+            
+            matched_lines = [
+                line for line in lines
+                if keyword_lower in line.lower()
+            ]
+            
+            if not matched_lines:
+                return f"[搜索] 在最新日志的最后 {len(lines)} 行中未找到 '{keyword}'。"
+            
+            # 格式化输出
+            result = [
+                f"[搜索] 在日志 **{latest_log.name}** 的最后 {len(lines)} 行中找到 {len(matched_lines)} 条匹配记录:\n"
+            ]
+            
+            for line in matched_lines[:max_results]:
+                result.append(f"  {line}")
+            
+            if len(matched_lines) > max_results:
+                result.append(f"\n  ... 还有 {len(matched_lines) - max_results} 条记录")
+            
+            return "\n".join(result)
+        
+        except FileNotFoundError:
+            return f"[错误] 日志文件不存在或已被删除。"
+        except PermissionError:
+            return f"[错误] 没有权限读取日志文件，请检查文件权限。"
+        except UnicodeDecodeError:
+            return f"[错误] 日志文件编码错误，无法读取。请确保文件使用 UTF-8 编码。"
+        except Exception as e:
+            self.logger.error(f"搜索日志失败: {e}", exc_info=True)
+            return f"[错误] 搜索日志时出错: {str(e)}"
+    
+    def get_log_summary(self) -> str:
+        """获取日志摘要统计
+        
+        Returns:
+            str: 日志统计信息
+        """
+        try:
+            if not self.log_dir.exists():
+                return "[警告] 日志目录不存在。"
+            
+            log_files = list(self.log_dir.glob('*.log'))
+            if not log_files:
+                return "[日志] 没有找到日志文件。"
+            
+            # 获取最新日志
+            latest_log = max(log_files, key=lambda f: f.stat().st_mtime)
+            
+            # 获取文件大小信息
+            file_size = latest_log.stat().st_size
+            file_size_mb = file_size / 1024 / 1024
+            
+            # 使用优化的读取方法（读取最后 500 行用于统计）
+            summary_lines = min(500, self.max_log_lines)
+            recent_lines = self.read_last_n_lines(latest_log, summary_lines)
+            
+            # 统计
+            info_count = sum(1 for line in recent_lines if 'INFO' in line)
+            warning_count = sum(1 for line in recent_lines if 'WARNING' in line or '警告' in line)
+            error_count = sum(1 for line in recent_lines if 'ERROR' in line or '错误' in line)
+            
+            # 格式化输出
+            result = [
+                f"[统计] **日志统计信息** ({latest_log.name})\n",
+                f"文件大小: {file_size_mb:.2f} MB",
+                f"分析行数: 最后 {len(recent_lines)} 行",
+                f"日志级别统计:",
+                f"  [INFO] {info_count}",
+                f"  [WARNING] {warning_count}",
+                f"  [ERROR] {error_count}",
+            ]
+            
+            if file_size > MAX_FILE_SIZE_BYTES:
+                result.append(f"\n[警告] 日志文件较大 ({file_size_mb:.1f} MB)，建议定期清理。")
+            
+            if error_count > 0:
+                result.append(f"\n[提示] 发现 {error_count} 个错误，建议使用 '分析错误' 查看详情。")
+            
+            return "\n".join(result)
+        
+        except FileNotFoundError:
+            return f"[错误] 日志文件不存在或已被删除。"
+        except PermissionError:
+            return f"[错误] 没有权限读取日志文件，请检查文件权限。"
+        except UnicodeDecodeError:
+            return f"[错误] 日志文件编码错误，无法读取。请确保文件使用 UTF-8 编码。"
+        except Exception as e:
+            self.logger.error(f"获取日志摘要失败: {e}", exc_info=True)
+            return f"[错误] 获取日志摘要时出错: {str(e)}"
+
+
+

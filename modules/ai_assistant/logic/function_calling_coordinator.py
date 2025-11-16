@@ -1,0 +1,442 @@
+# -*- coding: utf-8 -*-
+
+"""
+Function Calling 协调器
+实现真正的两段式 Function Calling：LLM → 工具执行 → LLM 最终回复
+支持多轮工具调用和循环限制
+"""
+
+import json
+import traceback
+import time
+from typing import Dict, List, Callable, Optional, Any
+from PyQt6.QtCore import QThread, pyqtSignal
+from core.utils.error_handler import ErrorHandler
+from core.utils.thread_cleanup import ThreadCleanupMixin
+from core.logger import get_logger
+
+
+def format_tool_result(result: Dict) -> str:
+    """
+    将工具执行结果格式化为 LLM 可理解的文本
+    
+    Args:
+        result: 工具执行结果字典
+        
+    Returns:
+        str: 格式化后的文本
+    """
+    if result.get('success'):
+        tool_result = result.get('result', '')
+        # 如果结果是字典或列表，转为 JSON
+        if isinstance(tool_result, (dict, list)):
+            tool_result = json.dumps(tool_result, ensure_ascii=False, indent=2)
+        return f"工具执行成功。结果:\n{tool_result}"
+    else:
+        error_msg = result.get('error', '未知错误')
+        return f"工具执行失败。错误: {error_msg}"
+
+
+class FunctionCallingCoordinator(QThread, ThreadCleanupMixin):
+    """
+    Function Calling 协调器
+
+    职责：
+    1. 协调 LLM 和工具执行的多轮交互
+    2. 检测 tool_calls 并执行工具
+    3. 将工具结果返回 LLM 生成最终回复
+    4. 提供 UI 回调支持
+    5. 使用 ThreadCleanupMixin 确保线程资源正确释放（Requirement 4.1, 4.2, 4.3）
+    """
+    
+    # 信号定义
+    tool_start = pyqtSignal(str)  # 工具开始执行：tool_name
+    tool_complete = pyqtSignal(str, dict)  # 工具完成：tool_name, result
+    chunk_received = pyqtSignal(str)  # 文本块接收：chunk
+    request_finished = pyqtSignal()  # 请求完成
+    token_usage = pyqtSignal(dict)  # Token 使用量统计
+    error_occurred = pyqtSignal(str)  # 错误发生：error_message
+    
+    def __init__(
+        self,
+        messages: List[Dict],
+        tools_registry,
+        llm_client,
+        max_iterations: int = 5
+    ):
+        """
+        初始化协调器
+        
+        Args:
+            messages: 初始消息列表
+            tools_registry: 工具注册表实例
+            llm_client: LLM 客户端实例
+            max_iterations: 最大迭代次数（防止无限循环）
+        """
+        super().__init__()
+        self.messages = messages.copy()
+        self.tools_registry = tools_registry
+        self.llm_client = llm_client
+        self.max_iterations = max_iterations
+        self._should_stop = False
+        self.logger = get_logger(__name__)
+        
+        # API 调用计数器（用于测试和监控）
+        self.api_call_count = 0
+    
+    def stop(self):
+        """停止执行（向后兼容方法）"""
+        self.request_stop()
+
+    def request_stop(self) -> None:
+        """请求线程停止（实现 ThreadCleanupMixin 抽象方法）
+
+        Requirement 4.1: 实现 request_stop() 方法
+        """
+        self._should_stop = True
+    
+    def run(self):
+        """
+        执行 Function Calling 流程
+        
+        流程：
+        1. 调用 LLM（带 tools 参数）
+        2. 检查响应是否包含 tool_calls
+        3. 如果有，执行工具并将结果追加到消息
+        4. 重复步骤 1-3，直到 LLM 返回最终文本或达到最大迭代次数
+        """
+        # 关键调试：追踪协调器启动
+        import traceback
+        call_stack = ''.join(traceback.format_stack())
+        print(f"\n{'='*80}")
+        print(f"[COORDINATOR] !!! FunctionCallingCoordinator.run() 被调用！")
+        print(f"[COORDINATOR] 消息数量: {len(self.messages)}")
+        tools_count = len(self.tools_registry.openai_tool_schemas()) if self.tools_registry else 0
+        print(f"[COORDINATOR] 工具数量: {tools_count}")
+        print(f"[COORDINATOR] 调用堆栈:\n{call_stack}")
+        print(f"{'='*80}\n")
+        
+        try:
+            iteration = 0
+            
+            while iteration < self.max_iterations and not self._should_stop:
+                
+                # 获取工具定义
+                tools = self.tools_registry.openai_tool_schemas() if self.tools_registry else None
+                
+                # 调用 LLM（非流式，用于检测 tool_calls）
+                response_data = self._call_llm_non_streaming(self.messages, tools)
+                
+                if self._should_stop:
+                    break
+                
+                # 检查响应类型
+                if response_data['type'] == 'tool_calls':
+                    # LLM 决定调用工具
+                    tool_calls = response_data['tool_calls']
+                    
+                    # 构建 assistant 消息（包含 tool_calls）
+                    assistant_message = {
+                        "role": "assistant",
+                        "content": None,
+                        "tool_calls": tool_calls
+                    }
+                    self.messages.append(assistant_message)
+                    
+                    # 执行每个工具
+                    for tool_call in tool_calls:
+                        if self._should_stop:
+                            break
+                        
+                        tool_name = tool_call['function']['name']
+                        tool_args_str = tool_call['function']['arguments']
+                        tool_call_id = tool_call['id']
+                        
+                        
+                        # 通知 UI 工具开始
+                        self.tool_start.emit(tool_name)
+                        
+                        # 执行工具
+                        result = self._execute_tool(tool_name, tool_args_str)
+                        
+                        # 通知 UI 工具完成
+                        self.tool_complete.emit(tool_name, result)
+                        
+                        # 将工具结果追加到消息
+                        tool_message = {
+                            "role": "tool",
+                            "tool_call_id": tool_call_id,
+                            "content": format_tool_result(result)
+                        }
+                        self.messages.append(tool_message)
+                        
+                    
+                    # 继续下一轮迭代
+                    iteration += 1
+                    
+                elif response_data['type'] == 'content':
+                    # LLM 返回最终文本（第一次非流式调用已获取）
+                    
+                    # [OPTIMIZATION] 关键修复：直接使用第一次调用的content，避免第二次API调用
+                    content = response_data.get('content', '')
+                    usage = response_data.get('usage')  # 获取token使用统计
+                    
+                    if content:
+                        # 模拟自然的流式输出（模仿真实AI打字节奏）
+                        import time
+                        import random
+                        buffer = ""
+                        for i, char in enumerate(content):
+                            buffer += char
+                            # 每1个字符发送一次
+                            self.chunk_received.emit(buffer)
+                            buffer = ""
+                            
+                            # 自然的延迟：基础延迟 + 随机波动
+                            base_delay = 0.008  # 8ms基础延迟（更快）
+                            random_variation = random.uniform(-0.002, 0.005)  # ±2~5ms随机波动
+                            delay = base_delay + random_variation
+                            
+                            # 在标点符号后增加额外停顿（更自然）
+                            if char in '，。！？；：、,.:;!?\n':
+                                delay += random.uniform(0.02, 0.04)  # 标点后停顿20-40ms
+                            
+                            time.sleep(max(0.001, delay))  # 确保延迟不为负数
+                    
+                    # ⚡ 发送token使用统计（如果有）
+                    if usage:
+                        self.token_usage.emit(usage)
+                    
+                    # 完成
+                    self.request_finished.emit()
+                    break
+                
+                else:
+                    # 未知响应类型
+                    raise Exception(f"未知的响应类型: {response_data['type']}")
+            
+            if iteration >= self.max_iterations:
+                # 超过最大迭代次数
+                error_msg = f"工具调用次数过多（{self.max_iterations} 次），已终止"
+                print(f"[WARNING] [FunctionCalling] {error_msg}")
+                self.error_occurred.emit(error_msg)
+        
+        except Exception as e:
+            # 使用 ErrorHandler 格式化和记录错误
+            error_code = getattr(e, 'status_code', None) or getattr(e, 'code', None)
+            ErrorHandler.log_error(e, "FunctionCallingCoordinator.run", error_code)
+
+            # 格式化用户友好的错误消息
+            formatted_error = ErrorHandler.format_error(e, error_code)
+            user_error_msg = f"{formatted_error.title}: {formatted_error.message}"
+            if formatted_error.suggestions:
+                user_error_msg += f"\n建议: {formatted_error.suggestions[0]}"
+
+            print(f"[ERROR] [FunctionCalling] {user_error_msg}")
+            print(traceback.format_exc())
+
+            # 向 UI 发送友好的错误消息
+            self.error_occurred.emit(user_error_msg)
+    
+    def _call_llm_non_streaming(self, messages: List[Dict], tools: List[Dict]) -> Dict:
+        """
+        调用 LLM（非流式）用于检测 tool_calls
+        
+        Args:
+            messages: 消息列表
+            tools: 工具定义列表
+            
+        Returns:
+            Dict: {
+                'type': 'tool_calls' | 'content',
+                'tool_calls': [...] | None,
+                'content': str | None,
+                'usage': dict | None
+            }
+        """
+        # 记录 API 调用时间戳
+        start_time = time.time()
+        self.api_call_count += 1
+        
+        self.logger.info(f"[API调用 #{self.api_call_count}] 开始时间: {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(start_time))}")
+        
+        try:
+            # 调用 LLM 客户端的非流式方法
+            response = self.llm_client.generate_response_non_streaming(messages, tools=tools)
+            
+            # 记录 API 调用完成和 Token 消耗
+            elapsed_time = time.time() - start_time
+            usage = response.get('usage', {})
+            self.logger.info(
+                f"[API调用 #{self.api_call_count}] 完成 - "
+                f"耗时: {elapsed_time:.2f}s, "
+                f"Token消耗: {usage.get('total_tokens', 'N/A')} "
+                f"(prompt: {usage.get('prompt_tokens', 'N/A')}, "
+                f"completion: {usage.get('completion_tokens', 'N/A')})"
+            )
+            
+            return response
+            
+        except AttributeError:
+            # 如果 LLM 客户端不支持非流式方法，回退到流式并累积
+            self.logger.warning("[FunctionCalling] LLM 客户端不支持非流式调用，使用流式回退")
+            
+            accumulated_content = ""
+            accumulated_tool_calls = None
+            accumulated_usage = None
+            
+            for chunk in self.llm_client.generate_response(messages, stream=True, tools=tools):
+                if isinstance(chunk, dict):
+                    chunk_type = chunk.get('type')
+                    
+                    if chunk_type == 'tool_calls':
+                        accumulated_tool_calls = chunk.get('tool_calls')
+                    elif chunk_type == 'content':
+                        accumulated_content += chunk.get('text', '')
+                    elif chunk_type == 'token_usage':
+                        accumulated_usage = chunk.get('usage', {})
+                        # ⚡ 转发 token 使用量
+                        self.token_usage.emit(accumulated_usage)
+                else:
+                    accumulated_content += str(chunk)
+            
+            # 记录 API 调用完成和 Token 消耗
+            elapsed_time = time.time() - start_time
+            if accumulated_usage:
+                self.logger.info(
+                    f"[API调用 #{self.api_call_count}] 完成 - "
+                    f"耗时: {elapsed_time:.2f}s, "
+                    f"Token消耗: {accumulated_usage.get('total_tokens', 'N/A')} "
+                    f"(prompt: {accumulated_usage.get('prompt_tokens', 'N/A')}, "
+                    f"completion: {accumulated_usage.get('completion_tokens', 'N/A')})"
+                )
+            else:
+                self.logger.info(f"[API调用 #{self.api_call_count}] 完成 - 耗时: {elapsed_time:.2f}s")
+            
+            if accumulated_tool_calls:
+                return {
+                    'type': 'tool_calls',
+                    'tool_calls': accumulated_tool_calls,
+                    'content': None,
+                    'usage': accumulated_usage
+                }
+            else:
+                return {
+                    'type': 'content',
+                    'tool_calls': None,
+                    'content': accumulated_content,
+                    'usage': accumulated_usage
+                }
+                
+        except Exception as e:
+            # 记录 API 调用失败
+            elapsed_time = time.time() - start_time
+            self.logger.error(f"[API调用 #{self.api_call_count}] 失败 - 耗时: {elapsed_time:.2f}s")
+
+            # 使用 ErrorHandler 格式化和记录错误
+            error_code = getattr(e, 'status_code', None) or getattr(e, 'code', None)
+            ErrorHandler.log_error(e, "FunctionCallingCoordinator._call_llm_non_streaming", error_code)
+
+            # 检测 "does not support tools" 错误
+            error_msg = str(e)
+            if 'does not support tools' in error_msg.lower():
+                # 使用 ErrorHandler 格式化错误消息
+                formatted_error = ErrorHandler.format_error(e, error_code)
+                self.logger.warning(
+                    f"[FunctionCalling] {formatted_error.title}: {formatted_error.message}"
+                )
+                for suggestion in formatted_error.suggestions:
+                    self.logger.warning(f"  建议: {suggestion}")
+
+                # ⚡ 关键修复：直接返回错误而不重试 API 调用
+                # 返回空工具调用结果，避免重复 API 请求
+                return {
+                    'type': 'content',
+                    'tool_calls': None,
+                    'content': '',
+                    'usage': None
+                }
+
+            # ⚡ 关键修复：其他错误直接抛出，不重试
+            # 原因：重试逻辑会导致重复 API 调用，浪费 Token
+            raise
+    
+    def _stream_final_response(self, messages: List[Dict], tools: List[Dict]):
+        """
+        流式输出最终响应
+        
+        Args:
+            messages: 消息列表
+            tools: 工具定义列表
+        
+        ⚠️ 修复说明：移除了重试逻辑，避免重复 API 调用
+        如果模型不支持工具，应该在初始化时检测，而不是在运行时重试
+        """
+        # ⚡ 关键修复：移除重试逻辑，直接抛出异常
+        # 原因：重试逻辑会导致重复 API 调用，浪费 Token
+        for chunk in self.llm_client.generate_response(messages, stream=True, tools=tools):
+            if self._should_stop:
+                break
+            
+            # 只处理文本内容和token统计
+            if isinstance(chunk, dict):
+                chunk_type = chunk.get('type')
+                
+                if chunk_type == 'content':
+                    text = chunk.get('text', '')
+                    if text:
+                        self.chunk_received.emit(text)
+                elif chunk_type == 'token_usage':
+                    # ⚡ 转发 token 使用量
+                    self.token_usage.emit(chunk.get('usage', {}))
+            else:
+                # 字符串类型（向后兼容）
+                self.chunk_received.emit(str(chunk))
+    
+    def _execute_tool(self, tool_name: str, tool_args_str: str) -> Dict:
+        """
+        执行工具
+        
+        Args:
+            tool_name: 工具名称
+            tool_args_str: 工具参数（JSON 字符串）
+            
+        Returns:
+            Dict: {
+                'success': bool,
+                'result': Any | None,
+                'error': str | None
+            }
+        """
+        try:
+            # 解析参数
+            tool_args = json.loads(tool_args_str)
+            
+            # 调用工具注册表
+            result = self.tools_registry.dispatch(tool_name, tool_args)
+            
+            # 检查结果格式
+            if isinstance(result, dict) and 'success' in result:
+                return result
+            else:
+                # 兼容旧格式
+                return {
+                    'success': True,
+                    'result': result,
+                    'error': None
+                }
+        
+        except json.JSONDecodeError as e:
+            return {
+                'success': False,
+                'result': None,
+                'error': f"参数解析失败: {str(e)}"
+            }
+        
+        except Exception as e:
+            return {
+                'success': False,
+                'result': None,
+                'error': f"工具执行异常: {str(e)}"
+            }
+

@@ -1,0 +1,598 @@
+# -*- coding: utf-8 -*-
+
+"""
+工具注册表
+定义只读工具的接口和调度逻辑
+"""
+
+import json
+from typing import Dict, Any, List, Callable
+from core.logger import get_logger
+
+logger = get_logger(__name__)
+
+
+class ToolDefinition:
+    """工具定义"""
+    
+    def __init__(
+        self,
+        name: str,
+        description: str,
+        parameters: Dict[str, Any],
+        function: Callable,
+        requires_confirmation: bool = False
+    ):
+        self.name = name
+        self.description = description
+        self.parameters = parameters  # JSON Schema 格式
+        self.function = function
+        self.requires_confirmation = requires_confirmation  # v0.2: 权限声明
+
+
+class ToolsRegistry:
+    """
+    工具注册表
+    
+    v0.2: 注册和管理所有只读工具
+    v0.3: 扩展支持受控写入工具
+    """
+    
+    def __init__(self, asset_reader=None, config_reader=None, log_analyzer=None, document_reader=None, asset_importer=None, theme_generator=None):
+        """
+        初始化工具注册表
+        
+        Args:
+            asset_reader: 资产读取器
+            config_reader: 配置读取器
+            log_analyzer: 日志分析器
+            document_reader: 文档读取器
+            asset_importer: 资产导入器（测试功能）
+            theme_generator: 主题生成器（测试功能）
+        """
+        self.logger = logger
+        self.asset_reader = asset_reader
+        self.config_reader = config_reader
+        self.log_analyzer = log_analyzer
+        self.document_reader = document_reader
+        self.asset_importer = asset_importer
+        self.theme_generator = theme_generator
+        
+        # 初始化UE工具RPC客户端
+        from modules.ai_assistant.clients.ue_tool_client import UEToolClient
+        
+        # 从配置读取UE服务器地址和端口（如果配置不存在则使用默认值）
+        ue_host = "127.0.0.1"
+        ue_port = 9998
+        
+        # TODO: 未来可以从配置管理器读取这些设置
+        # if config_reader:
+        #     ue_host = config_reader.get('ue_server_host', '127.0.0.1')
+        #     ue_port = config_reader.get('ue_server_port', 9998)
+        
+        self.ue_client = UEToolClient(host=ue_host, port=ue_port)
+        self.logger.info(f"UE RPC客户端已初始化 (目标: {ue_host}:{ue_port})")
+        
+        # 工具注册表
+        self.tools: Dict[str, ToolDefinition] = {}
+        
+        # 注册所有只读工具
+        self._register_readonly_tools()
+        
+        # 注册测试功能工具
+        self._register_experimental_tools()
+        
+        # 注册虚幻引擎蓝图操作工具
+        self._register_ue_tools()
+        
+        self.logger.info(f"工具注册表初始化完成，共注册 {len(self.tools)} 个工具")
+    
+    def _register_readonly_tools(self):
+        """注册所有只读工具"""
+        
+        # 1. 搜索资产
+        self.register_tool(ToolDefinition(
+            name="search_assets",
+            description="搜索虚幻引擎资产（模型、蓝图、材质等）",
+            parameters={
+                "type": "object",
+                "properties": {
+                    "keyword": {
+                        "type": "string",
+                        "description": "搜索关键词，如资产名称或类型"
+                    }
+                },
+                "required": ["keyword"]
+            },
+            function=self._tool_search_assets,
+            requires_confirmation=False  # 只读，无需确认
+        ))
+        
+        # 2. 查询资产详情
+        self.register_tool(ToolDefinition(
+            name="query_asset_detail",
+            description="获取特定资产的详细信息（路径、文件列表、大小等）",
+            parameters={
+                "type": "object",
+                "properties": {
+                    "asset_name": {
+                        "type": "string",
+                        "description": "资产名称"
+                    }
+                },
+                "required": ["asset_name"]
+            },
+            function=self._tool_query_asset_detail,
+            requires_confirmation=False
+        ))
+        
+        # 3. 搜索配置模板
+        self.register_tool(ToolDefinition(
+            name="search_configs",
+            description="搜索UE项目配置模板",
+            parameters={
+                "type": "object",
+                "properties": {
+                    "keyword": {
+                        "type": "string",
+                        "description": "搜索关键词"
+                    }
+                },
+                "required": ["keyword"]
+            },
+            function=self._tool_search_configs,
+            requires_confirmation=False
+        ))
+        
+        # 4. 对比配置
+        self.register_tool(ToolDefinition(
+            name="diff_config",
+            description="对比两个配置模板的差异",
+            parameters={
+                "type": "object",
+                "properties": {
+                    "config1": {"type": "string", "description": "第一个配置名称"},
+                    "config2": {"type": "string", "description": "第二个配置名称"}
+                },
+                "required": ["config1", "config2"]
+            },
+            function=self._tool_diff_config,
+            requires_confirmation=False
+        ))
+        
+        # 5. 搜索日志
+        self.register_tool(ToolDefinition(
+            name="search_logs",
+            description="搜索日志文件中的特定内容",
+            parameters={
+                "type": "object",
+                "properties": {
+                    "keyword": {
+                        "type": "string",
+                        "description": "搜索关键词"
+                    }
+                },
+                "required": ["keyword"]
+            },
+            function=self._tool_search_logs,
+            requires_confirmation=False
+        ))
+        
+        # 6. 搜索文档
+        self.register_tool(ToolDefinition(
+            name="search_docs",
+            description="搜索项目文档和使用说明",
+            parameters={
+                "type": "object",
+                "properties": {
+                    "keyword": {
+                        "type": "string",
+                        "description": "搜索关键词"
+                    }
+                },
+                "required": ["keyword"]
+            },
+            function=self._tool_search_docs,
+            requires_confirmation=False
+        ))
+    
+    def register_tool(self, tool: ToolDefinition):
+        """注册工具"""
+        self.tools[tool.name] = tool
+        self.logger.debug(f"注册工具: {tool.name} (需要确认: {tool.requires_confirmation})")
+    
+    def openai_tool_schemas(self) -> List[Dict[str, Any]]:
+        """
+        返回 OpenAI tools 描述格式
+        
+        兼容 ChatGPT Function Calling 规范：
+        tools=[{type:'function', function:{name, description, parameters}}]
+        
+        Returns:
+            List[Dict]: OpenAI tools 格式的工具列表
+        """
+        schemas = []
+        
+        for tool_name, tool_def in self.tools.items():
+            schemas.append({
+                "type": "function",
+                "function": {
+                    "name": tool_def.name,
+                    "description": tool_def.description,
+                    "parameters": tool_def.parameters
+                }
+            })
+        
+        return schemas
+    
+    def dispatch(self, tool_name: str, arguments: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        调度工具执行
+        
+        Args:
+            tool_name: 工具名称
+            arguments: 工具参数
+            
+        Returns:
+            Dict: 工具执行结果 {success, result, error}
+        """
+        try:
+            if tool_name not in self.tools:
+                return {
+                    "success": False,
+                    "error": f"未知工具: {tool_name}"
+                }
+            
+            tool = self.tools[tool_name]
+            
+            self.logger.info(f"执行工具: {tool_name}, 参数: {arguments}")
+            
+            # 调用工具函数
+            result = tool.function(**arguments)
+            
+            return {
+                "success": True,
+                "result": result,
+                "tool_name": tool_name,
+                "requires_confirmation": tool.requires_confirmation
+            }
+        
+        except Exception as e:
+            self.logger.error(f"工具执行失败 {tool_name}: {e}", exc_info=True)
+            return {
+                "success": False,
+                "error": str(e),
+                "tool_name": tool_name
+            }
+    
+    def cleanup(self):
+        """清理资源，关闭连接"""
+        try:
+            if hasattr(self, 'ue_client') and self.ue_client:
+                self.ue_client.close()
+                self.logger.info("UE RPC客户端连接已关闭")
+        except Exception as e:
+            self.logger.warning(f"清理UE客户端时出错: {e}")
+    
+    # ========== 工具实现函数 ==========
+    
+    def _tool_search_assets(self, keyword: str) -> str:
+        """搜索资产工具实现"""
+        if self.asset_reader:
+            return self.asset_reader.search_assets(keyword)
+        return "[错误] 资产读取器未初始化"
+    
+    def _tool_query_asset_detail(self, asset_name: str) -> str:
+        """查询资产详情工具实现"""
+        if self.asset_reader:
+            return self.asset_reader.get_asset_details(asset_name)
+        return "[错误] 资产读取器未初始化"
+    
+    def _tool_search_configs(self, keyword: str) -> str:
+        """搜索配置工具实现"""
+        if self.config_reader:
+            return self.config_reader.search_configs(keyword)
+        return "[错误] 配置读取器未初始化"
+    
+    def _tool_diff_config(self, config1: str, config2: str) -> str:
+        """配置对比工具实现（暂时返回占位符）"""
+        # TODO: 实现配置对比逻辑
+        return f"[配置对比] {config1} vs {config2}\n（功能待实现）"
+    
+    def _tool_search_logs(self, keyword: str) -> str:
+        """搜索日志工具实现"""
+        if self.log_analyzer:
+            return self.log_analyzer.search_in_logs(keyword)
+        return "[错误] 日志分析器未初始化"
+    
+    def _tool_search_docs(self, keyword: str) -> str:
+        """搜索文档工具实现"""
+        if self.document_reader:
+            return self.document_reader.search_in_documents(keyword)
+        return "[错误] 文档读取器未初始化"
+    
+    def _register_experimental_tools(self):
+        """注册实验性功能工具（测试版）"""
+        
+        # 1. 导入资产到UE项目
+        self.register_tool(ToolDefinition(
+            name="import_asset_to_ue",
+            description="将资产自动导入到当前正在运行的虚幻引擎项目（测试功能）。此工具会自动检测正在运行的UE项目，无需用户提供路径。",
+            parameters={
+                "type": "object",
+                "properties": {
+                    "asset_name": {
+                        "type": "string",
+                        "description": "要导入的资产名称"
+                    }
+                },
+                "required": ["asset_name"]
+            },
+            function=self._tool_import_asset,
+            requires_confirmation=False  # 测试功能，简化流程
+        ))
+        
+        # 2. 列出可导入的资产
+        self.register_tool(ToolDefinition(
+            name="list_importable_assets",
+            description="列出所有可以导入到UE项目的资产",
+            parameters={
+                "type": "object",
+                "properties": {}
+            },
+            function=self._tool_list_importable_assets,
+            requires_confirmation=False
+        ))
+        
+        # 3. 生成并应用主题
+        self.register_tool(ToolDefinition(
+            name="generate_and_apply_theme",
+            description="根据用户描述生成自定义主题并立即应用。生成后需要询问用户是否满意。",
+            parameters={
+                "type": "object",
+                "properties": {
+                    "theme_name": {
+                        "type": "string",
+                        "description": "主题名称，建议使用英文"
+                    },
+                    "theme_description": {
+                        "type": "string",
+                        "description": "主题描述，用于向用户说明设计理念"
+                    },
+                    "color_variables": {
+                        "type": "object",
+                        "description": "颜色变量对象，必须包含bg_primary, bg_secondary, text_primary, text_secondary, accent, border等必需变量",
+                        "properties": {
+                            "bg_primary": {"type": "string"},
+                            "bg_secondary": {"type": "string"},
+                            "bg_tertiary": {"type": "string"},
+                            "bg_hover": {"type": "string"},
+                            "bg_pressed": {"type": "string"},
+                            "text_primary": {"type": "string"},
+                            "text_secondary": {"type": "string"},
+                            "text_tertiary": {"type": "string"},
+                            "text_disabled": {"type": "string"},
+                            "accent": {"type": "string"},
+                            "accent_hover": {"type": "string"},
+                            "accent_pressed": {"type": "string"},
+                            "border": {"type": "string"},
+                            "border_hover": {"type": "string"},
+                            "border_focus": {"type": "string"},
+                            "success": {"type": "string"},
+                            "warning": {"type": "string"},
+                            "error": {"type": "string"},
+                            "info": {"type": "string"},
+                            "bg_primary_alpha": {"type": "string"},
+                            "bg_secondary_alpha": {"type": "string"},
+                            "accent_alpha": {"type": "string"}
+                        },
+                        "required": ["bg_primary", "bg_secondary", "text_primary", "text_secondary", "accent", "border"]
+                    }
+                },
+                "required": ["theme_name", "theme_description", "color_variables"]
+            },
+            function=self._tool_generate_theme,
+            requires_confirmation=False
+        ))
+        
+        # 4. 确认保留主题
+        self.register_tool(ToolDefinition(
+            name="confirm_theme",
+            description="用户确认满意当前生成的主题，保留该主题",
+            parameters={
+                "type": "object",
+                "properties": {}
+            },
+            function=self._tool_confirm_theme,
+            requires_confirmation=False
+        ))
+        
+        # 5. 拒绝并删除主题
+        self.register_tool(ToolDefinition(
+            name="reject_theme",
+            description="用户不满意当前生成的主题，删除该主题并恢复默认主题",
+            parameters={
+                "type": "object",
+                "properties": {}
+            },
+            function=self._tool_reject_theme,
+            requires_confirmation=False
+        ))
+        
+        # 6. 列出所有可用主题
+        self.register_tool(ToolDefinition(
+            name="list_themes",
+            description="列出所有可用的主题（包括内置和自定义主题）",
+            parameters={
+                "type": "object",
+                "properties": {}
+            },
+            function=self._tool_list_themes,
+            requires_confirmation=False
+        ))
+    
+    def _tool_import_asset(self, asset_name: str) -> str:
+        """导入资产工具实现（自动检测正在运行的UE项目）"""
+        if self.asset_importer:
+            result = self.asset_importer.import_asset_to_ue(asset_name)
+            return result.get('message', '[错误] 导入失败')
+        return "[错误] 资产导入器未初始化"
+    
+    def _tool_list_importable_assets(self) -> str:
+        """列出可导入资产工具实现"""
+        if self.asset_importer:
+            return self.asset_importer.list_importable_assets()
+        return "[错误] 资产导入器未初始化"
+    
+    def _tool_generate_theme(self, theme_name: str, theme_description: str, color_variables: dict) -> str:
+        """生成主题工具实现"""
+        if self.theme_generator:
+            result = self.theme_generator.generate_and_apply_theme(theme_name, theme_description, color_variables)
+            if result.get('success'):
+                return result.get('preview_message', '[成功] 主题已生成并应用')
+            return result.get('message', '[错误] 生成主题失败')
+        return "[错误] 主题生成器未初始化"
+    
+    def _tool_confirm_theme(self) -> str:
+        """确认主题工具实现"""
+        if self.theme_generator:
+            result = self.theme_generator.confirm_theme()
+            return result.get('message', '[错误] 确认失败')
+        return "[错误] 主题生成器未初始化"
+    
+    def _tool_reject_theme(self) -> str:
+        """拒绝主题工具实现"""
+        if self.theme_generator:
+            result = self.theme_generator.reject_theme()
+            return result.get('message', '[错误] 删除失败')
+        return "[错误] 主题生成器未初始化"
+    
+    def _tool_list_themes(self) -> str:
+        """列出主题工具实现"""
+        if self.theme_generator:
+            return self.theme_generator.list_available_themes()
+        return "[错误] 主题生成器未初始化"
+    
+    def _register_controlled_tools(self):
+        """
+        v0.3 新增：注册受控写入工具
+        
+        所有受控工具标记 requires_confirmation=True
+        """
+        # 1. 导出配置模板
+        self.register_tool(ToolDefinition(
+            name="export_config_template",
+            description="导出UE配置模板到指定路径（需要确认）",
+            parameters={
+                "type": "object",
+                "properties": {
+                    "template_name": {
+                        "type": "string",
+                        "description": "配置模板名称"
+                    },
+                    "export_path": {
+                        "type": "string",
+                        "description": "导出路径"
+                    }
+                },
+                "required": ["template_name", "export_path"]
+            },
+            function=self._tool_export_config_template,
+            requires_confirmation=True  # 需要确认
+        ))
+        
+        # 2. 批量重命名预览
+        self.register_tool(ToolDefinition(
+            name="batch_rename_preview",
+            description="批量重命名资产（需要确认）",
+            parameters={
+                "type": "object",
+                "properties": {
+                    "pattern": {
+                        "type": "string",
+                        "description": "匹配模式"
+                    },
+                    "replacement": {
+                        "type": "string",
+                        "description": "替换文本"
+                    },
+                    "asset_ids": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "资产ID列表"
+                    }
+                },
+                "required": ["pattern", "replacement", "asset_ids"]
+            },
+            function=self._tool_batch_rename_preview,
+            requires_confirmation=True  # 需要确认
+        ))
+    
+    def _tool_export_config_template(self, template_name: str, export_path: str) -> str:
+        """导出配置模板工具实现（返回预览）"""
+        if self.controlled_tools:
+            result = self.controlled_tools.export_config_template(template_name, export_path)
+            return result.get('preview', '[错误] 无预览')
+        return "[错误] 受控工具集未初始化"
+    
+    def _tool_batch_rename_preview(self, pattern: str, replacement: str, asset_ids: list) -> str:
+        """批量重命名工具实现（返回预览）"""
+        if self.controlled_tools:
+            result = self.controlled_tools.batch_rename_preview(pattern, replacement, asset_ids)
+            return result.get('preview', '[错误] 无预览')
+        return "[错误] 受控工具集未初始化"
+    
+    def _execute_ue_python_tool(self, tool_name: str, **kwargs) -> str:
+        """
+        通过RPC客户端执行虚幻引擎编辑器内的Python脚本。
+        这是 Function Calling 调用虚幻引擎工具的桥梁。
+        
+        Args:
+            tool_name: UE工具名称
+            **kwargs: 工具参数
+            
+        Returns:
+            str: JSON格式的执行结果
+        """
+        try:
+            # 使用UE RPC客户端执行工具
+            result = self.ue_client.execute_tool_rpc(tool_name, **kwargs)
+            
+            # 将结果转换为JSON字符串返回给LLM
+            return json.dumps(result, ensure_ascii=False)
+            
+        except Exception as e:
+            self.logger.error(f"UE工具执行失败: {e}", exc_info=True)
+            # 将失败信息包装成 JSON 返回给 LLM
+            return json.dumps({
+                "status": "error", 
+                "message": f"UE工具执行器捕获到错误: {str(e)}"
+            }, ensure_ascii=False)
+    
+    def _register_ue_tools(self):
+        """
+        注册虚幻引擎蓝图操作工具到注册表中。
+
+        注意：当前版本为只读模式，只支持蓝图分析，不支持修改蓝图。
+        """
+        # 1. 获取蓝图摘要（读取）工具
+        self.register_tool(ToolDefinition(
+            name="get_current_blueprint_summary",
+            description="""
+读取当前在虚幻编辑器中打开的蓝图的主要节点和结构。
+用途：用于分析蓝图结构、理解蓝图逻辑、检测错误等。
+注意：当前版本为只读模式，AI只能分析蓝图并给出建议，不能直接修改蓝图。
+参数：无需参数。
+            """.strip(),
+            parameters={
+                "type": "object",
+                "properties": {},
+                "required": []
+            },
+            function=lambda **kwargs: self._execute_ue_python_tool("get_current_blueprint_summary", **kwargs),
+            requires_confirmation=False  # 只读工具，无需确认
+        ))
+
+        # 注意：apply_blueprint_changes 工具已弃用（只读模式）
+        # 当前版本专注于稳定的蓝图分析和错误检测，不支持修改蓝图
+
