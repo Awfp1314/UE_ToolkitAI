@@ -330,7 +330,7 @@ def cleanup_all_services():
         try:
             if logger:
                 logger.info("清理 StyleService...")
-            _style_service.cleanup()
+            # StyleService 没有 cleanup() 方法，直接重置
             _style_service = None
             _service_states['style'] = ServiceState.NOT_INITIALIZED
             if logger:
@@ -346,7 +346,7 @@ def cleanup_all_services():
         try:
             if logger:
                 logger.info("清理 ConfigService...")
-            _config_service.cleanup()
+            # ConfigService 没有 cleanup() 方法，直接重置
             _config_service = None
             _service_states['config'] = ServiceState.NOT_INITIALIZED
             if logger:
@@ -362,7 +362,7 @@ def cleanup_all_services():
         try:
             if logger:
                 logger.info("清理 PathService...")
-            _path_service.cleanup()
+            # PathService 没有 cleanup() 方法，直接重置
             _path_service = None
             _service_states['path'] = ServiceState.NOT_INITIALIZED
             if logger:
