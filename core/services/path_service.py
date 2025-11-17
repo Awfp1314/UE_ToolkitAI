@@ -23,11 +23,19 @@ class PathService:
     
     def __init__(self):
         """初始化路径服务
-        
+
         注意：使用 print() 记录初始化日志，避免循环依赖
         """
         self._path_utils = PathUtils()
         print("[PathService] 初始化完成")
+
+    def create_dirs(self) -> None:
+        """创建所有必要的用户目录
+
+        Example:
+            path_service.create_dirs()
+        """
+        self._path_utils.create_dirs()
     
     def get_user_data_dir(self, create: bool = True) -> Path:
         """获取用户数据目录

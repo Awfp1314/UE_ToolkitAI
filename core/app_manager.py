@@ -7,15 +7,26 @@ from typing import Dict, Any, Optional, Callable
 from pathlib import Path
 import threading
 
-from core.utils.path_utils import PathUtils
-from core.logger import Logger, get_logger
-from core.config.config_manager import ConfigManager
 from core.module_manager import ModuleManager, ModuleState
-from core.utils.thread_utils import get_thread_manager
+# 使用统一服务层
+from core.services import (
+    log_service,
+    path_service,
+    config_service,
+    thread_service,
+    cleanup_all_services
+)
 
 
-# 创建模块级 logger，避免在初始化过程中出现未定义错误
-_module_logger = get_logger(__name__)
+# 模块级 logger（延迟初始化，避免循环导入）
+_module_logger = None
+
+def _get_module_logger():
+    """获取模块级 logger（懒加载）"""
+    global _module_logger
+    if _module_logger is None:
+        _module_logger = log_service.get_logger(__name__)
+    return _module_logger
 
 
 
@@ -62,27 +73,27 @@ class AppManager:
     
     def __init__(self):
         """初始化应用程序管理器（线程安全）
-        
+
         使用实例级锁和标记确保即使多个线程同时调用 __init__，
         初始化逻辑也只会执行一次。
+
+        注意：不再创建服务实例，改为使用统一服务层
         """
         # 使用实例级锁保护初始化过程
         with self._init_lock:
             # 防止重复初始化（使用实例级标记）
             if self._initialized:
                 return
-            
-            self.logger: Optional[Logger] = None
-            self.path_utils: Optional[PathUtils] = None
-            self.config_manager: Optional[ConfigManager] = None
+
+            # 不再创建服务实例，改为使用统一服务层
+            # self.logger, self.path_utils, self.config_manager, self.thread_manager 已移除
             self.module_manager: Optional[ModuleManager] = None
-            self.thread_manager = None  # 延迟初始化
-            
+
             self._is_setup = False
             self._is_running = False
-            
-            # 使用模块级 logger 直到 Logger 初始化完成
-            self._logger = _module_logger
+
+            # 使用模块级 logger 直到服务层初始化完成（懒加载）
+            self._logger = _get_module_logger()
             
             # 注册系统信号处理器
             self._register_system_signals()
@@ -114,48 +125,49 @@ class AppManager:
     
     def setup(self) -> bool:
         """设置应用程序，按正确顺序初始化所有核心模块
-        
+
+        注意：现在使用统一服务层，服务会在首次访问时自动初始化（懒加载）
+
         Returns:
             bool: 初始化是否成功
         """
         if self._is_setup:
             self._logger.warning("应用程序已经设置完成")
             return True
-        
+
         try:
             self._logger.info("开始设置应用程序")
-            
-            # 1. 初始化 PathUtils
+
+            # 1. 初始化 PathService（触发懒加载）
             self._logger.info("初始化 PathUtils")
-            self.path_utils = PathUtils()
-            self.path_utils.create_dirs()
-            
-            # 2. 初始化 Logger
+            path_service.create_dirs()
+
+            # 2. 初始化 LogService（触发懒加载）
             self._logger.info("初始化 Logger")
-            self.logger = Logger()
-            
+            # LogService 已经在导入时初始化，这里只是确保它可用
+
             # 更新 AppManager 自身的 logger
-            self._logger = get_logger("app_manager")
+            self._logger = log_service.get_logger("app_manager")
             self._logger.info("Logger 初始化完成")
-            
-            # 3. 初始化 ConfigManager
+
+            # 3. 初始化 ConfigService（触发懒加载）
             self._logger.info("初始化 ConfigManager")
-            # AppManager 使用自己的配置模板（如果存在）
-            app_template_path = Path(__file__).parent / "config_templates" / "app_config_template.json"
-            self.config_manager = ConfigManager("app", app_template_path)
-            
+            # ConfigService 会在首次使用时自动初始化
+            # 这里不需要显式初始化
+
             # 4. 初始化 ModuleManager
             self._logger.info("初始化 ModuleManager")
             self.module_manager = ModuleManager()
-            
-            # 5. 初始化 ThreadManager
+
+            # 5. 初始化 ThreadService（触发懒加载）
             self._logger.info("初始化 ThreadManager")
-            self.thread_manager = get_thread_manager()
-            
+            # ThreadService 会在首次使用时自动初始化
+            # 这里不需要显式初始化
+
             # 标记设置完成
             self._is_setup = True
             self._logger.info("应用程序设置完成")
-            
+
             return True
         except Exception as e:
             self._logger.error(f"应用程序设置失败: {e}")
@@ -280,17 +292,17 @@ class AppManager:
                     on_error(error_msg)
                 return False
         
-        if self.thread_manager:
-            self.thread_manager.run_in_thread(
+        # 使用统一服务层的 thread_service
+        try:
+            worker, token = thread_service.run_async(
                 start_task,
                 on_result=on_complete,
-                on_error=on_error,
-                on_progress=on_progress
+                on_error=on_error
             )
-        else:
-            self._logger.error("ThreadManager 未初始化")
+        except Exception as e:
+            self._logger.error(f"启动异步任务失败: {e}")
             if on_error:
-                on_error("ThreadManager 未初始化")
+                on_error(f"启动异步任务失败: {e}")
     
     def quit(self) -> None:
         """退出应用程序"""
@@ -310,45 +322,54 @@ class AppManager:
                     if module_info.state in [ModuleState.LOADED, ModuleState.INITIALIZED]:
                         self.module_manager.unload_module(module_name)
 
-            # 清理线程管理器
+            # 清理所有服务（使用统一服务层）
             try:
-                self._logger.info("清理线程管理器")
-                thread_manager = get_thread_manager()
-                thread_manager.cleanup()
-                self._logger.info("线程管理器清理完成")
-            except Exception as thread_error:
-                self._logger.error(f"清理线程管理器失败: {thread_error}", exc_info=True)
+                self._logger.info("清理所有服务")
+                cleanup_all_services()
+                # 注意：cleanup_all_services() 会清理所有服务，包括 LogService
+                # 所以后续不能再使用 self._logger
+                print("[INFO] 所有服务清理完成")
+            except Exception as service_error:
+                print(f"[ERROR] 清理服务失败: {service_error}")
 
             # 标记应用已停止
             self._is_running = False
 
-            self._logger.info("应用程序退出完成")
+            print("[INFO] 应用程序退出完成")
         except Exception as e:
             self._logger.error(f"应用程序退出时发生错误: {e}")
     
     def get_app_config(self) -> Dict[str, Any]:
         """获取应用程序配置
-        
+
         Returns:
             Dict[str, Any]: 应用程序配置
         """
-        if not self.config_manager:
+        try:
+            # 使用统一服务层的 config_service
+            app_template_path = Path(__file__).parent / "config_templates" / "app_config_template.json"
+            return config_service.get_module_config("app", template_path=app_template_path)
+        except Exception as e:
+            self._logger.error(f"获取应用配置失败: {e}")
             return {}
-        return self.config_manager.get_module_config()
-    
+
     def update_app_config(self, key: str, value: Any) -> bool:
         """更新应用程序配置
-        
+
         Args:
             key: 配置键
             value: 配置值
-            
+
         Returns:
             bool: 更新是否成功
         """
-        if not self.config_manager:
+        try:
+            # 使用统一服务层的 config_service
+            app_template_path = Path(__file__).parent / "config_templates" / "app_config_template.json"
+            return config_service.update_config_value("app", key, value, template_path=app_template_path)
+        except Exception as e:
+            self._logger.error(f"更新应用配置失败: {e}")
             return False
-        return self.config_manager.update_config_value(key, value)
     
     def is_setup(self) -> bool:
         """检查应用程序是否已设置
