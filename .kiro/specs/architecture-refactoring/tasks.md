@@ -18,8 +18,8 @@
 - [x] 5. 实现服务层入口和单例管理 ✅ (已完成 - 2025-11-17)
 - [x] 6. 迁移 core/app_manager.py ✅ (已完成 - 2025-11-17)
 - [x] 7. 迁移 ui/ue_main_window.py ✅ (已完成 - 2025-11-17)
-- [ ] 8. 迁移 modules/asset_manager
-- [ ] 9. 迁移 modules/ai_assistant
+- [x] 8. 迁移 modules/asset_manager ✅ (已完成 - 2025-11-17)
+- [x] 9. 迁移 modules/ai_assistant ✅ (已完成 - 2025-11-17)
 - [x] 10. 迁移 modules/config_tool ✅ (无需迁移 - 2025-11-17)
 - [x] 11. 迁移 modules/site_recommendations ✅ (无需迁移 - 2025-11-17)
 - [ ] 12. 添加健康检查功能
@@ -420,20 +420,19 @@ python main.py
 
 #### 子任务
 
-- [ ] 8.1 迁移 asset_manager_logic.py
+- [x] 8.1 迁移 asset_manager.py ✅
 
-  - 更新导入语句
-  - 移除实例创建
-  - 更新方法调用
+  - 更新导入语句使用 style_service
+  - 修改 get_widget() 使用 style_service.get_current_theme()
   - _Requirements: Requirement 8.1, 8.2, 8.3_
 
-- [ ] 8.2 迁移 asset_manager_ui.py
+- [x] 8.2 检查 asset_manager_ui.py 和 logic ✅
 
-  - 更新导入语句
-  - 更新方法调用
+  - 已使用 core.logger.get_logger
+  - 无其他服务依赖，符合规范
   - _Requirements: Requirement 8.1, 8.2, 8.3_
 
-- [ ] 8.3 测试功能
+- [x] 8.3 测试功能 ✅
   - 运行应用程序
   - 测试资产管理器功能
   - _Requirements: Requirement 11.1, 11.2_
@@ -466,20 +465,19 @@ python main.py
 
 #### 子任务
 
-- [ ] 9.1 迁移 ai_assistant_logic.py
+- [x] 9.1 迁移 ai_assistant.py ✅
 
-  - 更新导入语句
-  - 移除实例创建
-  - 更新方法调用
+  - 更新导入语句使用 thread_service
+  - 修改 \_preload_embedding_model_async() 使用 thread_service.run_async()
   - _Requirements: Requirement 8.1, 8.2, 8.3_
 
-- [ ] 9.2 迁移 ai_assistant_ui.py
+- [x] 9.2 迁移 logic/local_retriever.py ✅
 
-  - 更新导入语句
-  - 更新方法调用
+  - 更新导入语句使用 path_service
+  - 修改数据库路径获取逻辑
   - _Requirements: Requirement 8.1, 8.2, 8.3_
 
-- [ ] 9.3 测试功能
+- [x] 9.3 测试功能 ✅
   - 运行应用程序
   - 测试 AI 助手功能
   - _Requirements: Requirement 11.1, 11.2_
