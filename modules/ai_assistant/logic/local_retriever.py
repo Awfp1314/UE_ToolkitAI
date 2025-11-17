@@ -127,9 +127,8 @@ class LocalDocIndex:
         # 数据库路径
         if db_path is None:
             try:
-                from core.utils.path_utils import PathUtils
-                path_utils = PathUtils()
-                self.db_path = path_utils.get_user_data_dir() / "chroma_db"
+                from core.services import path_service
+                self.db_path = path_service.get_user_data_dir() / "chroma_db"
             except Exception as e:
                 self.logger.warning(f"无法获取用户数据目录，使用默认路径: {e}")
                 self.db_path = Path.home() / ".ue_toolkit" / "chroma_db"

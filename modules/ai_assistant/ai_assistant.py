@@ -11,7 +11,7 @@ import threading
 from contextlib import contextmanager
 
 from core.logger import get_logger
-from core.utils.thread_utils import get_thread_manager
+from core.services import thread_service
 # from modules.ai_assistant.ui.chat_window import ChatWindow  # TODO: 待实现新 UI
 
 logger = get_logger(__name__)
@@ -143,7 +143,7 @@ class AIAssistantModule:
         """异步预加载 embedding 模型（后台线程）
 
         优化策略：
-        1. 使用 ThreadManager 管理线程生命周期
+        1. 使用 ThreadService 管理线程生命周期
         2. 使用上下文管理器自动恢复环境变量
         3. 通过信号在主线程显示UI提示
         4. 失败时优雅降级
@@ -275,9 +275,8 @@ class AIAssistantModule:
                 else:
                     self._model_load_progress = "模型预加载失败，首次提问时会自动加载"
 
-        # 使用 ThreadManager 管理线程
-        thread_manager = get_thread_manager()
-        thread_manager.run_in_thread(
+        # 使用 ThreadService 管理线程
+        thread_service.run_async(
             preload_task,
             on_result=lambda: logger.debug("模型预加载任务完成"),
             on_error=lambda err: logger.error(f"模型预加载任务出错: {err}")

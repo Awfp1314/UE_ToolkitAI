@@ -8,7 +8,7 @@ from pathlib import Path
 from PyQt6.QtWidgets import QWidget
 
 from core.logger import get_logger
-from core.utils.style_system import style_system
+from core.services import style_service
 from .logic import AssetManagerLogic
 from .ui import AssetManagerUI
 
@@ -46,11 +46,11 @@ class AssetManagerModule:
         if self.ui is None:
             if self.logic is None:
                 raise RuntimeError("模块未初始化，请先调用 initialize()")
-            
+
             # 获取当前主题
-            current_theme = style_system.current_theme
+            current_theme = style_service.get_current_theme()
             theme_name = 'dark' if current_theme == 'modern_dark' else 'light'
-            
+
             # 创建 UI
             self.ui = AssetManagerUI(self.logic, theme=theme_name, parent=self.parent)
             logger.info(f"资产管理器 UI 创建完成，主题: {theme_name}")
