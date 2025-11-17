@@ -265,23 +265,28 @@ class ThreadManager:
             worker.cancel()
     
     def cleanup(self):
-        """清理所有线程（阻塞等待所有线程完成）"""
+        """清理所有线程（阻塞等待所有线程完成）
+
+        优化策略：
+        1. 先取消所有任务（协作式取消）
+        2. 等待线程完成（最多2秒，避免退出卡顿）
+        3. 超时后强制终止（避免无限等待）
+        """
         logger.info(f"开始清理线程，共 {len(self.threads)} 个")
-        
+
         # 先取消所有任务
         self.cancel_all()
-        
-        # 等待所有线程完成
+
+        # 等待所有线程完成（缩短等待时间到2秒）
         for thread in self.threads:
             if thread.isRunning():
                 thread.quit()
-                thread.wait(5000)  # 最多等待5秒
-                
-                if thread.isRunning():
-                    logger.warning("线程未能在5秒内完成，强制终止")
+                # 缩短等待时间到2秒，避免退出时卡顿
+                if not thread.wait(2000):  # 最多等待2秒
+                    logger.warning("线程未能在2秒内完成，强制终止")
                     thread.terminate()
-                    thread.wait()
-        
+                    thread.wait(100)  # 等待终止完成（最多100ms）
+
         self.threads.clear()
         self.workers.clear()
         logger.info("线程清理完成")

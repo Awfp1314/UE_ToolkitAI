@@ -69,17 +69,20 @@ class AIAssistantModule:
     
     def initialize(self, config_dir: str):
         """初始化模块
-        
+
         Args:
             config_dir: 配置文件目录路径
         """
         logger.info(f"初始化 AI 助手模块，配置目录: {config_dir}")
         try:
             # AI 助手不需要持久化配置，可以跳过
-            
+
             # v0.1 新增：异步预加载 embedding 模型（避免首次调用卡顿）
-            self._preload_embedding_model_async()
-            
+            # 注意：预加载会导致退出时卡顿（模型加载是阻塞操作，无法中断）
+            # 改为完全延迟加载：模型会在首次真正使用时自动加载
+            # self._preload_embedding_model_async()
+            logger.info("AI 模型采用延迟加载策略（首次使用时自动加载）")
+
             logger.info("AI 助手模块初始化完成")
         except Exception as e:
             logger.error(f"AI 助手模块初始化失败: {e}", exc_info=True)
@@ -153,11 +156,21 @@ class AIAssistantModule:
         self._model_loading = True
         self._model_load_progress = "准备加载模型..."
 
-        def preload_task():
+        def preload_task(cancel_token):
+            """预加载任务（支持协作式取消）
+
+            Args:
+                cancel_token: 取消令牌，用于检查是否需要取消任务
+            """
             try:
                 import os
                 import time
                 start_time = time.time()
+
+                # 检查是否已取消
+                if cancel_token.is_cancelled():
+                    logger.info("模型预加载任务在启动前被取消")
+                    return
 
                 # 使用上下文管理器临时修改环境变量
                 proxy_keys = ['HTTP_PROXY', 'HTTPS_PROXY', 'http_proxy', 'https_proxy', 'ALL_PROXY', 'all_proxy']
@@ -175,14 +188,32 @@ class AIAssistantModule:
                     logger.info("🚀 开始后台预加载 AI 模型（已启用离线模式）...")
                     self._model_load_progress = "正在加载语义模型..."
 
-                    # 1. 预加载语义模型
+                    # 检查是否已取消
+                    if cancel_token.is_cancelled():
+                        logger.info("模型预加载任务在语义模型加载前被取消")
+                        return
+
+                    # 1. 预加载语义模型（仅初始化，不触发模型加载）
                     model_start = time.time()
                     from modules.ai_assistant.logic.intent_parser import IntentEngine
+
+                    # 只创建实例，不调用 parse()，避免阻塞式模型加载
+                    # 模型会在首次真正使用时自动加载（延迟加载）
                     temp_engine = IntentEngine(model_type="bge-small")
-                    temp_engine.parse("预热测试")
+
+                    # 检查是否已取消
+                    if cancel_token.is_cancelled():
+                        logger.info("模型预加载任务在语义模型初始化后被取消")
+                        return
+
                     model_elapsed = time.time() - model_start
-                    logger.info(f"✅ 语义模型加载完成（耗时 {model_elapsed:.1f} 秒）")
-                    self._model_load_progress = "语义模型加载完成，正在预热向量数据库..."
+                    logger.info(f"✅ 语义模型引擎初始化完成（耗时 {model_elapsed:.2f} 秒，模型将在首次使用时加载）")
+                    self._model_load_progress = "语义模型引擎初始化完成，正在预热向量数据库..."
+
+                    # 检查是否已取消
+                    if cancel_token.is_cancelled():
+                        logger.info("模型预加载任务在FAISS初始化前被取消")
+                        return
 
                     # 2. 预热 FAISS 记忆系统
                     try:
@@ -192,6 +223,12 @@ class AIAssistantModule:
 
                         self._model_load_progress = "正在初始化 FAISS 记忆系统..."
                         embedding_service = EmbeddingService()
+
+                        # 检查是否已取消
+                        if cancel_token.is_cancelled():
+                            logger.info("模型预加载任务在FAISS初始化中被取消")
+                            return
+
                         temp_memory = EnhancedMemoryManager(
                             user_id="default",
                             embedding_service=embedding_service
@@ -204,6 +241,11 @@ class AIAssistantModule:
                             logger.warning("⚠️ FAISS 记忆系统初始化失败（将在运行时重试）")
                     except Exception as e:
                         logger.warning(f"⚠️ FAISS 记忆系统预热失败（首次对话时会自动初始化）: {e}")
+
+                # 检查是否已取消
+                if cancel_token.is_cancelled():
+                    logger.info("模型预加载任务在完成前被取消")
+                    return
 
                 # 环境变量已自动恢复
                 total_elapsed = time.time() - start_time
