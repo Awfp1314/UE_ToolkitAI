@@ -3,17 +3,57 @@
 
 提供模块级单例访问接口，支持懒加载和依赖管理
 
-使用方式:
-    from core.services import log_service, thread_service, config_service
-    
-    # 获取日志记录器
-    logger = log_service.get_logger("my_module")
-    
-    # 运行异步任务
-    worker, token = thread_service.run_async(my_task, on_result=callback)
-    
-    # 获取配置
-    config = config_service.get_module_config("my_module", template_path=path)
+## 架构设计
+
+服务层采用三级依赖架构：
+- **Level 0**（无依赖）：LogService, PathService
+- **Level 1**（依赖 Level 0）：ConfigService, StyleService
+- **Level 2**（依赖 Level 0 和 Level 1）：ThreadService
+
+## 核心特性
+
+1. **单例模式**：每个服务全局唯一实例，避免资源浪费
+2. **懒加载**：服务在首次使用时才初始化，加快启动速度
+3. **依赖管理**：自动检测循环依赖，确保初始化顺序正确
+4. **统一清理**：cleanup_all_services() 按依赖逆序清理所有服务
+
+## 使用方式
+
+### 基础用法
+```python
+from core.services import log_service, thread_service, config_service
+
+# 获取日志记录器
+logger = log_service.get_logger("my_module")
+
+# 运行异步任务
+worker, token = thread_service.run_async(my_task, on_result=callback)
+
+# 获取配置
+config = config_service.get_module_config("my_module", template_path=path)
+```
+
+### 服务清理
+```python
+from core.services import cleanup_all_services
+
+# 应用退出时清理所有服务
+cleanup_all_services()
+```
+
+### 调试模式
+```python
+from core.services import is_debug_enabled
+
+if is_debug_enabled():
+    print("调试模式已启用")
+```
+
+## 注意事项
+
+1. **不要在工作线程中初始化服务**：某些服务（如 StyleService）依赖 Qt 主线程
+2. **不要手动创建服务实例**：始终通过模块级单例访问
+3. **清理顺序很重要**：cleanup_all_services() 会按依赖逆序清理，不要手动清理单个服务
 """
 
 import os
@@ -146,11 +186,56 @@ def _get_path_service():
 
 
 # Level 1 服务（可依赖 Level 0）
-# def _get_config_service(): ...
-# def _get_style_service(): ...
+
+def _get_config_service():
+    """获取配置服务单例（内部函数）"""
+    global _config_service, _service_states
+
+    if _config_service is None:
+        _check_circular_dependency('config')
+        _service_states['config'] = ServiceState.INITIALIZING
+
+        from core.services.config_service import ConfigService
+        _config_service = ConfigService()
+
+        _service_states['config'] = ServiceState.INITIALIZED
+
+    return _config_service
+
+
+def _get_style_service():
+    """获取样式服务单例（内部函数）"""
+    global _style_service, _service_states
+
+    if _style_service is None:
+        _check_circular_dependency('style')
+        _service_states['style'] = ServiceState.INITIALIZING
+
+        from core.services.style_service import StyleService
+        _style_service = StyleService()
+
+        _service_states['style'] = ServiceState.INITIALIZED
+
+    return _style_service
+
 
 # Level 2 服务（可依赖 Level 0 和 Level 1）
-# def _get_thread_service(): ...
+
+def _get_thread_service():
+    """获取线程服务单例（内部函数）"""
+    global _thread_service, _service_states
+
+    if _thread_service is None:
+        _check_circular_dependency('thread')
+        _service_states['thread'] = ServiceState.INITIALIZING
+
+        from core.services.thread_service import ThreadService
+        _thread_service = ThreadService()
+
+        _service_states['thread'] = ServiceState.INITIALIZED
+        _get_log_service().get_logger("services").info("ThreadService 已初始化")
+
+    return _thread_service
 
 
 # ============================================================================
@@ -184,10 +269,111 @@ class _LazyService:
 
 
 # ============================================================================
-# 服务清理函数（将在后续任务中实现）
+# 服务清理函数
 # ============================================================================
 
-# def cleanup_all_services(): ...
+def cleanup_all_services():
+    """清理所有服务（按依赖顺序：Level 2 → Level 1 → Level 0）
+
+    清理顺序：
+    1. Level 2: ThreadService
+    2. Level 1: StyleService, ConfigService
+    3. Level 0: PathService, LogService
+
+    注意：
+    - 按照依赖关系逆序清理，避免依赖问题
+    - 清理后重置服务实例和状态
+    - 清理失败不会中断整个流程，会记录错误并继续
+    """
+    global _thread_service, _style_service, _config_service, _path_service, _log_service
+    global _service_states
+
+    # 获取 logger（在清理前）
+    logger = None
+    if _log_service is not None:
+        try:
+            logger = _log_service.get_logger("services")
+            logger.info("开始清理所有服务...")
+        except:
+            pass
+
+    # Level 2: ThreadService
+    if _thread_service is not None:
+        try:
+            if logger:
+                logger.info("清理 ThreadService...")
+            _thread_service.cleanup()
+            _thread_service = None
+            _service_states['thread'] = ServiceState.NOT_INITIALIZED
+            if logger:
+                logger.info("ThreadService 清理完成")
+        except Exception as e:
+            if logger:
+                logger.error(f"ThreadService 清理失败: {e}", exc_info=True)
+            else:
+                print(f"[ERROR] ThreadService 清理失败: {e}")
+
+    # Level 1: StyleService
+    if _style_service is not None:
+        try:
+            if logger:
+                logger.info("清理 StyleService...")
+            _style_service.cleanup()
+            _style_service = None
+            _service_states['style'] = ServiceState.NOT_INITIALIZED
+            if logger:
+                logger.info("StyleService 清理完成")
+        except Exception as e:
+            if logger:
+                logger.error(f"StyleService 清理失败: {e}", exc_info=True)
+            else:
+                print(f"[ERROR] StyleService 清理失败: {e}")
+
+    # Level 1: ConfigService
+    if _config_service is not None:
+        try:
+            if logger:
+                logger.info("清理 ConfigService...")
+            _config_service.cleanup()
+            _config_service = None
+            _service_states['config'] = ServiceState.NOT_INITIALIZED
+            if logger:
+                logger.info("ConfigService 清理完成")
+        except Exception as e:
+            if logger:
+                logger.error(f"ConfigService 清理失败: {e}", exc_info=True)
+            else:
+                print(f"[ERROR] ConfigService 清理失败: {e}")
+
+    # Level 0: PathService
+    if _path_service is not None:
+        try:
+            if logger:
+                logger.info("清理 PathService...")
+            _path_service.cleanup()
+            _path_service = None
+            _service_states['path'] = ServiceState.NOT_INITIALIZED
+            if logger:
+                logger.info("PathService 清理完成")
+        except Exception as e:
+            if logger:
+                logger.error(f"PathService 清理失败: {e}", exc_info=True)
+            else:
+                print(f"[ERROR] PathService 清理失败: {e}")
+
+    # Level 0: LogService（最后清理）
+    if _log_service is not None:
+        try:
+            if logger:
+                logger.info("清理 LogService...")
+            _log_service.cleanup()
+            _log_service = None
+            _service_states['log'] = ServiceState.NOT_INITIALIZED
+            print("[INFO] LogService 清理完成")
+        except Exception as e:
+            print(f"[ERROR] LogService 清理失败: {e}")
+
+    print("[INFO] 所有服务清理完成")
 
 
 # ============================================================================
@@ -196,6 +382,9 @@ class _LazyService:
 
 log_service = _LazyService(_get_log_service)
 path_service = _LazyService(_get_path_service)
+config_service = _LazyService(_get_config_service)
+style_service = _LazyService(_get_style_service)
+thread_service = _LazyService(_get_thread_service)
 
 
 # ============================================================================
@@ -205,13 +394,16 @@ path_service = _LazyService(_get_path_service)
 __all__ = [
     # 工具函数
     'is_debug_enabled',
+    'cleanup_all_services',
     # Level 0 服务
     'log_service',
     'path_service',
-    # 服务实例（将在后续任务中添加）
-    # 'config_service',
-    # 'style_service',
-    # 'thread_service',
-    # 'cleanup_all_services',
+    # Level 1 服务
+    'config_service',
+    'style_service',
+    # Level 2 服务
+    'thread_service',
+    # 枚举和异常（供高级用户使用）
+    'ServiceState',
 ]
 

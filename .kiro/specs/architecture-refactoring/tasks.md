@@ -13,8 +13,8 @@
 
 - [x] 1. 创建服务层基础结构 ✅ (已完成 - commit: 9a1d6a1)
 - [x] 2. 实现 Level 0 服务（LogService 和 PathService） ✅ (已完成 - commit: 4dd614b)
-- [ ] 3. 实现 Level 1 服务（ConfigService 和 StyleService）
-- [ ] 4. 实现 Level 2 服务（ThreadService）
+- [x] 3. 实现 Level 1 服务（ConfigService 和 StyleService） ✅ (已完成 - 2024-11-17)
+- [x] 4. 实现 Level 2 服务（ThreadService） ✅ (已完成 - 2024-11-17)
 - [ ] 5. 实现服务层入口和单例管理
 - [ ] 6. 迁移 core/app_manager.py
 - [ ] 7. 迁移 ui/ue_main_window.py
@@ -135,14 +135,14 @@ assert log_service is log_service2
 
 #### 子任务
 
-- [ ] 3.1 实现 ConfigService
+- [x] 3.1 实现 ConfigService ✅
 
   - 创建 `core/services/config_service.py`
   - 实现所有配置管理方法
   - 使用 LogService 记录日志
   - _Requirements: Requirement 3.1-3.6_
 
-- [ ] 3.2 实现 StyleService
+- [x] 3.2 实现 StyleService ✅
 
   - 创建 `core/services/style_service.py`
   - 实现所有样式管理方法
@@ -150,7 +150,7 @@ assert log_service is log_service2
   - 使用 LogService 记录日志
   - _Requirements: Requirement 5.1-5.9_
 
-- [ ] 3.3 在 `__init__.py` 中添加 Level 1 服务的 getter 函数
+- [x] 3.3 在 `__init__.py` 中添加 Level 1 服务的 getter 函数 ✅
   - 实现 `_get_config_service()` 和 `_get_style_service()`
   - 导出 `config_service` 和 `style_service`
   - _Requirements: Requirement 1.2, 1.3, 1.12_
@@ -183,7 +183,7 @@ assert len(themes) > 0
 
 #### 子任务
 
-- [ ] 4.0 确认 ThreadManager 签名检测与 cancel_token 注入
+- [x] 4.0 确认 ThreadManager 签名检测与 cancel_token 注入 ✅
 
   - 检查 `core/utils/thread_utils.py` 中 Worker 类的 `cancel_token` 属性（应在第 68 行）
   - 检查 ThreadManager 的签名检测逻辑（应在第 69-71 行）
@@ -244,14 +244,14 @@ assert len(themes) > 0
   print("\n✅ 所有验证通过：ThreadManager 签名检测和 token 注入功能完整")
   ```
 
-- [ ] 4.1 实现 ThreadService
+- [x] 4.1 实现 ThreadService ✅
 
   - 创建 `core/services/thread_service.py`
   - 实现所有线程管理方法
   - 使用 LogService 记录日志
   - _Requirements: Requirement 2.1-2.11_
 
-- [ ] 4.2 在 `__init__.py` 中添加 Level 2 服务的 getter 函数
+- [x] 4.2 在 `__init__.py` 中添加 Level 2 服务的 getter 函数 ✅
   - 实现 `_get_thread_service()`
   - 导出 `thread_service`
   - _Requirements: Requirement 1.2, 1.3, 1.12_
