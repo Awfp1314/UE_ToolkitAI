@@ -11,7 +11,7 @@
 
 ## 任务列表
 
-- [ ] 1. 创建服务层基础结构
+- [x] 1. 创建服务层基础结构 ✅ (已完成 - commit: 9a1d6a1)
 - [ ] 2. 实现 Level 0 服务（LogService 和 PathService）
 - [ ] 3. 实现 Level 1 服务（ConfigService 和 StyleService）
 - [ ] 4. 实现 Level 2 服务（ThreadService）
@@ -41,18 +41,18 @@
 
 #### 子任务
 
-- [ ] 1.1 创建 `core/services/` 目录
+- [x] 1.1 创建 `core/services/` 目录 ✅
 
   - 创建目录结构
   - _Requirements: Requirement 1.6_
 
-- [ ] 1.2 创建 `core/services/exceptions.py`
+- [x] 1.2 创建 `core/services/exceptions.py` ✅
 
   - 定义 ServiceError 及其子类
   - 包含：ServiceInitializationError, CircularDependencyError, ConfigError, ThreadError, StyleError, PathError
   - _Requirements: Requirement 9.2_
 
-- [ ] 1.3 创建 `core/services/__init__.py` 骨架
+- [x] 1.3 创建 `core/services/__init__.py` 骨架 ✅
   - 定义 ServiceState 枚举
   - 定义全局变量（服务实例和状态）
   - 定义 is_debug_enabled() 函数
