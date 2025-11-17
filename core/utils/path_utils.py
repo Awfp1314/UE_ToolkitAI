@@ -6,12 +6,22 @@ import platform
 import logging
 from pathlib import Path
 
-logger = logging.getLogger(__name__)
+# 模块级 logger - 注释掉以避免死锁
+# logger = logging.getLogger(__name__)
 
 
 class PathUtils:
     def __init__(self) -> None:
         self.system: str = platform.system()
+        # 延迟创建 logger，避免在 Logger 初始化时触发 logging 模块初始化
+        self._logger = None
+
+    @property
+    def logger(self):
+        """延迟创建 logger"""
+        if self._logger is None:
+            self._logger = logging.getLogger(__name__)
+        return self._logger
     
     def get_user_data_dir(self) -> Path:
         """返回用户数据目录路径
@@ -24,7 +34,7 @@ class PathUtils:
             # 如果无法获取主目录，使用临时目录作为备用
             import tempfile
             home = Path(tempfile.gettempdir())
-            logger.warning(f"无法获取用户主目录，使用临时目录: {home}")
+            self.logger.warning(f"无法获取用户主目录，使用临时目录: {home}")
         
         if self.system == "Windows":
             # Windows: %APPDATA%/ue_toolkit/user_data
@@ -42,21 +52,21 @@ class PathUtils:
                 base_path = home / '.local' / 'share'
         
         user_data_path = base_path / "ue_toolkit" / "user_data"
-        logger.info(f"用户数据目录路径: {user_data_path}")
+        self.logger.info(f"用户数据目录路径: {user_data_path}")
         return user_data_path
     
     def get_user_config_dir(self) -> Path:
         """返回用户配置目录路径"""
         user_data_dir = self.get_user_data_dir()
         config_path = user_data_dir / "configs"
-        logger.info(f"用户配置目录路径: {config_path}")
+        self.logger.info(f"用户配置目录路径: {config_path}")
         return config_path
     
     def get_user_logs_dir(self) -> Path:
         """返回用户日志目录路径"""
         user_data_dir = self.get_user_data_dir()
         logs_path = user_data_dir / "logs"
-        logger.info(f"用户日志目录路径: {logs_path}")
+        self.logger.info(f"用户日志目录路径: {logs_path}")
         return logs_path
     
     def create_dirs(self) -> None:
@@ -73,13 +83,13 @@ class PathUtils:
             "cache"
         ]
         
-        logger.info(f"开始创建用户数据目录: {user_data_dir}")
+        self.logger.info(f"开始创建用户数据目录: {user_data_dir}")
         # 确保用户数据目录存在
         user_data_dir.mkdir(parents=True, exist_ok=True)
-        logger.info(f"用户数据目录创建完成: {user_data_dir}")
-        
+        self.logger.info(f"用户数据目录创建完成: {user_data_dir}")
+
         for dir_name in dirs_to_create:
             dir_path = user_data_dir / dir_name
-            logger.info(f"正在创建目录: {dir_path}")
+            self.logger.info(f"正在创建目录: {dir_path}")
             dir_path.mkdir(parents=True, exist_ok=True)
-            logger.info(f"目录创建成功: {dir_path}")
+            self.logger.info(f"目录创建成功: {dir_path}")

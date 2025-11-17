@@ -168,25 +168,32 @@ class Logger:
             
             # 清除现有的处理器，避免重复添加
             self.logger.handlers.clear()
-            
-            # 延迟导入PathUtils以避免循环导入
-            from core.utils.path_utils import PathUtils
-            self.path_utils = PathUtils()
-            
+
+            # 延迟创建 PathUtils，避免在初始化时导入
+            self._path_utils = None
+
             # 设置日志格式
             self.formatter = logging.Formatter(
                 '%(asctime)s - %(name)s - %(levelname)s - %(message)s',
                 datefmt='%Y-%m-%d %H:%M:%S'
             )
-            
+
             # 配置日志处理器
             self._setup_handlers()
             
             # 标记已初始化（在锁内设置，确保原子性）
             self._initialized = True
-            
+
             self.logger.info("日志系统初始化完成")
-    
+
+    @property
+    def path_utils(self):
+        """延迟创建 PathUtils，避免循环导入"""
+        if self._path_utils is None:
+            from core.utils.path_utils import PathUtils
+            self._path_utils = PathUtils()
+        return self._path_utils
+
     def _setup_handlers(self):
         """配置日志处理器
         
