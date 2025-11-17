@@ -119,7 +119,9 @@ class AssetManagerUI(QWidget):
         self.grid_widget.setObjectName("AssetGridWidget")
         self.grid_layout = QGridLayout(self.grid_widget)
         self.grid_layout.setContentsMargins(0, 0, 0, 0)
-        self.grid_layout.setSpacing(30)  # 默认详细视图使用30px间距
+        # 根据当前视图模式设置间距
+        initial_spacing = 30 if self.current_view_mode == "detailed" else 20
+        self.grid_layout.setSpacing(initial_spacing)
         self.grid_layout.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
 
         scroll_layout.addWidget(self.grid_widget)
