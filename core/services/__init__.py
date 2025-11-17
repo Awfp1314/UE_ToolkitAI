@@ -160,7 +160,7 @@ def _get_log_service():
         if is_debug_enabled():
             print("[DEBUG] 正在初始化 LogService...")
 
-        from core.services.log_service import LogService
+        from core.services._log_service import LogService
         _log_service = LogService()
 
         _service_states['log'] = ServiceState.INITIALIZED
@@ -186,7 +186,7 @@ def _get_path_service():
         if is_debug_enabled():
             print("[DEBUG] 正在初始化 PathService...")
 
-        from core.services.path_service import PathService
+        from core.services._path_service import PathService
         _path_service = PathService()
 
         _service_states['path'] = ServiceState.INITIALIZED
@@ -207,7 +207,7 @@ def _get_config_service():
         _check_circular_dependency('config')
         _service_states['config'] = ServiceState.INITIALIZING
 
-        from core.services.config_service import ConfigService
+        from core.services._config_service import ConfigService
         _config_service = ConfigService()
 
         _service_states['config'] = ServiceState.INITIALIZED
@@ -223,7 +223,7 @@ def _get_style_service():
         _check_circular_dependency('style')
         _service_states['style'] = ServiceState.INITIALIZING
 
-        from core.services.style_service import StyleService
+        from core.services._style_service import StyleService
         _style_service = StyleService()
 
         _service_states['style'] = ServiceState.INITIALIZED
@@ -241,7 +241,7 @@ def _get_thread_service():
         _check_circular_dependency('thread')
         _service_states['thread'] = ServiceState.INITIALIZING
 
-        from core.services.thread_service import ThreadService
+        from core.services._thread_service import ThreadService
         _thread_service = ThreadService()
 
         _service_states['thread'] = ServiceState.INITIALIZED
@@ -418,4 +418,3 @@ __all__ = [
     # 枚举和异常（供高级用户使用）
     'ServiceState',
 ]
-
