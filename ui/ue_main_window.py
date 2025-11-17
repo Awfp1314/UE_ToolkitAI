@@ -17,11 +17,9 @@ from PyQt6.QtCore import Qt, QStandardPaths
 from PyQt6.QtGui import QIcon, QPixmap
 from pathlib import Path
 
-# 导入样式系统
-from core.utils.style_system import style_system
-from core.logger import get_logger
-
-logger = get_logger(__name__)
+# 使用统一服务层
+from core.services import style_service
+# 注意：不在模块级别导入 log_service，避免循环导入问题
 
 
 class UEMainWindow(QMainWindow):
@@ -29,6 +27,11 @@ class UEMainWindow(QMainWindow):
 
     def __init__(self, module_provider=None):
         super().__init__()
+
+        # 初始化 logger（使用旧的 logger，避免导入冲突）
+        from core.logger import get_logger
+        self.logger = get_logger(__name__)
+
         self.module_provider = module_provider
         # 模块名称和键（用于懒加载，避免启动时一次性创建所有模块UI）
         self.module_names = ["资产库", "AI 助手", "工程配置", "作者推荐"]
@@ -95,7 +98,7 @@ class UEMainWindow(QMainWindow):
         from core.logger import get_logger
         logger = get_logger(__name__)
         
-        logger.info("开始加载初始模块")
+        self.logger.info("开始加载初始模块")
         
         # 加载第一个模块
         self._ensure_module_loaded(0)
@@ -103,28 +106,28 @@ class UEMainWindow(QMainWindow):
         # 如果是资产库模块，异步加载资产
         if hasattr(self, "module_keys") and len(self.module_keys) > 0:
             if self.module_keys[0] == "asset_manager" and self.module_provider:
-                logger.info("检测到资产库模块，开始加载资产")
+                self.logger.info("检测到资产库模块，开始加载资产")
                 asset_manager = self.module_provider.get_module("asset_manager")
                 if asset_manager:
                     # 确保UI已创建
                     asset_widget = asset_manager.get_widget()
-                    logger.info(f"获取资产库UI组件: {asset_widget}")
+                    self.logger.info(f"获取资产库UI组件: {asset_widget}")
                     if asset_widget and hasattr(asset_widget, "load_assets_async"):
                         # 使用异步加载资产，避免阻塞UI
-                        logger.info("开始异步加载资产")
+                        self.logger.info("开始异步加载资产")
                         asset_widget.load_assets_async(on_complete)
                     elif on_complete:
-                        logger.warning("资产库UI组件不支持异步加载，直接调用回调")
+                        self.logger.warning("资产库UI组件不支持异步加载，直接调用回调")
                         on_complete()
                 else:
-                    logger.error("无法获取资产库模块")
+                    self.logger.error("无法获取资产库模块")
                     if on_complete:
                         on_complete()
             elif on_complete:
-                logger.warning("不是资产库模块，直接调用回调")
+                self.logger.warning("不是资产库模块，直接调用回调")
                 on_complete()
         elif on_complete:
-            logger.warning("没有模块键，直接调用回调")
+            self.logger.warning("没有模块键，直接调用回调")
             on_complete()
 
     def create_title_bar(self, parent_layout):
@@ -498,8 +501,8 @@ class UEMainWindow(QMainWindow):
                 return
         self._last_theme_toggle_time = current_time
 
-        # 获取当前主题并切换
-        current_theme = style_system.current_theme
+        # 获取当前主题并切换（使用统一服务层）
+        current_theme = style_service.get_current_theme()
 
         # 在深色和浅色主题之间切换
         if current_theme == 'modern_dark':
@@ -509,9 +512,9 @@ class UEMainWindow(QMainWindow):
             new_theme = 'modern_dark'
             theme_name = 'dark'
 
-        # 应用新主题
+        # 应用新主题（使用统一服务层）
         app = QApplication.instance()
-        style_system.apply_theme(app, new_theme)
+        style_service.apply_theme(app, new_theme)
 
         # 保存主题设置到配置文件
         self._save_theme_setting(new_theme)
@@ -562,7 +565,7 @@ class UEMainWindow(QMainWindow):
                     with open(config_path, 'r', encoding='utf-8') as f:
                         config = json.load(f)
                 except Exception as e:
-                    logger.warning(f"读取配置文件失败，将创建新配置: {e}")
+                    self.logger.warning(f"读取配置文件失败，将创建新配置: {e}")
 
             # 更新主题设置
             config['theme'] = theme_name
@@ -571,14 +574,15 @@ class UEMainWindow(QMainWindow):
             with open(config_path, 'w', encoding='utf-8') as f:
                 json.dump(config, f, indent=2, ensure_ascii=False)
 
-            logger.info(f"主题设置已保存到配置文件: {theme_name}")
+            self.logger.info(f"主题设置已保存到配置文件: {theme_name}")
 
         except Exception as e:
-            logger.error(f"保存主题设置失败: {e}", exc_info=True)
+            self.logger.error(f"保存主题设置失败: {e}", exc_info=True)
 
     def _update_theme_button_icon(self):
         """根据当前主题更新主题按钮图标"""
-        current_theme = style_system.current_theme
+        # 使用统一服务层获取当前主题
+        current_theme = style_service.get_current_theme()
 
         if current_theme == 'modern_dark':
             self.theme_button.setText("☀")  # 深色主题显示太阳图标
@@ -618,7 +622,7 @@ class UEMainWindow(QMainWindow):
         Args:
             event: 关闭事件对象
         """
-        logger.info("主窗口正在关闭，清理资源...")
+        self.logger.info("主窗口正在关闭，清理资源...")
 
         try:
             # 调用 app_manager 的 quit 方法清理资源
@@ -628,10 +632,10 @@ class UEMainWindow(QMainWindow):
 
             # 接受关闭事件
             event.accept()
-            logger.info("主窗口资源清理完成")
+            self.logger.info("主窗口资源清理完成")
 
         except Exception as e:
-            logger.error(f"关闭窗口时发生错误: {e}", exc_info=True)
+            self.logger.error(f"关闭窗口时发生错误: {e}", exc_info=True)
             # 即使出错也要接受关闭事件
             event.accept()
 
