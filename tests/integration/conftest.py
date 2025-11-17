@@ -9,6 +9,10 @@ import tempfile
 import shutil
 from pathlib import Path
 import os
+import sys
+
+# 导入 Qt 应用程序
+from PyQt6.QtWidgets import QApplication
 
 
 class TestEnvironment:
@@ -45,18 +49,33 @@ def test_env():
     env.cleanup()
 
 
+@pytest.fixture(scope="session")
+def qapp():
+    """提供 QApplication 实例
+
+    ThreadService 需要 QApplication 才能正常工作
+    使用 session scope 确保整个测试会话只创建一次
+    """
+    app = QApplication.instance()
+    if app is None:
+        app = QApplication(sys.argv)
+    yield app
+    # 不要退出应用，让 pytest 自己管理
+
+
 @pytest.fixture(scope="function")
-def clean_services():
+def clean_services(qapp):
     """清理所有服务单例
-    
+
     确保每个测试都从干净的状态开始
+    依赖 qapp fixture 确保 QApplication 已创建
     """
     # 测试前清理
     from core.services import cleanup_all_services
     cleanup_all_services()
-    
+
     yield
-    
+
     # 测试后清理
     cleanup_all_services()
 

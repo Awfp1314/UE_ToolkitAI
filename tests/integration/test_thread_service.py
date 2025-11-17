@@ -6,6 +6,7 @@ ThreadService 集成测试
 
 import pytest
 import time
+from PyQt6.QtWidgets import QApplication
 
 
 def test_thread_service_basic(clean_services):
@@ -30,8 +31,12 @@ def test_thread_service_basic(clean_services):
     # 提交任务
     thread_service.run_async(test_task, on_result=on_result)
 
-    # 等待任务完成
-    time.sleep(0.5)
+    # 等待任务完成，处理 Qt 事件
+    for _ in range(10):  # 最多等待 1 秒
+        QApplication.processEvents()
+        time.sleep(0.1)
+        if len(result_container) > 0:
+            break
 
     # 验证结果
     assert len(result_container) == 1, "应该收到一个结果"
@@ -59,8 +64,12 @@ def test_thread_service_error_handling(clean_services):
     # 提交任务
     thread_service.run_async(error_task, on_error=on_error)
 
-    # 等待任务完成
-    time.sleep(0.5)
+    # 等待任务完成，处理 Qt 事件
+    for _ in range(10):  # 最多等待 1 秒
+        QApplication.processEvents()
+        time.sleep(0.1)
+        if len(error_container) > 0:
+            break
 
     # 验证错误
     assert len(error_container) == 1, "应该收到一个错误"
@@ -92,11 +101,15 @@ def test_thread_service_multiple_tasks(clean_services):
     for i in range(5):
         thread_service.run_async(create_task(i), on_result=on_result)
 
-    # 等待所有任务完成
-    time.sleep(1.0)
+    # 等待所有任务完成，处理 Qt 事件
+    for _ in range(20):  # 最多等待 2 秒
+        QApplication.processEvents()
+        time.sleep(0.1)
+        if len(result_container) >= 5:
+            break
 
     # 验证结果
-    assert len(result_container) == 5, "应该收到 5 个结果"
+    assert len(result_container) == 5, f"应该收到 5 个结果，实际收到 {len(result_container)} 个"
     for i in range(5):
         assert f"task_{i}" in result_container, f"应该包含 task_{i}"
 
