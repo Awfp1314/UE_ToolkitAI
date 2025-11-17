@@ -97,9 +97,9 @@ _service_states = {
 
 def is_debug_enabled() -> bool:
     """检查是否启用调试模式
-    
+
     优先级：环境变量 > 配置文件
-    
+
     Returns:
         是否启用调试
     """
@@ -107,15 +107,15 @@ def is_debug_enabled() -> bool:
     env_debug = os.getenv('DEBUG_SERVICES', '').lower()
     if env_debug in ('1', 'true', 'yes'):
         return True
-    
-    # TODO: 从配置文件读取（未来实现）
-    # try:
-    #     from core.services import config_service
-    #     app_config = config_service.get_module_config("app")
-    #     return app_config.get("debug_services", False)
-    # except:
-    #     pass
-    
+
+    # 从配置文件读取
+    try:
+        app_config = _get_config_service().get_module_config("app")
+        return app_config.get("debug_services", False)
+    except Exception:
+        # 配置文件读取失败，返回 False
+        pass
+
     return False
 
 
@@ -157,10 +157,16 @@ def _get_log_service():
         _check_circular_dependency('log')
         _service_states['log'] = ServiceState.INITIALIZING
 
+        if is_debug_enabled():
+            print("[DEBUG] 正在初始化 LogService...")
+
         from core.services.log_service import LogService
         _log_service = LogService()
 
         _service_states['log'] = ServiceState.INITIALIZED
+
+        if is_debug_enabled():
+            print("[DEBUG] LogService 初始化完成")
 
     return _log_service
 
@@ -177,10 +183,16 @@ def _get_path_service():
         _check_circular_dependency('path')
         _service_states['path'] = ServiceState.INITIALIZING
 
+        if is_debug_enabled():
+            print("[DEBUG] 正在初始化 PathService...")
+
         from core.services.path_service import PathService
         _path_service = PathService()
 
         _service_states['path'] = ServiceState.INITIALIZED
+
+        if is_debug_enabled():
+            print("[DEBUG] PathService 初始化完成")
 
     return _path_service
 
