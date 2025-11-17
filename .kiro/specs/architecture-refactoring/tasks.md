@@ -12,7 +12,7 @@
 ## 任务列表
 
 - [x] 1. 创建服务层基础结构 ✅ (已完成 - commit: 9a1d6a1)
-- [ ] 2. 实现 Level 0 服务（LogService 和 PathService）
+- [x] 2. 实现 Level 0 服务（LogService 和 PathService） ✅ (已完成 - commit: 4dd614b)
 - [ ] 3. 实现 Level 1 服务（ConfigService 和 StyleService）
 - [ ] 4. 实现 Level 2 服务（ThreadService）
 - [ ] 5. 实现服务层入口和单例管理
@@ -85,21 +85,21 @@ assert issubclass(CircularDependencyError, ServiceError)
 
 #### 子任务
 
-- [ ] 2.1 实现 LogService
+- [x] 2.1 实现 LogService ✅
 
   - 创建 `core/services/log_service.py`
   - 实现 `__init__()`, `get_logger()`, `set_level()`, `cleanup()` 方法
   - 使用 print() 记录初始化日志（避免循环依赖）
   - _Requirements: Requirement 4.1, 4.2, 4.5, 4.6_
 
-- [ ] 2.2 实现 PathService
+- [x] 2.2 实现 PathService ✅
 
   - 创建 `core/services/path_service.py`
   - 实现所有路径获取方法
   - 使用 print() 记录初始化日志
   - _Requirements: Requirement 6.1-6.10_
 
-- [ ] 2.3 在 `__init__.py` 中添加 Level 0 服务的 getter 函数
+- [x] 2.3 在 `__init__.py` 中添加 Level 0 服务的 getter 函数 ✅
   - 实现 `_get_log_service()` 和 `_get_path_service()`
   - 实现 `_LazyService` 包装器类
   - 导出 `log_service` 和 `path_service`
