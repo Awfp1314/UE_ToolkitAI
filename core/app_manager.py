@@ -8,6 +8,9 @@ from pathlib import Path
 import threading
 
 from core.module_manager import ModuleManager, ModuleState
+from core.config.thread_config import ThreadConfiguration
+from core.utils.shutdown_orchestrator import ShutdownOrchestrator
+from core.module_interface import IModule
 # 使用统一服务层
 from core.services import (
     log_service,
@@ -305,7 +308,7 @@ class AppManager:
                 on_error(f"启动异步任务失败: {e}")
     
     def quit(self) -> None:
-        """退出应用程序"""
+        """退出应用程序（使用 ShutdownOrchestrator 并行清理模块）"""
         if not self._is_running:
             self._logger.warning("应用程序未在运行中")
             return
@@ -313,14 +316,70 @@ class AppManager:
         try:
             self._logger.info("开始退出应用程序")
 
-            # 卸载模块
+            # 使用 ShutdownOrchestrator 并行清理模块
             if self.module_manager:
-                self._logger.info("卸载模块")
-                modules_to_unload = self.module_manager.get_all_modules()
-                for module_name, module_info in modules_to_unload.items():
-                    # 只卸载已加载或已初始化的模块
-                    if module_info.state in [ModuleState.LOADED, ModuleState.INITIALIZED]:
-                        self.module_manager.unload_module(module_name)
+                self._logger.info("开始并行清理模块")
+
+                # 获取所有已初始化的模块实例
+                modules_to_shutdown: Dict[str, IModule] = {}
+                all_modules = self.module_manager.get_all_modules()
+
+                for module_name, module_info in all_modules.items():
+                    # 只清理已初始化的模块
+                    if module_info.state == ModuleState.INITIALIZED and module_info.instance:
+                        modules_to_shutdown[module_name] = module_info.instance
+
+                if modules_to_shutdown:
+                    # 加载线程配置
+                    config_path = Path("config/thread_config.json")
+                    try:
+                        thread_config = ThreadConfiguration.load_from_file(config_path)
+                        self._logger.info(f"已加载线程配置: {config_path}")
+                    except FileNotFoundError:
+                        thread_config = ThreadConfiguration()
+                        self._logger.info("使用默认线程配置")
+
+                    # 创建 ShutdownOrchestrator 并执行并行清理
+                    orchestrator = ShutdownOrchestrator(thread_config, self._logger)
+                    shutdown_result = orchestrator.shutdown_modules(modules_to_shutdown)
+
+                    # 记录关闭结果
+                    if shutdown_result.is_success:
+                        self._logger.info(
+                            f"✅ 所有模块清理成功 ({shutdown_result.success_count}/{shutdown_result.total_modules}), "
+                            f"耗时: {shutdown_result.duration_ms}ms"
+                        )
+                    elif shutdown_result.is_partial_failure:
+                        self._logger.warning(
+                            f"⚠️ 部分模块清理失败 ({shutdown_result.failure_count}/{shutdown_result.total_modules}), "
+                            f"成功: {shutdown_result.success_count}, 耗时: {shutdown_result.duration_ms}ms"
+                        )
+                        # 记录失败详情
+                        for failure in shutdown_result.failures:
+                            self._logger.error(
+                                f"  - 模块 '{failure.module_name}' 清理失败 "
+                                f"(类型: {failure.failure_type}): {failure.error_message}"
+                            )
+                    else:  # is_complete_failure
+                        self._logger.error(
+                            f"❌ 所有模块清理失败 ({shutdown_result.failure_count}/{shutdown_result.total_modules}), "
+                            f"耗时: {shutdown_result.duration_ms}ms"
+                        )
+                        # 记录失败详情
+                        for failure in shutdown_result.failures:
+                            self._logger.error(
+                                f"  - 模块 '{failure.module_name}' 清理失败 "
+                                f"(类型: {failure.failure_type}): {failure.error_message}"
+                            )
+
+                    # 更新模块状态为已卸载
+                    for module_name in modules_to_shutdown.keys():
+                        module_info = self.module_manager.get_module(module_name)
+                        if module_info:
+                            module_info.state = ModuleState.UNLOADED
+                            module_info.instance = None
+                else:
+                    self._logger.info("没有需要清理的模块")
 
             # 清理所有服务（使用统一服务层）
             try:
