@@ -687,10 +687,10 @@ class AssetManagerLogic(QObject):
             # 根据资产类型选择相应的移动方法
             if asset_type == AssetType.PACKAGE:
                 # 移动整个文件夹（保持原文件夹名称）
-                self._safe_move_tree(asset_path, target_path, progress_callback=move_progress_callback)
+                self._file_ops.safe_move_tree(asset_path, target_path, progress_callback=move_progress_callback)
             else:
                 # 移动单个文件（保持原文件名）
-                self._safe_move_file(asset_path, target_path, progress_callback=move_progress_callback)
+                self._file_ops.safe_move_file(asset_path, target_path, progress_callback=move_progress_callback)
             
             logger.info(f"资产已移动: {asset_path} -> {target_path}")
             
@@ -1663,214 +1663,6 @@ class AssetManagerLogic(QObject):
             self.error_occurred.emit(error_msg)
             return False
     
-    def _safe_copytree(self, src: Path, dst: Path, max_depth: int = 20, 
-                       progress_callback=None) -> None:
-        """安全地复制目录树，限制最大深度防止无限递归
-        
-        Args:
-            src: 源目录
-            dst: 目标目录
-            max_depth: 最大递归深度（默认20层）
-            progress_callback: 进度回调函数 (current, total, message)
-        """
-        # 计算总文件数（用于进度报告）
-        total_files = 0
-        copied_files = 0
-        
-        if progress_callback:
-            logger.info("正在计算文件总数...")
-            for item in src.rglob('*'):
-                if item.is_file() and not item.is_symlink():
-                    # 跳过隐藏文件和系统文件
-                    if not item.name.startswith('.') and item.name not in ['__pycache__', 'Thumbs.db', 'desktop.ini']:
-                        total_files += 1
-            logger.info(f"共需复制 {total_files} 个文件")
-            progress_callback(0, total_files, f"准备复制 {total_files} 个文件...")
-        
-        def _copy_recursive(src_dir: Path, dst_dir: Path, current_depth: int = 0):
-            """递归复制，带深度限制"""
-            nonlocal copied_files
-            
-            if current_depth >= max_depth:
-                logger.warning(f"达到最大复制深度 {max_depth}，跳过: {src_dir}")
-                return
-            
-            dst_dir.mkdir(parents=True, exist_ok=True)
-            
-            # 遍历源目录中的所有项
-            try:
-                items = list(src_dir.iterdir())
-            except (PermissionError, OSError) as e:
-                logger.warning(f"无法访问目录 {src_dir}: {e}")
-                return
-            
-            for item in items:
-                try:
-                    # 跳过符号链接
-                    if item.is_symlink():
-                        logger.debug(f"跳过符号链接: {item}")
-                        continue
-                    
-                    # 跳过隐藏文件和系统文件
-                    if item.name.startswith('.') or item.name in ['__pycache__', 'Thumbs.db', 'desktop.ini']:
-                        continue
-                    
-                    dst_item = dst_dir / item.name
-                    
-                    if item.is_file():
-                        # 复制文件
-                        shutil.copy2(str(item), str(dst_item))
-                        copied_files += 1
-                        
-                        # 报告进度
-                        if progress_callback and total_files > 0:
-                            progress = int((copied_files / total_files) * 100)
-                            rel_path = item.relative_to(src)
-                            progress_callback(copied_files, total_files, f"正在复制: {rel_path}")
-                    elif item.is_dir():
-                        # 递归复制子目录
-                        _copy_recursive(item, dst_item, current_depth + 1)
-                        
-                except (PermissionError, OSError) as e:
-                    logger.warning(f"复制失败 {item}: {e}")
-                    continue
-                except Exception as e:
-                    logger.error(f"处理 {item} 时出错: {e}")
-                    continue
-        
-        try:
-            logger.info(f"开始安全复制: {src} -> {dst} (最大深度: {max_depth})")
-            _copy_recursive(src, dst)
-            # 确保最终进度为100%
-            if progress_callback and total_files > 0:
-                progress_callback(total_files, total_files, "复制完成！")
-                logger.info(f"复制进度: {copied_files}/{total_files} 文件")
-            logger.info(f"复制完成: {dst}")
-        except Exception as e:
-            raise Exception(f"复制目录失败: {src} -> {dst}: {e}")
-    
-    def _safe_move_tree(self, src: Path, dst: Path, max_depth: int = 20, 
-                        progress_callback=None) -> None:
-        """安全地移动目录树，限制最大深度防止无限递归，支持实时进度报告
-        
-        Args:
-            src: 源目录
-            dst: 目标目录
-            max_depth: 最大递归深度（默认20层）
-            progress_callback: 进度回调函数 (current, total, message)
-        """
-        # 计算总文件数（用于进度报告）
-        total_files = 0
-        moved_files = 0
-        
-        if progress_callback:
-            logger.info("正在计算文件总数...")
-            for item in src.rglob('*'):
-                if item.is_file() and not item.is_symlink():
-                    # 跳过隐藏文件和系统文件
-                    if not item.name.startswith('.') and item.name not in ['__pycache__', 'Thumbs.db', 'desktop.ini']:
-                        total_files += 1
-            logger.info(f"共需移动 {total_files} 个文件")
-            progress_callback(0, total_files, f"准备移动 {total_files} 个文件...")
-        
-        def _move_recursive(src_dir: Path, dst_dir: Path, current_depth: int = 0):
-            """递归移动，带深度限制"""
-            nonlocal moved_files
-            
-            if current_depth >= max_depth:
-                logger.warning(f"达到最大移动深度 {max_depth}，跳过: {src_dir}")
-                return
-            
-            dst_dir.mkdir(parents=True, exist_ok=True)
-            
-            # 遍历源目录中的所有项
-            try:
-                items = list(src_dir.iterdir())
-            except (PermissionError, OSError) as e:
-                logger.warning(f"无法访问目录 {src_dir}: {e}")
-                return
-            
-            for item in items:
-                try:
-                    # 跳过符号链接
-                    if item.is_symlink():
-                        logger.debug(f"跳过符号链接: {item}")
-                        continue
-                    
-                    # 跳过隐藏文件和系统文件
-                    if item.name.startswith('.') or item.name in ['__pycache__', 'Thumbs.db', 'desktop.ini']:
-                        continue
-                    
-                    dst_item = dst_dir / item.name
-                    
-                    if item.is_file():
-                        # 移动文件
-                        shutil.move(str(item), str(dst_item))
-                        moved_files += 1
-                        
-                        # 报告进度
-                        if progress_callback and total_files > 0:
-                            progress = int((moved_files / total_files) * 100)
-                            rel_path = item.relative_to(src)
-                            progress_callback(moved_files, total_files, f"正在移动: {rel_path}")
-                    elif item.is_dir():
-                        # 递归移动子目录
-                        _move_recursive(item, dst_item, current_depth + 1)
-                        
-                except (PermissionError, OSError) as e:
-                    logger.warning(f"移动失败 {item}: {e}")
-                    continue
-                except Exception as e:
-                    logger.error(f"处理 {item} 时出错: {e}")
-                    continue
-        
-        try:
-            logger.info(f"开始安全移动: {src} -> {dst} (最大深度: {max_depth})")
-            _move_recursive(src, dst)
-            
-            # 删除源目录树（包括所有子目录）
-            if src.exists():
-                try:
-                    shutil.rmtree(src)
-                    logger.info(f"已删除源目录树: {src}")
-                except Exception as e:
-                    logger.warning(f"删除源目录树失败（部分文件可能已移动）: {e}")
-            
-            if progress_callback:
-                progress_callback(total_files, total_files, "移动完成！")
-            logger.info(f"移动完成: {dst}")
-        except Exception as e:
-            raise Exception(f"移动目录失败: {src} -> {dst}: {e}")
-    
-    def _safe_move_file(self, src: Path, dst: Path, progress_callback=None) -> None:
-        """安全地移动单个文件，支持实时进度报告
-        
-        Args:
-            src: 源文件
-            dst: 目标文件
-            progress_callback: 进度回调函数 (current, total, message)
-        """
-        try:
-            if not src.is_file():
-                raise ValueError(f"源路径不是文件: {src}")
-            
-            file_size = src.stat().st_size
-            
-            if progress_callback:
-                progress_callback(0, 1, f"准备移动文件: {src.name}")
-            
-            # 简单地移动文件（通常很快）
-            shutil.move(str(src), str(dst))
-            
-            if progress_callback:
-                progress_callback(1, 1, f"已移动: {src.name}")
-            
-            logger.info(f"文件已移动: {src} -> {dst}")
-            
-        except Exception as e:
-            logger.error(f"移动文件失败: {src} -> {dst}: {e}")
-            raise Exception(f"移动文件失败: {e}")
-    
     def _do_preview_asset(self, asset: Asset, preview_project: Path, progress_callback=None) -> None:
         """执行资产预览（后台线程）"""
         try:
@@ -1906,7 +1698,7 @@ class AssetManagerLogic(QObject):
                 # A型：复制整个文件夹（保持原文件夹名称）
                 dest_dir = content_dir / asset.path.name
                 # 使用安全复制函数，避免符号链接导致的循环引用
-                self._safe_copytree(asset.path, dest_dir, progress_callback=progress_callback)
+                self._file_ops.safe_copytree(asset.path, dest_dir, progress_callback=progress_callback)
             else:
                 # B型：复制单个文件（保持原文件名）
                 if progress_callback:
@@ -2202,9 +1994,9 @@ class AssetManagerLogic(QObject):
                     if progress_callback:
                         progress_callback(0, 1, "正在删除已有的同名文件夹...")
                     shutil.rmtree(dest_dir)
-                
+
                 # 使用安全复制并报告进度
-                self._safe_copytree(asset.path, dest_dir, progress_callback=progress_callback)
+                self._file_ops.safe_copytree(asset.path, dest_dir, progress_callback=progress_callback)
             else:
                 # B型：复制单个文件（保持原文件名）
                 if progress_callback:
@@ -2243,9 +2035,9 @@ class AssetManagerLogic(QObject):
                 return
             
             has_thumbnail = asset.thumbnail_path and Path(asset.thumbnail_path).exists()
-            
+
             # 查找截图文件（根据缩略图来源决定搜索策略）
-            screenshot_path, source = self._find_screenshot(preview_project, asset.thumbnail_source)
+            screenshot_path, source = self._screenshot_processor.find_screenshot(preview_project, asset.thumbnail_source)
             
             if not screenshot_path:
                 if has_thumbnail:
@@ -2282,83 +2074,5 @@ class AssetManagerLogic(QObject):
                 
         except Exception as e:
             logger.error(f"处理截图时出错: {e}", exc_info=True)
-    
-    def _find_screenshot(self, preview_project: Path, thumbnail_source: Optional[str] = None) -> tuple[Optional[Path], Optional[str]]:
-        """查找截图文件
-        
-        查找策略：
-        1. 优先在 {预览工程}/Saved/Screenshots/ 及其子文件夹下查找用户主动截图
-        2. 如果已获取过 Saved/Screenshots/ 的图片，只有新图片才更新
-        3. 如果找不到，在 {预览工程}/Saved/ 下查找自动保存的截图
-        
-        Args:
-            preview_project: 预览工程路径
-            thumbnail_source: 缩略图来源（screenshots 或 autosave，用于判断是否需要更新）
-            
-        Returns:
-            元组 (截图文件路径, 来源)，如果未找到返回 (None, None)
-            来源值为 "screenshots" 或 "autosave"
-        """
-        try:
-            # 第一步：查找用户截图
-            screenshots_dir = preview_project / "Saved" / "Screenshots"
-            
-            if screenshots_dir.exists():
-                latest_screenshot = None
-                latest_mtime = 0
-                
-                # 扫描 Screenshots 当前目录
-                for file_path in screenshots_dir.glob("*.png"):
-                    mtime = file_path.stat().st_mtime
-                    if mtime > latest_mtime:
-                        latest_mtime = mtime
-                        latest_screenshot = file_path
-                
-                # 扫描所有子文件夹
-                for subdir in screenshots_dir.iterdir():
-                    if subdir.is_dir():
-                        for file_path in subdir.glob("*.png"):
-                            mtime = file_path.stat().st_mtime
-                            if mtime > latest_mtime:
-                                latest_mtime = mtime
-                                latest_screenshot = file_path
-                
-                if latest_screenshot:
-                    logger.info(f"找到用户截图: {latest_screenshot}")
-                    return latest_screenshot, "screenshots"
-            
-            # 第二步：如果已获取过 Saved/Screenshots/ 的图片，不再查找自动保存图
-            if thumbnail_source == "screenshots":
-                logger.debug(f"已获取过用户截图，不再查找自动保存的截图")
-                return None, None
-            
-            # 第三步：查找自动保存的截图
-            saved_dir = preview_project / "Saved"
-            
-            if saved_dir.exists():
-                latest_autosave = None
-                latest_mtime = 0
-                
-                # 在 Saved 目录下查找所有 PNG 文件（包括 Saved 根目录和所有子目录）
-                for file_path in saved_dir.rglob("*.png"):
-                    # 跳过 Screenshots 子目录中的文件（已在第一步检查过）
-                    if "Screenshots" in str(file_path):
-                        continue
-                    
-                    mtime = file_path.stat().st_mtime
-                    if mtime > latest_mtime:
-                        latest_mtime = mtime
-                        latest_autosave = file_path
-                
-                if latest_autosave:
-                    logger.info(f"找到自动保存的截图: {latest_autosave}")
-                    return latest_autosave, "autosave"
-            
-            logger.debug(f"未找到任何截图")
-            return None, None
-            
-        except Exception as e:
-            logger.error(f"查找截图时出错: {e}", exc_info=True)
-            return None, None
     
 
