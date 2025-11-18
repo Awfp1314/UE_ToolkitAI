@@ -167,7 +167,17 @@ class SearchEngine:
             # 搜索文本转小写
             search_lower = search_text.lower()
             search_pinyin = self.get_pinyin(search_text)
-            search_initials = self.get_pinyin_initials(search_text)
+
+            # 判断搜索文本是否包含中文字符
+            has_chinese = any('\u4e00' <= char <= '\u9fff' for char in search_text)
+
+            # 首字母匹配策略：
+            # 1. 如果包含中文，不使用首字母匹配（中文直接匹配 + 拼音全拼匹配）
+            # 2. 如果是纯字母且长度 <= 3，启用首字母匹配（如 ht, abc）
+            # 3. 如果是纯字母且长度 > 3，不使用首字母匹配（如 wester, hutao）
+            is_short_alpha = search_lower.isalpha() and len(search_lower) <= 3
+            use_initials = not has_chinese and is_short_alpha
+            search_initials = self.get_pinyin_initials(search_text) if use_initials else ""
 
             # 搜索匹配
             results = []
@@ -188,13 +198,19 @@ class SearchEngine:
                     asset_id = getattr(asset, 'id', str(id(asset)))
                     if asset_id in self._pinyin_cache:
                         cache = self._pinyin_cache[asset_id]
-                        # 同时检查全拼和首字母
-                        if (search_pinyin in cache.get('name_pinyin', '') or
-                            search_pinyin in cache.get('desc_pinyin', '') or
-                            search_pinyin in cache.get('category_pinyin', '') or
-                            search_initials in cache.get('name_initials', '') or
-                            search_initials in cache.get('desc_initials', '') or
-                            search_initials in cache.get('category_initials', '')):
+
+                        # 基础匹配：拼音全拼匹配
+                        matched = (search_pinyin in cache.get('name_pinyin', '') or
+                                  search_pinyin in cache.get('desc_pinyin', '') or
+                                  search_pinyin in cache.get('category_pinyin', ''))
+
+                        # 如果启用首字母匹配，则额外检查首字母
+                        if not matched and use_initials and search_initials:
+                            matched = (search_initials in cache.get('name_initials', '') or
+                                      search_initials in cache.get('desc_initials', '') or
+                                      search_initials in cache.get('category_initials', ''))
+
+                        if matched:
                             results.append(asset)
 
             return results
