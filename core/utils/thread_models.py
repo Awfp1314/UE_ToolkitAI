@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Optional
+from typing import Optional, Union
 from enum import Enum
 
 from PyQt6.QtCore import QThread, QTimer
@@ -42,7 +42,7 @@ class ThreadInfo:
     thread_id: int
     state: str
     elapsed_ms: int
-    started_at: datetime
+    started_at: Union[datetime, str]
 
 
 __all__ = [
