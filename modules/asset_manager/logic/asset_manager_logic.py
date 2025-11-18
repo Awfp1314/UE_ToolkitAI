@@ -25,6 +25,12 @@ from PyQt6.QtCore import QObject, pyqtSignal
 from core.logger import get_logger
 from core.config.config_manager import ConfigManager
 from .asset_model import Asset, AssetType
+from .file_operations import FileOperations
+from .search_engine import SearchEngine
+from .screenshot_processor import ScreenshotProcessor
+from .asset_migrator import AssetMigrator
+from .config_handler import ConfigHandler
+from .preview_manager import PreviewManager
 
 logger = get_logger(__name__)
 
@@ -62,7 +68,15 @@ class AssetManagerLogic(QObject):
 
         self.config_manager = ConfigManager("asset_manager",
                                            template_path=template_path)
-        
+
+        # 初始化子模块（Task 5 重构）
+        self._file_ops = FileOperations(logger)
+        self._search_engine = SearchEngine(logger)
+        self._screenshot_processor = ScreenshotProcessor(logger)
+        self._asset_migrator = AssetMigrator(self._file_ops, logger)
+        self._config_handler = ConfigHandler(self.config_manager, logger)
+        self._preview_manager = PreviewManager(self._file_ops, logger)
+
         # 本地配置路径（在资产库目录下，只在需要时初始化）
         self.local_config_path = None
         
