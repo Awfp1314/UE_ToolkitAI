@@ -93,7 +93,7 @@ This implementation plan breaks down the thread and resource management unificat
   - Write unit tests for pool utilization and cleanup
   - _Requirements: 5.1, 5.2, 5.5, 11.5_
 
-- [ ] 5. Update IModule interface with CleanupResult contract
+- [x] 5. Update IModule interface with CleanupResult contract
 
   - Add request_stop() method to IModule (optional, default no-op)
   - Update cleanup() signature to return CleanupResult

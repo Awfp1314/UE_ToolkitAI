@@ -12,6 +12,7 @@ from core.logger import get_logger
 from core.config.config_manager import ConfigManager
 from core.utils.path_utils import PathUtils
 from core.utils.thread_utils import get_thread_manager
+from core.utils.cleanup_result import CleanupResult
 
 
 class ModuleState(Enum):
@@ -650,8 +651,23 @@ class ModuleManager:
             if module_info.instance and hasattr(module_info.instance, 'cleanup'):
                 try:
                     self.logger.debug(f"调用模块 {module_name} 的 cleanup 方法")
-                    module_info.instance.cleanup()
-                    self.logger.debug(f"模块 {module_name} cleanup 完成")
+                    cleanup_result = module_info.instance.cleanup()
+
+                    # 处理 CleanupResult（如果返回）
+                    if isinstance(cleanup_result, CleanupResult):
+                        if cleanup_result.success:
+                            self.logger.debug(f"模块 {module_name} cleanup 成功")
+                        else:
+                            self.logger.warning(
+                                f"模块 {module_name} cleanup 返回失败: {cleanup_result.error_message}"
+                            )
+                            if cleanup_result.errors:
+                                for error in cleanup_result.errors:
+                                    self.logger.debug(f"  - {error}")
+                    else:
+                        # 旧模块返回 None，视为成功
+                        self.logger.debug(f"模块 {module_name} cleanup 完成")
+
                 except Exception as cleanup_error:
                     self.logger.error(f"模块 {module_name} cleanup 失败: {cleanup_error}", exc_info=True)
 

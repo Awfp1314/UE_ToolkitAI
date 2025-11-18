@@ -10,6 +10,8 @@ from typing import Dict, List, Optional, Any
 from PyQt6.QtWidgets import QWidget
 from dataclasses import dataclass
 
+from core.utils.cleanup_result import CleanupResult
+
 
 @dataclass
 class ModuleMetadata:
@@ -55,23 +57,42 @@ class IModule(ABC):
         """
         pass
     
-    @abstractmethod
-    def cleanup(self) -> None:
-        """清理模块资源"""
+    def request_stop(self) -> None:
+        """请求模块停止操作（在 cleanup 之前调用）
+
+        这是一个可选方法，模块可以重写此方法来：
+        1. 设置停止标志
+        2. 取消正在进行的操作
+        3. 中断阻塞操作
+
+        注意：
+        - 此方法应该是非阻塞的
+        - 仅设置停止信号，不等待操作完成
+        - 默认实现为空操作
+        """
         pass
-    
+
+    @abstractmethod
+    def cleanup(self) -> CleanupResult:
+        """清理模块资源
+
+        Returns:
+            CleanupResult: 清理结果，包含成功标志和错误信息
+        """
+        pass
+
     def is_enabled(self) -> bool:
         """检查模块是否启用
-        
+
         Returns:
             bool: 模块是否启用
         """
         return True
-    
+
     def on_activated(self) -> None:
         """模块被激活时调用（用户切换到该模块）"""
         pass
-    
+
     def on_deactivated(self) -> None:
         """模块被停用时调用（用户切换到其他模块）"""
         pass
@@ -173,12 +194,31 @@ class ModuleAdapter(IModule):
         """初始化模块"""
         # 原始模块已经在ModuleManager中初始化
         return True
-    
-    def cleanup(self) -> None:
-        """清理模块资源"""
+
+    def request_stop(self) -> None:
+        """请求模块停止操作"""
+        if hasattr(self.instance, 'request_stop'):
+            self.instance.request_stop()
+
+    def cleanup(self) -> CleanupResult:
+        """清理模块资源（向后兼容包装器）"""
         if hasattr(self.instance, 'cleanup'):
-            self.instance.cleanup()
-    
+            try:
+                result = self.instance.cleanup()
+                # 如果模块已经返回 CleanupResult，直接使用
+                if isinstance(result, CleanupResult):
+                    return result
+                # 否则，旧模块返回 None，视为成功
+                return CleanupResult.success_result()
+            except Exception as e:
+                # 捕获异常并返回失败结果
+                return CleanupResult.failure_result(
+                    error_message=f"Cleanup failed: {str(e)}",
+                    errors=[str(e)]
+                )
+        # 如果模块没有 cleanup 方法，视为成功
+        return CleanupResult.success_result()
+
     def is_enabled(self) -> bool:
         """检查模块是否启用"""
         return self.info.state.name == "INITIALIZED"
@@ -252,4 +292,43 @@ class ModuleProviderAdapter(IModuleProvider):
         self._module_cache.clear()
         # 可以在这里实现重新加载逻辑
         return True
+
+
+# ============================================================================
+# 向后兼容辅助函数
+# ============================================================================
+
+def wrap_legacy_cleanup(cleanup_func):
+    """包装旧的 cleanup 方法，使其返回 CleanupResult
+
+    这个装饰器用于将返回 None 的旧 cleanup 方法转换为返回 CleanupResult 的新方法。
+
+    Args:
+        cleanup_func: 旧的 cleanup 方法（返回 None）
+
+    Returns:
+        包装后的方法（返回 CleanupResult）
+
+    Example:
+        class MyModule(IModule):
+            @wrap_legacy_cleanup
+            def cleanup(self) -> None:
+                # 旧的清理代码
+                pass
+    """
+    def wrapper(*args, **kwargs):
+        try:
+            result = cleanup_func(*args, **kwargs)
+            # 如果已经返回 CleanupResult，直接使用
+            if isinstance(result, CleanupResult):
+                return result
+            # 否则视为成功
+            return CleanupResult.success_result()
+        except Exception as e:
+            # 捕获异常并返回失败结果
+            return CleanupResult.failure_result(
+                error_message=f"Cleanup failed: {str(e)}",
+                errors=[str(e)]
+            )
+    return wrapper
 
