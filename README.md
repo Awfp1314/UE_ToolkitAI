@@ -14,11 +14,13 @@
 **👉 请立即阅读 [`START_HERE.md`](START_HERE.md) 👈**
 
 这是 **UI 重构版本**：
+
 - ✅ **逻辑层**: 100% 完成（44 个逻辑文件）
 - ✅ **核心层**: 100% 完成（模块管理、配置管理等）
 - ❌ **UI 层**: 0% 完成（**待实现**）
 
 **文档导航**:
+
 1. [`START_HERE.md`](START_HERE.md) - 从这里开始！
 2. [`AI_HANDOVER_REPORT.md`](AI_HANDOVER_REPORT.md) - 接手报告
 3. [`PROJECT_STATUS.md`](PROJECT_STATUS.md) - 项目状态
@@ -78,6 +80,7 @@
 - **灵活的关闭行为** - 可选择直接关闭、最小化到托盘或每次询问
 
 ## 界面预览
+
 _主界面展示_
 <img width="1950" height="1200" alt="image" src="https://github.com/user-attachments/assets/4d3da947-48f0-4efa-9f54-1d8fcd5cc6d7" />
 
@@ -89,7 +92,6 @@ _站点推荐_
 
 _设置界面_
 <img width="1950" height="1200" alt="image" src="https://github.com/user-attachments/assets/ee080824-482a-450d-baae-06038dacbcea" />
-
 
 ## 安装要求
 
@@ -165,6 +167,7 @@ python main.py
 ### 系统托盘与关闭行为
 
 1. **系统托盘**:
+
    - 点击标题栏的关闭按钮时，可选择最小化到系统托盘
    - 托盘图标右键菜单提供"显示主窗口"和"退出程序"选项
    - 点击托盘图标可快速恢复主窗口
@@ -191,11 +194,13 @@ python main.py
 程序支持用户自定义主题，您可以创建专属的配色方案：
 
 1. **创建自定义主题**:
+
    - 在设置界面点击"管理自定义主题"
    - 点击"添加主题"创建新主题
    - 设置主题名称和各项颜色配置
 
 2. **主题配置项**:
+
    - 背景色（主要、次要、三级）
    - 文本色（主要、次要、三级）
    - 强调色、边框色
@@ -203,6 +208,7 @@ python main.py
    - 危险操作警告色
 
 3. **主题管理**:
+
    - 编辑已有的自定义主题
    - 删除不需要的主题
    - 主题配置自动保存到用户数据目录
@@ -214,7 +220,7 @@ python main.py
 
 ### 切换主题
 
-在设置界面的"主题设置"区域，选择您喜欢的主题即可实时应用。所有对话框、按钮、卡片等UI元素都会自动适配所选主题。
+在设置界面的"主题设置"区域，选择您喜欢的主题即可实时应用。所有对话框、按钮、卡片等 UI 元素都会自动适配所选主题。
 
 ## 🎯 新特性亮点
 
@@ -253,11 +259,99 @@ python main.py
 - **备份限制**: 保留最近 5 个备份文件，自动清理旧备份
 - **独立存储**: 全局配置和模块配置分别备份，互不影响
 
+## 架构设计
+
+### 统一服务层
+
+本项目采用统一的服务层架构，所有核心功能通过服务层访问，确保代码的可维护性和可测试性。
+
+#### 服务层特性
+
+- **单例模式**: 所有服务都是单例，确保全局唯一性
+- **懒加载**: 服务在首次使用时才初始化，提升启动性能
+- **依赖管理**: 三级依赖层次，避免循环依赖
+- **线程安全**: 服务初始化使用锁保护，支持多线程环境
+- **统一清理**: 按依赖顺序反向清理，确保资源正确释放
+
+#### 可用服务
+
+| 服务             | 说明         | 依赖级别 |
+| ---------------- | ------------ | -------- |
+| `log_service`    | 日志管理服务 | Level 0  |
+| `path_service`   | 路径管理服务 | Level 0  |
+| `config_service` | 配置管理服务 | Level 1  |
+| `style_service`  | 样式管理服务 | Level 1  |
+| `thread_service` | 线程管理服务 | Level 2  |
+
+#### 使用示例
+
+```python
+# 导入服务
+from core.services import log_service, config_service, thread_service
+
+# 使用日志服务
+logger = log_service.get_logger(__name__)
+logger.info("应用程序启动")
+
+# 使用配置服务
+config = config_service.get_module_config("asset_manager")
+asset_path = config.get("asset_library_path", "")
+
+# 使用线程服务执行异步任务
+def long_running_task():
+    # 执行耗时操作
+    return "任务完成"
+
+def on_result(result):
+    logger.info(f"任务结果: {result}")
+
+thread_service.run_async(
+    long_running_task,
+    on_result=on_result
+)
+```
+
+#### 调试模式
+
+服务层支持调试模式，可以输出详细的初始化日志：
+
+```bash
+# 通过环境变量启用
+set DEBUG_SERVICES=1
+python main.py
+
+# 或在配置文件中设置
+# app_config.json: {"debug_services": true}
+```
+
+#### 健康检查
+
+可以使用健康检查功能验证所有服务状态：
+
+```python
+from core.services.health_check import perform_health_checks
+
+results = perform_health_checks()
+if all(results.values()):
+    print("所有服务健康")
+else:
+    print("部分服务异常:", results)
+```
+
 ## 项目结构
 
 ```
 ue_toolkit/
 ├── core/                      # 核心模块
+│   ├── services/              # 统一服务层 ⭐ 新架构
+│   │   ├── __init__.py        # 服务层入口
+│   │   ├── _log_service.py    # 日志服务实现
+│   │   ├── _path_service.py   # 路径服务实现
+│   │   ├── _config_service.py # 配置服务实现
+│   │   ├── _style_service.py  # 样式服务实现
+│   │   ├── _thread_service.py # 线程服务实现
+│   │   ├── exceptions.py      # 服务层异常
+│   │   └── health_check.py    # 健康检查工具
 │   ├── config/                # 配置管理
 │   │   ├── config_manager.py  # 配置管理器
 │   │   ├── config_backup.py   # 配置备份
@@ -281,6 +375,11 @@ ue_toolkit/
 │   ├── qss/                   # 样式文件
 │   └── templates/             # 配置模板
 ├── tests/                     # 测试文件
+│   ├── integration/           # 集成测试 ⭐ 新增
+│   │   ├── test_config_service.py
+│   │   ├── test_thread_service.py
+│   │   └── test_service_singleton.py
+│   └── unit/                  # 单元测试
 ├── main.py                    # 程序入口
 ├── build_release.py           # 发布打包脚本
 └── requirements.txt           # 依赖文件
@@ -356,18 +455,21 @@ pytest --cov=core --cov=modules --cov-report=html
 ### v1.1.0 (2025-10-31)
 
 **新增功能**
+
 - ✨ 系统托盘支持 - 最小化到系统托盘，后台运行更隐蔽
 - ✨ 关闭行为设置 - 可选择直接关闭、最小化到托盘或每次询问
 - ✨ 记住我的选择 - 关闭对话框中可勾选记住选择，下次不再询问
 - ✨ 设置界面优化 - 新增关闭方式设置区域
 
 **UI 改进**
+
 - 🎨 自定义关闭确认对话框 - 主题统一的关闭确认界面
 - 🎨 设置界面滚动容器 - 设置内容可滚动，避免窗口高度变化
 - 🎨 自定义复选框 - 主题一致的复选框控件，带手绘勾选标记
 - 🎨 移除焦点虚线框 - Alt 键不再显示控件的虚线边框
 
 **技术优化**
+
 - 🔧 配置实时同步 - 关闭对话框设置实时同步到设置界面
 - 🔧 托盘退出修复 - 托盘菜单退出现在正确调用 QApplication.quit()
 - 🔧 配置验证增强 - 确保配置保存时包含必需的 `_version` 字段
@@ -376,6 +478,7 @@ pytest --cov=core --cov=modules --cov-report=html
 ### v1.0.0 (2025-10-30)
 
 **核心改进**
+
 - ✨ 资产配置本地化 - 配置、缩略图和文档存储在资产库路径下
 - ✨ 智能截图扫描 - 优先使用用户主动截图，支持增量更新
 - ✨ 自动文档管理 - 删除资产时同步删除关联文档
@@ -383,11 +486,13 @@ pytest --cov=core --cov=modules --cov-report=html
 - ✨ 模块特定配置 - 每个模块独立配置目录
 
 **UI 改进**
+
 - 🎨 自定义主题对话框 - 统一的 UI 风格
 - 🎨 精美的标题栏 - 带透明程序图标的自定义标题栏
 - 🎨 优化对话框布局 - 更好的文本显示和居中效果
 
 **技术优化**
+
 - 🔧 重构配置管理器 - 支持模块特定配置目录
 - 🔧 优化备份策略 - 备份新配置而非旧文件
 - 🔧 改进截图检测逻辑 - 多层级目录扫描
@@ -396,30 +501,40 @@ pytest --cov=core --cov=modules --cov-report=html
 ## ❓ 常见问题
 
 ### Q: 资产配置文件存储在哪里？
+
 A: 从 v1.0.0 开始，资产配置存储在各资产库路径下的 `.asset_config` 目录中。全局配置（如资产库路径列表）存储在 `%APPDATA%\ue_toolkit\user_data\configs\asset_manager\` 目录。
 
 ### Q: 如何备份我的资产配置？
+
 A: 资产配置会自动备份到资产库路径下的 `.asset_config/backup/` 目录。每次配置更新前都会创建备份，保留最近 5 个备份文件。
 
 ### Q: 缩略图为什么没有自动更新？
+
 A: 程序会优先扫描 UE 项目的 `Saved/Screenshots/` 目录（用户主动截图）。如果该目录下有新截图，程序会自动更新。如果只有自动保存的截图（在 `Saved/` 目录下），程序会在首次添加资产时使用，但不会自动更新。
 
 ### Q: 迁移资产库后需要重新配置吗？
+
 A: 不需要！由于配置存储在资产库路径下的 `.asset_config` 目录中，迁移资产库时配置会跟随移动。只需在程序中重新选择新的资产库路径即可。
 
 ### Q: 删除资产时会删除源文件吗？
+
 A: 不会。删除资产只会删除程序中的配置记录和关联的缩略图、文档文件，不会删除资产库中的实际资产文件。
 
 ### Q: 关闭程序时如何选择最小化到托盘？
+
 A: 有两种方式：
+
 1. 点击关闭按钮时，在弹出的对话框中选择"最小化到托盘"，并可勾选"记住我的选择"
 2. 在设置界面的"关闭方式设置"中选择"最小化到系统托盘"，之后点击关闭按钮会直接最小化到托盘
 
 ### Q: 托盘图标消失了怎么办？
+
 A: 如果托盘图标不显示，可以重新启动程序。程序启动后会自动显示托盘图标（如果关闭方式设置为最小化到托盘）。
 
 ### Q: 如何完全退出程序？
+
 A: 有三种方式：
+
 1. 在关闭对话框中选择"直接关闭"
 2. 右键点击系统托盘图标，选择"退出程序"
 3. 在设置中将关闭方式设为"直接关闭程序"，然后点击关闭按钮
@@ -431,6 +546,3 @@ HUTAO
 ## 致谢
 
 感谢所有为虚幻引擎社区做出贡献的开发者们。
-
-
-
