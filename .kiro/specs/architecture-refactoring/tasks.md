@@ -622,13 +622,13 @@ python main.py
 
 #### 子任务
 
-- [ ] 12.1 创建 `core/services/health_check.py`
+- [x] 12.1 创建 `core/services/health_check.py` ✅
 
   - 实现各服务的健康检查函数
   - 实现 perform_health_checks() 函数
   - _Requirements: Requirement 9.4, 9.5_
 
-- [ ] 12.2 在应用启动时执行健康检查
+- [x] 12.2 在应用启动时执行健康检查 ✅
   - 在 main.py 中调用 perform_health_checks()
   - 记录健康检查结果
   - _Requirements: Requirement 9.5_
@@ -654,13 +654,13 @@ assert all(results.values())
 
 #### 子任务
 
-- [ ] 13.1 完善 is_debug_enabled() 函数
+- [x] 13.1 完善 is_debug_enabled() 函数 ✅
 
   - 支持环境变量读取
   - 支持配置文件读取
   - _Requirements: Requirement 9.6, Requirement 10.5_
 
-- [ ] 13.2 在关键位置添加调试日志
+- [x] 13.2 在关键位置添加调试日志 ✅
   - 服务初始化
   - 线程使用情况
   - 配置加载时间
@@ -686,7 +686,7 @@ python main.py
 
 #### 子任务
 
-- [ ] 14.0 准备测试环境和数据隔离
+- [x] 14.0 准备测试环境和数据隔离 ✅
 
   - 创建临时测试目录（使用 tempfile.mkdtemp()）
   - 准备测试配置文件（不污染真实用户配置）
@@ -714,25 +714,25 @@ python main.py
           shutil.rmtree(self.temp_dir, ignore_errors=True)
   ```
 
-- [ ] 14.1 创建测试目录结构
+- [x] 14.1 创建测试目录结构 ✅
 
   - 创建 tests/integration/ 目录
   - 创建测试配置文件
   - _Requirements: Requirement 11.8_
 
-- [ ] 14.2 编写服务单例和依赖顺序测试
+- [x] 14.2 编写服务单例和依赖顺序测试 ✅
 
   - 测试服务单例
   - 测试依赖顺序
   - _Requirements: Requirement 11.8_
 
-- [ ] 14.3 编写 ThreadService 协作式取消测试
+- [x] 14.3 编写 ThreadService 协作式取消测试 ✅
 
   - 测试任务取消
   - 测试取消令牌
   - _Requirements: Requirement 11.8_
 
-- [ ] 14.4 编写 ConfigService 读写和备份测试
+- [x] 14.4 编写 ConfigService 读写和备份测试 ✅
   - 测试配置读写
   - 测试备份恢复
   - _Requirements: Requirement 11.8_
@@ -762,25 +762,25 @@ pytest --cov=core/services --cov-report=term-missing tests/integration/
 
 #### 子任务
 
-- [ ] 15.1 更新 README.md
+- [x] 15.1 更新 README.md ✅
 
   - 添加服务层说明
   - 添加使用示例
   - _Requirements: Requirement 8.4_
 
-- [ ] 15.2 创建迁移指南文档
+- [x] 15.2 创建迁移指南文档 ✅
 
   - 记录迁移步骤
   - 记录常见问题
   - _Requirements: Requirement 8.4_
 
-- [ ] 15.3 执行端到端回归测试
+- [x] 15.3 执行端到端回归测试 ✅
 
   - 测试所有主要功能
   - 验证性能无回归
   - _Requirements: Requirement 11.7, Requirement 10.4_
 
-- [ ] 15.4 创建验证清单
+- [x] 15.4 创建验证清单 ✅
   - 记录已测试的功能
   - 记录已验证的工作流
   - _Requirements: Requirement 11.3_
