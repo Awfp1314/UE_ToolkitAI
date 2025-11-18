@@ -1039,103 +1039,140 @@ class AssetManagerLogic(QObject):
     
     def _get_pinyin(self, text: str) -> str:
         """获取文本的拼音
-        
+
         Args:
             text: 输入文本
-            
+
         Returns:
             拼音字符串（小写，无空格）
         """
         if not text:
             return ""
-            
+
         if lazy_pinyin is None:
             # 如果没有pypinyin，返回原文本的小写形式
             return text.lower()
-        
+
         try:
             pinyin_list = lazy_pinyin(text, style=Style.NORMAL)  # type: ignore
             return ''.join(pinyin_list).lower()
         except Exception as e:
             logger.warning(f"拼音转换失败: {e}")
             return text.lower()
-    
+
+    def _get_pinyin_initials(self, text: str) -> str:
+        """获取文本的拼音首字母
+
+        Args:
+            text: 输入文本
+
+        Returns:
+            拼音首字母字符串（小写）
+        """
+        if not text:
+            return ""
+
+        if lazy_pinyin is None:
+            # 如果没有pypinyin，返回原文本的小写形式
+            return text.lower()
+
+        try:
+            pinyin_list = lazy_pinyin(text, style=Style.NORMAL)  # type: ignore
+            return ''.join([p[0] for p in pinyin_list if p]).lower()
+        except Exception as e:
+            logger.warning(f"拼音首字母转换失败: {e}")
+            return text.lower()
+
     def _build_pinyin_cache(self) -> None:
         """预先构建所有资产的拼音缓存，避免搜索时实时转换"""
         logger.info(f"开始构建拼音缓存，共 {len(self.assets)} 个资产...")
-        
+
         # 预热 pypinyin（首次调用时会初始化内部数据结构，避免在用户搜索时卡顿）
         if lazy_pinyin is not None:
             try:
                 _ = self._get_pinyin("预热测试")
+                _ = self._get_pinyin_initials("预热测试")
                 logger.debug("pypinyin 预热完成")
             except Exception as e:
                 logger.warning(f"pypinyin 预热失败: {e}")
-        
+
         for asset in self.assets:
             self._pinyin_cache[asset.id] = {
                 'name_pinyin': self._get_pinyin(asset.name),
+                'name_initials': self._get_pinyin_initials(asset.name),
                 'desc_pinyin': self._get_pinyin(asset.description) if asset.description else "",
-                'category_pinyin': self._get_pinyin(asset.category)
+                'desc_initials': self._get_pinyin_initials(asset.description) if asset.description else "",
+                'category_pinyin': self._get_pinyin(asset.category),
+                'category_initials': self._get_pinyin_initials(asset.category)
             }
-        
+
         logger.info(f"拼音缓存构建完成，共缓存 {len(self._pinyin_cache)} 个资产")
     
     def _get_asset_pinyin(self, asset_id: str) -> Dict[str, str]:
         """获取资产的拼音缓存
-        
+
         Args:
             asset_id: 资产ID
-            
+
         Returns:
             拼音缓存字典，如果不存在则返回空字典
         """
         return self._pinyin_cache.get(asset_id, {
             'name_pinyin': '',
+            'name_initials': '',
             'desc_pinyin': '',
-            'category_pinyin': ''
+            'desc_initials': '',
+            'category_pinyin': '',
+            'category_initials': ''
         })
     
     def search_assets(self, search_text: str, category: Optional[str] = None) -> List[Asset]:
         """搜索资产（支持拼音模糊搜索，使用缓存优化）
-        
+
         Args:
-            search_text: 搜索文本（支持中文和拼音）
+            search_text: 搜索文本（支持中文、拼音全拼和拼音首字母）
             category: 可选，指定分类名称
-            
+
         Returns:
             匹配的资产列表
         """
         if not search_text or not search_text.strip():
             # 如果搜索文本为空，返回所有资产
             return self.get_all_assets(category)
-        
+
         search_text = search_text.strip().lower()
         search_pinyin = self._get_pinyin(search_text)
-        
+        search_initials = self._get_pinyin_initials(search_text)
+
         candidates = self.get_all_assets(category)
         matched_assets = []
-        
+
         for asset in candidates:
             asset_name = asset.name.lower()
             asset_desc = asset.description.lower() if asset.description else ""
             asset_category = asset.category.lower()
-            
+
             # 从缓存获取拼音，避免实时转换
             pinyin_data = self._get_asset_pinyin(asset.id)
             asset_name_pinyin = pinyin_data.get('name_pinyin', '')
+            asset_name_initials = pinyin_data.get('name_initials', '')
             asset_desc_pinyin = pinyin_data.get('desc_pinyin', '')
+            asset_desc_initials = pinyin_data.get('desc_initials', '')
             asset_category_pinyin = pinyin_data.get('category_pinyin', '')
-            
-            # 模糊匹配：检查是否包含搜索文本
-            if (search_text in asset_name or 
+            asset_category_initials = pinyin_data.get('category_initials', '')
+
+            # 模糊匹配：检查是否包含搜索文本（支持中文、拼音全拼、拼音首字母）
+            if (search_text in asset_name or
                 search_pinyin in asset_name_pinyin or
-                search_text in asset_desc or 
+                search_initials in asset_name_initials or
+                search_text in asset_desc or
                 search_pinyin in asset_desc_pinyin or
-                search_text in asset_category or 
-                search_pinyin in asset_category_pinyin):
+                search_initials in asset_desc_initials or
+                search_text in asset_category or
+                search_pinyin in asset_category_pinyin or
+                search_initials in asset_category_initials):
                 matched_assets.append(asset)
-        
+
         logger.debug(f"搜索 '{search_text}' 找到 {len(matched_assets)} 个匹配的资产")
         return matched_assets
     

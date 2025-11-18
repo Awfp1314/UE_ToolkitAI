@@ -167,6 +167,7 @@ class SearchEngine:
             # 搜索文本转小写
             search_lower = search_text.lower()
             search_pinyin = self.get_pinyin(search_text)
+            search_initials = self.get_pinyin_initials(search_text)
 
             # 搜索匹配
             results = []
@@ -191,9 +192,9 @@ class SearchEngine:
                         if (search_pinyin in cache.get('name_pinyin', '') or
                             search_pinyin in cache.get('desc_pinyin', '') or
                             search_pinyin in cache.get('category_pinyin', '') or
-                            search_lower in cache.get('name_initials', '') or
-                            search_lower in cache.get('desc_initials', '') or
-                            search_lower in cache.get('category_initials', '')):
+                            search_initials in cache.get('name_initials', '') or
+                            search_initials in cache.get('desc_initials', '') or
+                            search_initials in cache.get('category_initials', '')):
                             results.append(asset)
 
             return results
