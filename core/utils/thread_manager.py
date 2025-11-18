@@ -129,6 +129,7 @@ class EnhancedThreadManager:
             start_time=time.time(),
             timeout_ms=timeout,
             timeout_timer=timeout_timer,
+            timeout_recorded=False,
         )
 
         with self._lock:
@@ -161,7 +162,9 @@ class EnhancedThreadManager:
         elif task_info.state == ThreadState.CANCELLED:
             self.monitor.record_task_cancelled(task_id)
         elif task_info.state == ThreadState.TIMEOUT:
-            self.monitor.record_task_timeout(task_id)
+            if not task_info.timeout_recorded:
+                self.monitor.record_task_timeout(task_id)
+                task_info.timeout_recorded = True
         elif task_info.state == ThreadState.FAILED:
             # already recorded in _handle_task_error
             pass
@@ -200,7 +203,9 @@ class EnhancedThreadManager:
                     info = self._active_tasks.get(task_id)
                     if info and info.state == ThreadState.RUNNING:
                         info.state = ThreadState.TIMEOUT
-                        self.monitor.record_task_timeout(task_id)
+                        if not info.timeout_recorded:
+                            self.monitor.record_task_timeout(task_id)
+                            info.timeout_recorded = True
                         if on_timeout:
                             on_timeout()
 
@@ -212,12 +217,37 @@ class EnhancedThreadManager:
         return timer
 
     def cancel_task(self, task_id: str):
+        # Active task
         with self._lock:
             info = self._active_tasks.get(task_id)
             if info:
                 info.state = ThreadState.CANCELLED
                 info.cancel_token.cancel()
                 self.monitor.record_task_cancelled(task_id)
+                return
+
+        # Queued task: drain and requeue others
+        drained = []
+        found = False
+        while True:
+            try:
+                meta = self._task_queue.get_nowait()
+            except Empty:
+                break
+            if meta.get("task_id") == task_id:
+                found = True
+                continue
+            drained.append(meta)
+
+        for meta in drained:
+            try:
+                self._task_queue.put_nowait(meta)
+            except Full:
+                logger.warning("Queue full while re-queuing task %s", meta.get("task_id"))
+
+        if found:
+            # record cancellation for queued task
+            self.monitor.record_task_cancelled(task_id)
 
     def get_active_threads(self) -> list[ThreadInfo]:
         with self._lock:
@@ -255,3 +285,24 @@ class EnhancedThreadManager:
 
 
 __all__ = ["EnhancedThreadManager", "QueueFullError"]
+
+
+# Singleton accessor
+_thread_manager_instance: Optional[EnhancedThreadManager] = None
+_thread_manager_lock = threading.Lock()
+
+
+def get_thread_manager() -> EnhancedThreadManager:
+    """Get singleton ThreadManager instance (thread-safe)."""
+    global _thread_manager_instance
+    if _thread_manager_instance is None:
+        with _thread_manager_lock:
+            if _thread_manager_instance is None:
+                config_path = Path("config/thread_config.json")
+                try:
+                    config = ThreadConfiguration.load_from_file(config_path)
+                except FileNotFoundError:
+                    config = ThreadConfiguration()
+                _thread_manager_instance = EnhancedThreadManager(config)
+    return _thread_manager_instance
+from pathlib import Path

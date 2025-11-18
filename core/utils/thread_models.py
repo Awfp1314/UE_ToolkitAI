@@ -32,6 +32,7 @@ class TaskInfo:
     start_time: float
     timeout_ms: Optional[int]
     timeout_timer: Optional[QTimer] = None
+    timeout_recorded: bool = False
 
 
 @dataclass
@@ -42,7 +43,7 @@ class ThreadInfo:
     thread_id: int
     state: str
     elapsed_ms: int
-    started_at: Union[datetime, str]
+    started_at: str
 
 
 __all__ = [
