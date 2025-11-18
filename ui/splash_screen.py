@@ -379,9 +379,10 @@ class SplashScreen(QWidget):
         """完成加载，关闭启动界面
 
         ⚡ 优化：停止定时器，清理资源
+        ✨ 优化：更新消息后延迟关闭，保持进度条循环动画
         """
         try:
-            _get_logger().info("启动加载完成，关闭启动界面")
+            _get_logger().info("启动加载完成，准备关闭启动界面")
 
             # 注销日志处理器
             self.unregister_log_handler()
@@ -390,7 +391,19 @@ class SplashScreen(QWidget):
             if hasattr(self, '_update_timer') and self._update_timer.isActive():
                 self._update_timer.stop()
 
-            # 直接关闭窗口，不使用淡出动画
+            # ✨ 更新消息为"加载完成！"，但保持进度条循环动画
+            self.message_label.setText("加载完成！")
+
+            # ✨ 延迟200ms后关闭窗口，让用户看到"加载完成"的消息
+            QTimer.singleShot(200, self._do_close)
+        except RuntimeError:
+            # 窗口已被删除，忽略错误
+            pass
+
+    def _do_close(self):
+        """真正关闭窗口（在延迟后调用）"""
+        try:
+            _get_logger().info("启动加载界面关闭")
             self.close()
         except RuntimeError:
             # 窗口已被删除，忽略错误
