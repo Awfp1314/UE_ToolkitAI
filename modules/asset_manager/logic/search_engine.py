@@ -166,7 +166,13 @@ class SearchEngine:
 
             # 搜索文本转小写
             search_lower = search_text.lower()
-            search_pinyin = self.get_pinyin(search_text)
+
+            # 判断搜索文本是否包含中文字符
+            has_chinese = any('\u4e00' <= char <= '\u9fff' for char in search_text)
+
+            # 只有当搜索文本不包含中文时，才转换为拼音进行匹配
+            # 这样可以避免中文搜索时的同音字误匹配（如"孔不"匹配到"恐怖"）
+            search_pinyin = self.get_pinyin(search_text) if not has_chinese else ""
 
             # 搜索匹配
             results = []
@@ -182,8 +188,8 @@ class SearchEngine:
                     results.append(asset)
                     continue
 
-                # 检查拼音匹配（如果可用）
-                if self._pypinyin_available:
+                # 检查拼音匹配（如果可用且搜索文本是拼音）
+                if self._pypinyin_available and search_pinyin:
                     asset_id = getattr(asset, 'id', str(id(asset)))
                     if asset_id in self._pinyin_cache:
                         cache = self._pinyin_cache[asset_id]

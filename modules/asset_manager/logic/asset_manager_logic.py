@@ -1141,7 +1141,13 @@ class AssetManagerLogic(QObject):
             return self.get_all_assets(category)
 
         search_text = search_text.strip().lower()
-        search_pinyin = self._get_pinyin(search_text)
+
+        # 判断搜索文本是否包含中文字符
+        has_chinese = any('\u4e00' <= char <= '\u9fff' for char in search_text)
+
+        # 只有当搜索文本不包含中文时，才转换为拼音进行匹配
+        # 这样可以避免中文搜索时的同音字误匹配（如"孔不"匹配到"恐怖"）
+        search_pinyin = self._get_pinyin(search_text) if not has_chinese else ""
 
         candidates = self.get_all_assets(category)
         matched_assets = []
@@ -1151,19 +1157,24 @@ class AssetManagerLogic(QObject):
             asset_desc = asset.description.lower() if asset.description else ""
             asset_category = asset.category.lower()
 
-            # 从缓存获取拼音，避免实时转换
-            pinyin_data = self._get_asset_pinyin(asset.id)
-            asset_name_pinyin = pinyin_data.get('name_pinyin', '')
-            asset_desc_pinyin = pinyin_data.get('desc_pinyin', '')
-            asset_category_pinyin = pinyin_data.get('category_pinyin', '')
+            # 基础匹配：中文/英文直接匹配
+            matched = (search_text in asset_name or
+                      search_text in asset_desc or
+                      search_text in asset_category)
 
-            # 模糊匹配：中文直接匹配 + 拼音全拼匹配
-            if (search_text in asset_name or
-                search_pinyin in asset_name_pinyin or
-                search_text in asset_desc or
-                search_pinyin in asset_desc_pinyin or
-                search_text in asset_category or
-                search_pinyin in asset_category_pinyin):
+            # 如果搜索文本是拼音（不包含中文），则额外进行拼音匹配
+            if not matched and search_pinyin:
+                # 从缓存获取拼音，避免实时转换
+                pinyin_data = self._get_asset_pinyin(asset.id)
+                asset_name_pinyin = pinyin_data.get('name_pinyin', '')
+                asset_desc_pinyin = pinyin_data.get('desc_pinyin', '')
+                asset_category_pinyin = pinyin_data.get('category_pinyin', '')
+
+                matched = (search_pinyin in asset_name_pinyin or
+                          search_pinyin in asset_desc_pinyin or
+                          search_pinyin in asset_category_pinyin)
+
+            if matched:
                 matched_assets.append(asset)
 
         logger.debug(f"搜索 '{search_text}' 找到 {len(matched_assets)} 个匹配的资产")
