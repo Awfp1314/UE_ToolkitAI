@@ -22,7 +22,7 @@ This implementation plan breaks down the thread and resource management unificat
   - Write unit tests for event recording and privacy redaction
   - _Requirements: 9.1, 9.2, 9.3, 9.4, 9.5_
 
-- [ ] 3. Enhance existing Worker and CancellationToken
+- [x] 3. Enhance existing Worker and CancellationToken
 
   - Review existing Worker class in core/utils/thread_utils.py
   - Add error signal handling if not present

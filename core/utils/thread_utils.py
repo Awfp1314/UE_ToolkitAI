@@ -120,13 +120,12 @@ class Worker(QObject):
             else:
                 logger.debug(f"任务被取消: {self.func.__name__}")
         except Exception as e:
-            if not self.cancel_token.is_cancelled():
-                error_msg = f"{str(e)}\n{traceback.format_exc()}"
-                logger.error(f"任务执行失败: {self.func.__name__}, 错误: {error_msg}")
-                self.error.emit(error_msg)
+            error_msg = f"{str(e)}\n{traceback.format_exc()}"
+            logger.error(f"任务执行失败: {self.func.__name__}, 错误: {error_msg}")
+            self.error.emit(error_msg)
         finally:
-            if not self.cancel_token.is_cancelled():
-                self.finished.emit()
+            # 始终发出 finished，便于上层清理和状态同步
+            self.finished.emit()
 
     def cancel(self):
         """取消任务
@@ -376,4 +375,3 @@ def run_async(func: Callable,
         *args,
         **kwargs
     )
-
