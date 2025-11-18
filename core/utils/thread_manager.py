@@ -247,7 +247,9 @@ class EnhancedThreadManager:
 
         if found:
             # record cancellation for queued task
-            self.monitor.record_task_cancelled(task_id)
+            # queued任务没有 start 事件，直接累加取消计数
+            with self.monitor._lock:  # pylint: disable=protected-access
+                self.monitor.metrics.tasks_cancelled += 1
 
     def get_active_threads(self) -> list[ThreadInfo]:
         with self._lock:

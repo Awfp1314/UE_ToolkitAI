@@ -1,0 +1,12 @@
+{
+  "timestamp": "2025-11-18T15:37:47.851998",
+  "pytest_version": "8.4.2",
+  "exit_code": 0,
+  "status": "PASSED",
+  "test_files": [
+    "tests/test_thread_configuration.py",
+    "tests/test_thread_monitor.py",
+    "tests/test_worker.py",
+    "tests/test_thread_manager.py"
+  ]
+}

@@ -13,7 +13,7 @@ from core.utils.thread_manager import (  # noqa: E402
     EnhancedThreadManager,
     QueueFullError,
 )
-from core.utils.thread_models import ThreadState  # noqa: E402
+from core.utils.thread_models import ThreadState, TaskInfo  # noqa: E402
 
 
 def make_manager(pool: int = 1, queue_size: int = 1) -> EnhancedThreadManager:
@@ -22,9 +22,14 @@ def make_manager(pool: int = 1, queue_size: int = 1) -> EnhancedThreadManager:
 
 
 def test_queue_full_raises():
-    mgr = make_manager(pool=0, queue_size=0)
+    mgr = make_manager(pool=1, queue_size=1)
+    # 占用线程槽，确保后续任务入队
+    mgr._semaphore.acquire()
+    # 填满队列
+    mgr.run_in_thread(lambda: None, module_name="m", task_name="t")
     with pytest.raises(QueueFullError):
-        mgr.run_in_thread(lambda: None, module_name="m", task_name="t")
+        mgr.run_in_thread(lambda: None, module_name="m", task_name="t2")
+    mgr._semaphore.release()
 
 
 def test_cancel_queued_task():
@@ -41,48 +46,54 @@ def test_cancel_queued_task():
     mgr._semaphore.release()
 
 
-def test_timeout_records_once(monkeypatch):
+def test_timeout_records_once():
+    """Test that ThreadManager's timeout_recorded flag prevents duplicate timeout recording."""
+    from PyQt6.QtCore import QThread
+    from core.utils.thread_utils import Worker, CancellationToken
+
     mgr = make_manager(pool=1, queue_size=1)
-    # Speed up timers by monkeypatching QTimer.start to call immediately
-    class DummyTimer:
-        def __init__(self):
-            self._callback = None
 
-        def setSingleShot(self, *_):
-            pass
+    # Create a fake task in active_tasks
+    task_id = "test-timeout-task-123"
 
-        def timeout_connect(self, fn):
-            self._callback = fn
+    # Create minimal QThread and Worker for testing
+    thread = QThread()
+    worker = Worker(lambda: "test")
+    cancel_token = CancellationToken()
 
-        def start(self, *_):
-            if self._callback:
-                self._callback()
+    task_info = TaskInfo(
+        task_id=task_id,
+        module_name="m",
+        task_name="t",
+        thread=thread,
+        worker=worker,
+        cancel_token=cancel_token,
+        state=ThreadState.TIMEOUT,
+        start_time=time.time(),
+        timeout_ms=1000,
+        timeout_timer=None,
+        timeout_recorded=False  # Not yet recorded
+    )
 
-        def stop(self):
-            pass
-
-    def fake_qtimer():
-        t = DummyTimer()
-        # shim to mimic signal connect
-        def connect(fn):
-            t.timeout_connect(fn)
-        t.timeout = type("sig", (), {"connect": connect})
-        return t
-
-    monkeypatch.setattr("core.utils.thread_manager.QTimer", fake_qtimer)
-
-    mgr._semaphore.acquire()
-    # Provide long running task
-    def task(cancel_token):
-        time.sleep(0.01)
-        return "ok"
-
-    _, _, task_id = mgr.run_in_thread(task, module_name="m", task_name="t", timeout=1)
-    mgr._semaphore.release()
+    # Add to active tasks
     with mgr._lock:
-        info = mgr._active_tasks.get(task_id)
-        if info:
-            info.state = ThreadState.TIMEOUT
-            info.timeout_recorded = False
+        mgr._active_tasks[task_id] = task_info
+
+    # Record start event for the monitor
+    mgr.monitor.record_task_start(task_id, "m", "t", thread_id=1, thread_name="m_t_1")
+
+    # First cleanup - should record timeout
     mgr._cleanup_task(task_id)
     assert mgr.monitor.get_metrics().tasks_timeout == 1
+
+    # Re-add the task with timeout_recorded=True
+    task_info.timeout_recorded = True
+    with mgr._lock:
+        mgr._active_tasks[task_id] = task_info
+
+    # Second cleanup - should NOT record timeout again (already recorded)
+    mgr._cleanup_task(task_id)
+
+    # Should still be 1, not 2
+    metrics = mgr.monitor.get_metrics()
+    assert metrics.tasks_timeout == 1

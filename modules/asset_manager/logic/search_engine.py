@@ -56,20 +56,20 @@ class SearchEngine:
             self._logger.info("SearchEngine: Mock mode enabled")
     
     def get_pinyin(self, text: str) -> str:
-        """获取文本的拼音
-        
+        """获取文本的拼音（全拼）
+
         Args:
             text: 输入文本
-        
+
         Returns:
             str: 拼音字符串（小写，无分隔符）
         """
         if not text:
             return ""
-        
+
         if not self._pypinyin_available:
             return text.lower()
-        
+
         try:
             # 使用 pypinyin 转换
             pinyin_list = self._pypinyin.lazy_pinyin(text)
@@ -77,23 +77,60 @@ class SearchEngine:
         except Exception as e:
             self._logger.warning(f"Failed to convert to pinyin: {e}")
             return text.lower()
+
+    def get_pinyin_initials(self, text: str) -> str:
+        """获取文本的拼音首字母
+
+        Args:
+            text: 输入文本
+
+        Returns:
+            str: 拼音首字母字符串（小写）
+        """
+        if not text:
+            return ""
+
+        if not self._pypinyin_available:
+            return text.lower()
+
+        try:
+            # 使用 pypinyin 转换，只取首字母
+            pinyin_list = self._pypinyin.lazy_pinyin(text)
+            return ''.join([p[0] for p in pinyin_list if p]).lower()
+        except Exception as e:
+            self._logger.warning(f"Failed to convert to pinyin initials: {e}")
+            return text.lower()
     
     def build_pinyin_cache(self, assets: List) -> Dict[str, Dict[str, str]]:
-        """构建拼音缓存
-        
+        """构建拼音缓存（包含全拼和首字母）
+
         Args:
             assets: 资产列表
-        
+
         Returns:
-            Dict: 拼音缓存 {asset_id: {'name_pinyin': str, 'desc_pinyin': str, 'category_pinyin': str}}
+            Dict: 拼音缓存 {asset_id: {
+                'name_pinyin': str,           # 全拼
+                'name_initials': str,         # 首字母
+                'desc_pinyin': str,
+                'desc_initials': str,
+                'category_pinyin': str,
+                'category_initials': str
+            }}
         """
         cache = {}
         for asset in assets:
             asset_id = getattr(asset, 'id', str(id(asset)))
+            name = getattr(asset, 'name', '')
+            desc = getattr(asset, 'description', '')
+            category = getattr(asset, 'category', '')
+
             cache[asset_id] = {
-                'name_pinyin': self.get_pinyin(getattr(asset, 'name', '')),
-                'desc_pinyin': self.get_pinyin(getattr(asset, 'description', '')),
-                'category_pinyin': self.get_pinyin(getattr(asset, 'category', ''))
+                'name_pinyin': self.get_pinyin(name),
+                'name_initials': self.get_pinyin_initials(name),
+                'desc_pinyin': self.get_pinyin(desc),
+                'desc_initials': self.get_pinyin_initials(desc),
+                'category_pinyin': self.get_pinyin(category),
+                'category_initials': self.get_pinyin_initials(category)
             }
         self._pinyin_cache = cache
         return cache
@@ -150,9 +187,13 @@ class SearchEngine:
                     asset_id = getattr(asset, 'id', str(id(asset)))
                     if asset_id in self._pinyin_cache:
                         cache = self._pinyin_cache[asset_id]
-                        if (search_pinyin in cache['name_pinyin'] or
-                            search_pinyin in cache['desc_pinyin'] or
-                            search_pinyin in cache['category_pinyin']):
+                        # 同时检查全拼和首字母
+                        if (search_pinyin in cache.get('name_pinyin', '') or
+                            search_pinyin in cache.get('desc_pinyin', '') or
+                            search_pinyin in cache.get('category_pinyin', '') or
+                            search_lower in cache.get('name_initials', '') or
+                            search_lower in cache.get('desc_initials', '') or
+                            search_lower in cache.get('category_initials', '')):
                             results.append(asset)
 
             return results
