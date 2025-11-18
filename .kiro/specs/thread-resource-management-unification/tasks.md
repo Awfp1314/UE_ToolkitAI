@@ -31,14 +31,14 @@ This implementation plan breaks down the thread and resource management unificat
   - _Requirements: 2.1, 2.2, 2.3, 2.4, 2.5_
 
 - [x] 4. Implement EnhancedThreadManager core functionality
-- [ ] 4.1 Implement singleton accessor with double-checked locking
+- [x] 4.1 Implement singleton accessor with double-checked locking
 
   - Create get_thread_manager() function with thread-safe initialization
   - Load ThreadConfiguration from file with fallback to defaults
   - Write unit tests for singleton behavior and thread safety
   - _Requirements: 14.1, 14.2_
 
-- [ ] 4.2 Implement CancellationToken injection with signature inspection
+- [x] 4.2 Implement CancellationToken injection with signature inspection
 
   - Create \_inject_cancellation_token() method with functools unwrapping
   - Use inspect.signature to detect cancel_token parameter
@@ -46,7 +46,7 @@ This implementation plan breaks down the thread and resource management unificat
   - Write unit tests for various function signatures (plain, partial, wrapped, lambda)
   - _Requirements: 2.1, 2.2, 2.3_
 
-- [ ] 4.3 Implement queue-based task submission with backpressure
+- [x] 4.3 Implement queue-based task submission with backpressure
 
   - Create \_task_queue with configurable size
   - Implement run_in_thread() with non-blocking enqueue
@@ -55,7 +55,7 @@ This implementation plan breaks down the thread and resource management unificat
   - Write unit tests for queue overflow and task queuing
   - _Requirements: 11.1, 11.2, 11.3, 11.4_
 
-- [ ] 4.4 Implement \_start_task() with QThread + Worker creation
+- [x] 4.4 Implement \_start_task() with QThread + Worker creation
 
   - Create QThread and Worker from task metadata
   - Wire signals: started, finished, result, error
@@ -65,7 +65,7 @@ This implementation plan breaks down the thread and resource management unificat
   - Write unit tests for thread creation and signal wiring
   - _Requirements: 1.1, 1.4, 14.4_
 
-- [ ] 4.5 Implement timeout mechanism with QTimer and grace period
+- [x] 4.5 Implement timeout mechanism with QTimer and grace period
 
   - Create \_setup_timeout() method with QTimer
   - On timeout: cancel token, start grace period timer
@@ -73,7 +73,7 @@ This implementation plan breaks down the thread and resource management unificat
   - Write unit tests for timeout scenarios (complete before, during grace, stuck)
   - _Requirements: 4.1, 4.2, 4.3, 4.4_
 
-- [ ] 4.6 Implement task completion and cleanup
+- [x] 4.6 Implement task completion and cleanup
 
   - Create \_cleanup_task() to record final state and remove from active_tasks
   - Create \_on_thread_finished() to cleanup, release semaphore, process queue
@@ -85,7 +85,7 @@ This implementation plan breaks down the thread and resource management unificat
   - Add performance assertions for task submission overhead (< 10ms)
   - _Requirements: 2.3, 2.4, 2.5, 5.2, 5.3, 5.4_
 
-- [ ] 4.7 Implement thread pool management and monitoring
+- [x] 4.7 Implement thread pool management and monitoring
 
   - Implement get_active_threads() for snapshot
   - Implement get_metrics() for aggregated metrics
