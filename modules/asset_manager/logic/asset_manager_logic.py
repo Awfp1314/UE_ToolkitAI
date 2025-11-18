@@ -1130,7 +1130,7 @@ class AssetManagerLogic(QObject):
         """搜索资产（支持拼音模糊搜索，使用缓存优化）
 
         Args:
-            search_text: 搜索文本（支持中文、拼音全拼和拼音首字母）
+            search_text: 搜索文本（支持中文和拼音全拼）
             category: 可选，指定分类名称
 
         Returns:
@@ -1143,17 +1143,6 @@ class AssetManagerLogic(QObject):
         search_text = search_text.strip().lower()
         search_pinyin = self._get_pinyin(search_text)
 
-        # 判断搜索文本是否包含中文字符
-        has_chinese = any('\u4e00' <= char <= '\u9fff' for char in search_text)
-
-        # 首字母匹配策略：
-        # 1. 如果包含中文，不使用首字母匹配（中文直接匹配 + 拼音全拼匹配）
-        # 2. 如果是纯字母且长度 <= 3，启用首字母匹配（如 ht, abc）
-        # 3. 如果是纯字母且长度 > 3，不使用首字母匹配（如 wester, hutao）
-        is_short_alpha = search_text.isalpha() and len(search_text) <= 3
-        use_initials = not has_chinese and is_short_alpha
-        search_initials = self._get_pinyin_initials(search_text) if use_initials else ""
-
         candidates = self.get_all_assets(category)
         matched_assets = []
 
@@ -1165,27 +1154,16 @@ class AssetManagerLogic(QObject):
             # 从缓存获取拼音，避免实时转换
             pinyin_data = self._get_asset_pinyin(asset.id)
             asset_name_pinyin = pinyin_data.get('name_pinyin', '')
-            asset_name_initials = pinyin_data.get('name_initials', '')
             asset_desc_pinyin = pinyin_data.get('desc_pinyin', '')
-            asset_desc_initials = pinyin_data.get('desc_initials', '')
             asset_category_pinyin = pinyin_data.get('category_pinyin', '')
-            asset_category_initials = pinyin_data.get('category_initials', '')
 
-            # 基础匹配：中文直接匹配 + 拼音全拼匹配
-            matched = (search_text in asset_name or
-                      search_pinyin in asset_name_pinyin or
-                      search_text in asset_desc or
-                      search_pinyin in asset_desc_pinyin or
-                      search_text in asset_category or
-                      search_pinyin in asset_category_pinyin)
-
-            # 如果启用首字母匹配，则额外检查首字母
-            if not matched and use_initials and search_initials:
-                matched = (search_initials in asset_name_initials or
-                          search_initials in asset_desc_initials or
-                          search_initials in asset_category_initials)
-
-            if matched:
+            # 模糊匹配：中文直接匹配 + 拼音全拼匹配
+            if (search_text in asset_name or
+                search_pinyin in asset_name_pinyin or
+                search_text in asset_desc or
+                search_pinyin in asset_desc_pinyin or
+                search_text in asset_category or
+                search_pinyin in asset_category_pinyin):
                 matched_assets.append(asset)
 
         logger.debug(f"搜索 '{search_text}' 找到 {len(matched_assets)} 个匹配的资产")
