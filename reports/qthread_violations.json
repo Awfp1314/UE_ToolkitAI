@@ -1,0 +1,184 @@
+{
+  "summary": {
+    "total_modules": 4,
+    "total_violations": 21,
+    "modules_with_violations": 3,
+    "total_files_scanned": 101
+  },
+  "modules": {
+    "C:\\Users\\wang\\Desktop\\UI TO NEW\\UE_TOOKITS_AI_NEW\\modules\\ai_assistant": {
+      "module_path": "C:\\Users\\wang\\Desktop\\UI TO NEW\\UE_TOOKITS_AI_NEW\\modules\\ai_assistant",
+      "scanned_files": 39,
+      "violation_count": 12,
+      "violations": [
+        {
+          "file_path": "C:\\Users\\wang\\Desktop\\UI TO NEW\\UE_TOOKITS_AI_NEW\\modules\\ai_assistant\\logic\\api_client.py",
+          "line_number": 10,
+          "violation_type": "import",
+          "code_snippet": "from PyQt6.QtCore import QThread, pyqtSignal",
+          "class_name": null
+        },
+        {
+          "file_path": "C:\\Users\\wang\\Desktop\\UI TO NEW\\UE_TOOKITS_AI_NEW\\modules\\ai_assistant\\logic\\api_client.py",
+          "line_number": 16,
+          "violation_type": "subclass",
+          "code_snippet": "class APIClient(QThread, ThreadCleanupMixin):",
+          "class_name": "APIClient"
+        },
+        {
+          "file_path": "C:\\Users\\wang\\Desktop\\UI TO NEW\\UE_TOOKITS_AI_NEW\\modules\\ai_assistant\\logic\\api_client_streaming.py",
+          "line_number": 8,
+          "violation_type": "import",
+          "code_snippet": "from PyQt6.QtCore import QThread, pyqtSignal",
+          "class_name": null
+        },
+        {
+          "file_path": "C:\\Users\\wang\\Desktop\\UI TO NEW\\UE_TOOKITS_AI_NEW\\modules\\ai_assistant\\logic\\api_client_streaming.py",
+          "line_number": 90,
+          "violation_type": "subclass",
+          "code_snippet": "class StreamingAPIClient(QThread):",
+          "class_name": "StreamingAPIClient"
+        },
+        {
+          "file_path": "C:\\Users\\wang\\Desktop\\UI TO NEW\\UE_TOOKITS_AI_NEW\\modules\\ai_assistant\\logic\\async_memory_compressor.py",
+          "line_number": 12,
+          "violation_type": "import",
+          "code_snippet": "from PyQt6.QtCore import QThread, pyqtSignal, QTimer",
+          "class_name": null
+        },
+        {
+          "file_path": "C:\\Users\\wang\\Desktop\\UI TO NEW\\UE_TOOKITS_AI_NEW\\modules\\ai_assistant\\logic\\async_memory_compressor.py",
+          "line_number": 21,
+          "violation_type": "subclass",
+          "code_snippet": "class AsyncMemoryCompressor(QThread):",
+          "class_name": "AsyncMemoryCompressor"
+        },
+        {
+          "file_path": "C:\\Users\\wang\\Desktop\\UI TO NEW\\UE_TOOKITS_AI_NEW\\modules\\ai_assistant\\logic\\function_calling_coordinator.py",
+          "line_number": 13,
+          "violation_type": "import",
+          "code_snippet": "from PyQt6.QtCore import QThread, pyqtSignal",
+          "class_name": null
+        },
+        {
+          "file_path": "C:\\Users\\wang\\Desktop\\UI TO NEW\\UE_TOOKITS_AI_NEW\\modules\\ai_assistant\\logic\\function_calling_coordinator.py",
+          "line_number": 40,
+          "violation_type": "subclass",
+          "code_snippet": "class FunctionCallingCoordinator(QThread, ThreadCleanupMixin):",
+          "class_name": "FunctionCallingCoordinator"
+        },
+        {
+          "file_path": "C:\\Users\\wang\\Desktop\\UI TO NEW\\UE_TOOKITS_AI_NEW\\modules\\ai_assistant\\logic\\local_nlu.py",
+          "line_number": 14,
+          "violation_type": "import",
+          "code_snippet": "from PyQt6.QtCore import QThread, pyqtSignal",
+          "class_name": null
+        },
+        {
+          "file_path": "C:\\Users\\wang\\Desktop\\UI TO NEW\\UE_TOOKITS_AI_NEW\\modules\\ai_assistant\\logic\\local_nlu.py",
+          "line_number": 386,
+          "violation_type": "subclass",
+          "code_snippet": "class AsyncTemplateGeneratorThread(QThread):",
+          "class_name": "AsyncTemplateGeneratorThread"
+        },
+        {
+          "file_path": "C:\\Users\\wang\\Desktop\\UI TO NEW\\UE_TOOKITS_AI_NEW\\modules\\ai_assistant\\logic\\non_streaming_worker.py",
+          "line_number": 12,
+          "violation_type": "import",
+          "code_snippet": "from PyQt6.QtCore import QThread, pyqtSignal",
+          "class_name": null
+        },
+        {
+          "file_path": "C:\\Users\\wang\\Desktop\\UI TO NEW\\UE_TOOKITS_AI_NEW\\modules\\ai_assistant\\logic\\non_streaming_worker.py",
+          "line_number": 15,
+          "violation_type": "subclass",
+          "code_snippet": "class NonStreamingWorker(QThread):",
+          "class_name": "NonStreamingWorker"
+        }
+      ]
+    },
+    "C:\\Users\\wang\\Desktop\\UI TO NEW\\UE_TOOKITS_AI_NEW\\modules\\asset_manager": {
+      "module_path": "C:\\Users\\wang\\Desktop\\UI TO NEW\\UE_TOOKITS_AI_NEW\\modules\\asset_manager",
+      "scanned_files": 18,
+      "violation_count": 2,
+      "violations": [
+        {
+          "file_path": "C:\\Users\\wang\\Desktop\\UI TO NEW\\UE_TOOKITS_AI_NEW\\modules\\asset_manager\\logic\\lazy_asset_loader.py",
+          "line_number": 8,
+          "violation_type": "import",
+          "code_snippet": "from PyQt6.QtCore import QThread, pyqtSignal",
+          "class_name": null
+        },
+        {
+          "file_path": "C:\\Users\\wang\\Desktop\\UI TO NEW\\UE_TOOKITS_AI_NEW\\modules\\asset_manager\\logic\\lazy_asset_loader.py",
+          "line_number": 15,
+          "violation_type": "subclass",
+          "code_snippet": "class AssetLoadThread(QThread):",
+          "class_name": "AssetLoadThread"
+        }
+      ]
+    },
+    "C:\\Users\\wang\\Desktop\\UI TO NEW\\UE_TOOKITS_AI_NEW\\core": {
+      "module_path": "C:\\Users\\wang\\Desktop\\UI TO NEW\\UE_TOOKITS_AI_NEW\\core",
+      "scanned_files": 42,
+      "violation_count": 7,
+      "violations": [
+        {
+          "file_path": "C:\\Users\\wang\\Desktop\\UI TO NEW\\UE_TOOKITS_AI_NEW\\core\\services\\_thread_service.py",
+          "line_number": 7,
+          "violation_type": "import",
+          "code_snippet": "from PyQt5.QtCore import QThread",
+          "class_name": null
+        },
+        {
+          "file_path": "C:\\Users\\wang\\Desktop\\UI TO NEW\\UE_TOOKITS_AI_NEW\\core\\utils\\thread_cleanup.py",
+          "line_number": 7,
+          "violation_type": "import",
+          "code_snippet": "from PyQt6.QtCore import QThread",
+          "class_name": null
+        },
+        {
+          "file_path": "C:\\Users\\wang\\Desktop\\UI TO NEW\\UE_TOOKITS_AI_NEW\\core\\utils\\thread_manager.py",
+          "line_number": 10,
+          "violation_type": "import",
+          "code_snippet": "from PyQt6.QtCore import QThread, QTimer",
+          "class_name": null
+        },
+        {
+          "file_path": "C:\\Users\\wang\\Desktop\\UI TO NEW\\UE_TOOKITS_AI_NEW\\core\\utils\\thread_manager.py",
+          "line_number": 99,
+          "violation_type": "instantiation",
+          "code_snippet": "thread = QThread()",
+          "class_name": null
+        },
+        {
+          "file_path": "C:\\Users\\wang\\Desktop\\UI TO NEW\\UE_TOOKITS_AI_NEW\\core\\utils\\thread_models.py",
+          "line_number": 9,
+          "violation_type": "import",
+          "code_snippet": "from PyQt6.QtCore import QThread, QTimer",
+          "class_name": null
+        },
+        {
+          "file_path": "C:\\Users\\wang\\Desktop\\UI TO NEW\\UE_TOOKITS_AI_NEW\\core\\utils\\thread_utils.py",
+          "line_number": 22,
+          "violation_type": "import",
+          "code_snippet": "from PyQt6.QtCore import QThread, pyqtSignal, QObject",
+          "class_name": null
+        },
+        {
+          "file_path": "C:\\Users\\wang\\Desktop\\UI TO NEW\\UE_TOOKITS_AI_NEW\\core\\utils\\thread_utils.py",
+          "line_number": 209,
+          "violation_type": "instantiation",
+          "code_snippet": "thread = QThread()",
+          "class_name": null
+        }
+      ]
+    },
+    "C:\\Users\\wang\\Desktop\\UI TO NEW\\UE_TOOKITS_AI_NEW\\ui": {
+      "module_path": "C:\\Users\\wang\\Desktop\\UI TO NEW\\UE_TOOKITS_AI_NEW\\ui",
+      "scanned_files": 2,
+      "violation_count": 0,
+      "violations": []
+    }
+  }
+}
