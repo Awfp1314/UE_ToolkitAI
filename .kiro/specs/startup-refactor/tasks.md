@@ -62,7 +62,7 @@
 
 - [ ] 4. 实现 ModuleLoader 组件
 
-  - [ ] 4.1 实现 AppManager 设置
+  - [x] 4.1 实现 AppManager 设置
 
     - 创建 AppManager 实例
     - 调用 `app_manager.setup()` 初始化核心服务
