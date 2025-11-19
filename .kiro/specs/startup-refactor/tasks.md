@@ -92,7 +92,7 @@
 
 - [ ] 5. 实现 AppBootstrap 协调器
 
-  - [ ] 5.1 实现状态成员初始化
+  - [x] 5.1 实现状态成员初始化
 
     - 初始化 app_initializer、ui_launcher、module_loader
     - 声明状态成员：app、single_instance、splash、exit_code
