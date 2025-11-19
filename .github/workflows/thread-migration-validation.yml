@@ -1,0 +1,144 @@
+name: Thread Migration Validation
+
+on:
+  push:
+    branches: [main, develop, refactor/*]
+  pull_request:
+    branches: [main, develop]
+
+jobs:
+  validate-thread-migration:
+    name: Validate Thread Migration
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.9"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install PyQt6
+
+      - name: Run MigrationValidator on AI Assistant module
+        id: validate_ai_assistant
+        run: |
+          python -c "
+          import sys
+          from pathlib import Path
+          sys.path.insert(0, str(Path.cwd()))
+          from core.utils.migration_validator import MigrationValidator
+
+          validator = MigrationValidator()
+          result = validator.scan_module(Path('modules/ai_assistant'))
+
+          if result.violations:
+              print(f'❌ Found {result.violation_count} violations in ai_assistant module:')
+              for v in result.violations:
+                  print(f'  {v.file}:{v.line} - {v.pattern}')
+              sys.exit(1)
+          else:
+              print('✅ No violations found in ai_assistant module')
+          "
+
+      - name: Run MigrationValidator on Asset Manager module
+        id: validate_asset_manager
+        run: |
+          python -c "
+          import sys
+          from pathlib import Path
+          sys.path.insert(0, str(Path.cwd()))
+          from core.utils.migration_validator import MigrationValidator
+
+          validator = MigrationValidator()
+          result = validator.scan_module(Path('modules/asset_manager'))
+
+          if result.violations:
+              print(f'❌ Found {result.violation_count} violations in asset_manager module:')
+              for v in result.violations:
+                  print(f'  {v.file}:{v.line} - {v.pattern}')
+              sys.exit(1)
+          else:
+              print('✅ No violations found in asset_manager module')
+          "
+
+      - name: Generate validation report
+        if: always()
+        run: |
+          python -c "
+          import sys
+          import json
+          from pathlib import Path
+          from datetime import datetime
+          sys.path.insert(0, str(Path.cwd()))
+          from core.utils.migration_validator import MigrationValidator
+
+          validator = MigrationValidator()
+
+          # Scan both modules
+          ai_result = validator.scan_module(Path('modules/ai_assistant'))
+          asset_result = validator.scan_module(Path('modules/asset_manager'))
+
+          # Generate report
+          report = {
+              'timestamp': datetime.now().isoformat(),
+              'ai_assistant': {
+                  'violations': ai_result.violation_count,
+                  'status': 'PASS' if ai_result.violation_count == 0 else 'FAIL'
+              },
+              'asset_manager': {
+                  'violations': asset_result.violation_count,
+                  'status': 'PASS' if asset_result.violation_count == 0 else 'FAIL'
+              },
+              'total_violations': ai_result.violation_count + asset_result.violation_count
+          }
+
+          # Save report
+          report_dir = Path('reports')
+          report_dir.mkdir(exist_ok=True)
+
+          with open(report_dir / 'migration_validation.json', 'w') as f:
+              json.dump(report, f, indent=2)
+
+          print('📊 Validation Report:')
+          print(json.dumps(report, indent=2))
+          "
+
+      - name: Upload validation report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: migration-validation-report
+          path: reports/migration_validation.json
+          retention-days: 30
+
+      - name: Comment PR with results
+        if: github.event_name == 'pull_request' && always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const report = JSON.parse(fs.readFileSync('reports/migration_validation.json', 'utf8'));
+
+            const status = report.total_violations === 0 ? '✅ PASS' : '❌ FAIL';
+            const body = `## Thread Migration Validation ${status}
+
+            **AI Assistant Module:** ${report.ai_assistant.status} (${report.ai_assistant.violations} violations)
+            **Asset Manager Module:** ${report.asset_manager.status} (${report.asset_manager.violations} violations)
+
+            **Total Violations:** ${report.total_violations}
+
+            ${report.total_violations > 0 ? '⚠️ Please fix the violations before merging.' : '✅ All modules are compliant with ThreadManager migration.'}
+            `;
+
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: body
+            });

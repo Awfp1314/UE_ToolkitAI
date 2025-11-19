@@ -4,6 +4,7 @@
 ![Python](https://img.shields.io/badge/python-3.8%2B-blue.svg)
 ![Platform](https://img.shields.io/badge/platform-windows%20%7C%20linux%20%7C%20macos-lightgrey.svg)
 ![Status](https://img.shields.io/badge/status-UI%20重构中-orange.svg)
+![Thread Migration](https://github.com/YOUR_USERNAME/UE_TOOKITS_AI_NEW/actions/workflows/thread-migration-validation.yml/badge.svg)
 
 一个功能丰富的虚幻引擎辅助工具箱，专为虚幻引擎开发者设计，提供资产管理、配置管理和资源推荐等功能。
 
