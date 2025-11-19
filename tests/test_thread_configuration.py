@@ -123,3 +123,111 @@ def test_thread_state_and_task_info_creation():
     )
     assert snapshot.task_id == "t1"
     assert snapshot.state == ThreadState.RUNNING.value
+
+
+def test_load_configuration_file_not_found():
+    """Test that FileNotFoundError is raised when config file doesn't exist."""
+    non_existent_path = Path("/non/existent/path/config.json")
+
+    with pytest.raises(FileNotFoundError):
+        ThreadConfiguration.load_from_file(non_existent_path)
+
+
+def test_load_configuration_invalid_json(tmp_path: Path):
+    """Test that JSONDecodeError is raised for invalid JSON."""
+    invalid_json_file = tmp_path / "invalid.json"
+    invalid_json_file.write_text("{ this is not valid json }", encoding="utf-8")
+
+    with pytest.raises(json.JSONDecodeError):
+        ThreadConfiguration.load_from_file(invalid_json_file)
+
+
+def test_load_configuration_with_defaults(tmp_path: Path):
+    """Test that default values are used when fields are missing."""
+    minimal_config = tmp_path / "minimal.json"
+    minimal_config.write_text("{}", encoding="utf-8")
+
+    cfg = ThreadConfiguration.load_from_file(minimal_config)
+
+    # Verify all defaults are applied
+    assert cfg.task_timeout == 30000
+    assert cfg.grace_period == 2000
+    assert cfg.cleanup_timeout == 2000
+    assert cfg.global_shutdown_timeout == 10000
+    assert cfg.thread_pool_size == 10
+    assert cfg.task_queue_size == 50
+    assert cfg.cancellation_check_interval == 500
+    assert len(cfg.privacy_rules) == 0
+    assert len(cfg.module_overrides) == 0
+
+
+def test_load_configuration_partial_overrides(tmp_path: Path):
+    """Test that partial module overrides merge with defaults."""
+    partial_config = tmp_path / "partial.json"
+    data = {
+        "task_timeout": 40000,
+        "module_overrides": {
+            "test_module": {"task_timeout": 50000}  # Only override task_timeout
+        }
+    }
+    partial_config.write_text(json.dumps(data), encoding="utf-8")
+
+    cfg = ThreadConfiguration.load_from_file(partial_config)
+    module_cfg = cfg.get_module_config("test_module")
+
+    # task_timeout should be overridden
+    assert module_cfg.task_timeout == 50000
+    # cleanup_timeout should use global default
+    assert module_cfg.cleanup_timeout == cfg.cleanup_timeout
+
+
+def test_configuration_to_dict():
+    """Test that configuration can be serialized to dict."""
+    cfg = ThreadConfiguration(
+        task_timeout=35000,
+        grace_period=1800,
+        privacy_rules=[PrivacyRule(field="test", action="redact")],
+        module_overrides={"mod1": ModuleThreadConfig(task_timeout=45000)}
+    )
+
+    result = cfg.to_dict()
+
+    assert result["task_timeout"] == 35000
+    assert result["grace_period"] == 1800
+    assert len(result["privacy_rules"]) == 1
+    assert result["privacy_rules"][0]["field"] == "test"
+    assert result["privacy_rules"][0]["action"] == "redact"
+    assert "mod1" in result["module_overrides"]
+    assert result["module_overrides"]["mod1"]["task_timeout"] == 45000
+
+
+def test_privacy_rule_no_pattern():
+    """Test privacy rule without pattern (for redact action)."""
+    rule = PrivacyRule(field="sensitive", action="redact")
+    assert rule.apply("secret data") == "[REDACTED]"
+
+
+def test_privacy_rule_mask_no_match():
+    """Test mask rule when pattern doesn't match."""
+    rule = PrivacyRule(field="data", action="mask", pattern=r"password=\w+")
+    # Pattern doesn't match, should return original
+    assert rule.apply("no password here") == "no password here"
+
+
+def test_module_config_merge_with_defaults():
+    """Test ModuleThreadConfig merge behavior."""
+    defaults = ThreadConfiguration(task_timeout=30000, cleanup_timeout=2000)
+
+    # Module config with only task_timeout override
+    module_cfg = ModuleThreadConfig(task_timeout=60000, cleanup_timeout=None)
+    merged = module_cfg.merge_with_defaults(defaults)
+
+    assert merged.task_timeout == 60000
+    assert merged.cleanup_timeout == 2000  # From defaults
+
+    # Module config with both overrides
+    module_cfg2 = ModuleThreadConfig(task_timeout=70000, cleanup_timeout=5000)
+    merged2 = module_cfg2.merge_with_defaults(defaults)
+
+    assert merged2.task_timeout == 70000
+    assert merged2.cleanup_timeout == 5000
