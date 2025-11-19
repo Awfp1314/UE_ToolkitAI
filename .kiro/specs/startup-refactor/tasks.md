@@ -13,7 +13,7 @@
 
 - [ ] 2. 实现 AppInitializer 组件
 
-  - [ ] 2.1 实现日志系统配置
+  - [x] 2.1 实现日志系统配置
 
     - 调用 `init_logging_system()` 配置日志
     - 调用 `setup_console_encoding()` 设置控制台编码（Windows）
