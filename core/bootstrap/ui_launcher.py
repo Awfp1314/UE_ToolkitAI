@@ -39,8 +39,17 @@ class UILauncher:
         Returns:
             SplashScreen: Splash Screen 实例
         """
-        # 占位符：将在任务 3.2 中实现
-        pass
+        # 加载主题配置
+        self.current_theme = self._load_theme_config()
+
+        # 应用主题到 QApplication
+        self._apply_theme(app, self.current_theme)
+
+        # 创建 Splash Screen
+        self.splash = self._create_splash(self.current_theme)
+
+        self.logger.info("UI 准备阶段完成")
+        return self.splash
 
     def show_ui(self,
                 app: QApplication,
@@ -101,8 +110,10 @@ class UILauncher:
             app: QApplication 实例
             theme: 主题名称
         """
-        # 占位符：将在任务 3.2 中实现
-        pass
+        # 应用主题到 QApplication
+        self.logger.info(f"正在应用QSS主题: {theme}...")
+        style_system.apply_theme(app, theme)
+        self.logger.info("✅ QSS主题应用成功")
 
     def _create_splash(self, theme: str) -> SplashScreen:
         """创建 Splash Screen
@@ -113,8 +124,24 @@ class UILauncher:
         Returns:
             SplashScreen: Splash Screen 实例
         """
-        # 占位符：将在任务 3.2 中实现
-        pass
+        # 根据主题选择 Splash 主题（dark 或 light）
+        splash_theme = "dark" if "dark" in theme.lower() else "light"
+
+        # 创建 SplashScreen 实例
+        splash = SplashScreen(theme=splash_theme)
+
+        # 注册日志处理器
+        splash.register_log_handler()
+
+        # 显示 Splash
+        splash.show()
+
+        # 刷新 UI
+        from PyQt6.QtWidgets import QApplication as QApp
+        QApp.processEvents()
+
+        self.logger.info("启动加载界面已显示")
+        return splash
 
     def _create_main_window(self, module_provider) -> UEMainWindow:
         """创建主窗口

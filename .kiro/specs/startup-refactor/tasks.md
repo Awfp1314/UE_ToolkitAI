@@ -44,7 +44,7 @@
     - 失败时使用默认主题 modern_dark
     - _需求: 4.3, 4.4_
 
-  - [ ] 3.2 实现 UI 准备阶段（prepare_ui）
+  - [x] 3.2 实现 UI 准备阶段（prepare_ui）
 
     - 应用主题到 QApplication
     - 根据主题选择 Splash 主题（dark 或 light）
