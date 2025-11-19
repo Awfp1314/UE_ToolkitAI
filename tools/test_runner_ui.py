@@ -437,27 +437,31 @@ class TestRunnerUI(QMainWindow):
         total_tests = sum(len(files) for files in self.all_tests.values())
 
         html = f"""
-            <div style="padding: 30px; font-family: 'Microsoft YaHei UI', Arial; text-align: center;">
+            <div style="padding: 30px; font-family: 'Microsoft YaHei UI', Arial; text-align: center; background-color: #fafafa;">
                 <h1 style="color: #2196F3; margin-bottom: 20px;">🧪 欢迎使用测试运行器</h1>
 
                 <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 30px; border-radius: 12px; margin: 20px 0;">
-                    <h2 style="margin: 0 0 15px 0;">📊 测试统计</h2>
-                    <p style="font-size: 18px; margin: 10px 0;">
-                        共有 <strong style="font-size: 24px;">{total_tests}</strong> 个测试
+                    <h2 style="margin: 0 0 15px 0; color: white;">📊 测试统计</h2>
+                    <p style="font-size: 18px; margin: 10px 0; color: white;">
+                        共有 <strong style="font-size: 24px; color: white;">{total_tests}</strong> 个测试
                     </p>
-                    <div style="display: flex; justify-content: space-around; margin-top: 20px; text-align: center;">
-                        <div>
-                            <p style="font-size: 16px; margin: 5px 0;">🧵 线程管理</p>
-                            <p style="font-size: 20px; font-weight: bold; margin: 5px 0;">{len(self.all_tests.get(TestCategory.THREAD_MANAGEMENT, []))}</p>
-                        </div>
-                        <div>
-                            <p style="font-size: 16px; margin: 5px 0;">🔗 集成测试</p>
-                            <p style="font-size: 20px; font-weight: bold; margin: 5px 0;">{len(self.all_tests.get(TestCategory.INTEGRATION, []))}</p>
-                        </div>
-                        <div>
-                            <p style="font-size: 16px; margin: 5px 0;">⚙️ 功能测试</p>
-                            <p style="font-size: 20px; font-weight: bold; margin: 5px 0;">{len(self.all_tests.get(TestCategory.OTHER, []))}</p>
-                        </div>
+                    <div style="margin-top: 20px;">
+                        <table style="width: 100%; color: white;">
+                            <tr>
+                                <td style="text-align: center; padding: 10px;">
+                                    <p style="font-size: 16px; margin: 5px 0; color: white;">🧵 线程管理</p>
+                                    <p style="font-size: 24px; font-weight: bold; margin: 5px 0; color: white;">{len(self.all_tests.get(TestCategory.THREAD_MANAGEMENT, []))}</p>
+                                </td>
+                                <td style="text-align: center; padding: 10px;">
+                                    <p style="font-size: 16px; margin: 5px 0; color: white;">🔗 集成测试</p>
+                                    <p style="font-size: 24px; font-weight: bold; margin: 5px 0; color: white;">{len(self.all_tests.get(TestCategory.INTEGRATION, []))}</p>
+                                </td>
+                                <td style="text-align: center; padding: 10px;">
+                                    <p style="font-size: 16px; margin: 5px 0; color: white;">⚙️ 功能测试</p>
+                                    <p style="font-size: 24px; font-weight: bold; margin: 5px 0; color: white;">{len(self.all_tests.get(TestCategory.OTHER, []))}</p>
+                                </td>
+                            </tr>
+                        </table>
                     </div>
                 </div>
 
@@ -550,14 +554,14 @@ class TestRunnerUI(QMainWindow):
             self.display_test_result(result, friendly_name)
         else:
             self.result_text.setHtml(f"""
-                <div style="padding: 20px;">
+                <div style="padding: 20px; background-color: #fafafa;">
                     <h2 style="color: #2196F3; font-family: 'Microsoft YaHei UI';">📝 {friendly_name}</h2>
                     <hr style="border: none; border-top: 2px solid #e0e0e0; margin: 15px 0;">
-                    <p style="color: #666; font-size: 14px; line-height: 1.6;">
-                        <strong>状态：</strong>⚪ 尚未运行
+                    <p style="color: #333; font-size: 14px; line-height: 1.6;">
+                        <strong style="color: #333;">状态：</strong>⚪ 尚未运行
                     </p>
-                    <p style="color: #666; font-size: 14px; line-height: 1.6;">
-                        <strong>说明：</strong>点击上方的 <span style="color: #2196F3; font-weight: bold;">"▶ 运行选中测试"</span> 按钮来运行此测试
+                    <p style="color: #333; font-size: 14px; line-height: 1.6;">
+                        <strong style="color: #333;">说明：</strong>点击上方的 <span style="color: #2196F3; font-weight: bold;">"▶ 运行选中测试"</span> 按钮来运行此测试
                     </p>
                     <div style="background-color: #e3f2fd; padding: 15px; border-radius: 8px; margin-top: 20px;">
                         <p style="color: #1976d2; font-size: 13px; margin: 0;">
@@ -588,20 +592,20 @@ class TestRunnerUI(QMainWindow):
         display_name = friendly_name or get_friendly_test_name(result.name)
 
         html = f"""
-            <div style="padding: 20px; font-family: 'Microsoft YaHei UI', Arial;">
+            <div style="padding: 20px; font-family: 'Microsoft YaHei UI', Arial; background-color: #fafafa;">
                 <div style="background-color: {bg_color}; padding: 20px; border-radius: 8px; border-left: 5px solid {color};">
                     <h2 style="color: {color}; margin: 0 0 10px 0;">{icon} {display_name}</h2>
-                    <p style="color: #666; margin: 5px 0; font-size: 14px;">
-                        <strong>文件名：</strong><code style="background-color: rgba(0,0,0,0.05); padding: 2px 6px; border-radius: 3px;">{result.name}.py</code>
+                    <p style="color: #333; margin: 5px 0; font-size: 14px;">
+                        <strong style="color: #333;">文件名：</strong><code style="background-color: rgba(0,0,0,0.05); padding: 2px 6px; border-radius: 3px; color: #333;">{result.name}.py</code>
                     </p>
                 </div>
 
                 <div style="margin-top: 20px; padding: 15px; background-color: #f5f5f5; border-radius: 8px;">
-                    <p style="margin: 8px 0; font-size: 14px;">
-                        <strong>状态：</strong><span style="color: {color}; font-weight: bold;">{icon} {status_text}</span>
+                    <p style="margin: 8px 0; font-size: 14px; color: #333;">
+                        <strong style="color: #333;">状态：</strong><span style="color: {color}; font-weight: bold;">{icon} {status_text}</span>
                     </p>
-                    <p style="margin: 8px 0; font-size: 14px;">
-                        <strong>耗时：</strong><span style="color: #666;">{result.duration:.2f} 秒</span>
+                    <p style="margin: 8px 0; font-size: 14px; color: #333;">
+                        <strong style="color: #333;">耗时：</strong><span style="color: #666;">{result.duration:.2f} 秒</span>
                     </p>
                 </div>
         """
@@ -617,11 +621,11 @@ class TestRunnerUI(QMainWindow):
 
                 <div style="margin-top: 20px; background-color: #fff3e0; padding: 15px; border-radius: 8px; border-left: 4px solid #FFC107;">
                     <h3 style="color: #F57C00; margin: 0 0 10px 0;">💡 修复建议</h3>
-                    <ul style="color: #666; margin: 0; padding-left: 20px; line-height: 1.8;">
-                        <li><strong>AttributeError / TypeError：</strong>代码接口可能发生了变化，需要更新测试脚本</li>
-                        <li><strong>AssertionError：</strong>检查代码逻辑是否正确，或者测试的预期值是否需要更新</li>
-                        <li><strong>ImportError：</strong>检查依赖是否安装，运行 <code>pip install -r requirements.txt</code></li>
-                        <li><strong>FileNotFoundError：</strong>测试依赖的文件不存在，可能需要删除或更新此测试</li>
+                    <ul style="color: #333; margin: 0; padding-left: 20px; line-height: 1.8;">
+                        <li><strong style="color: #333;">AttributeError / TypeError：</strong><span style="color: #333;">代码接口可能发生了变化，需要更新测试脚本</span></li>
+                        <li><strong style="color: #333;">AssertionError：</strong><span style="color: #333;">检查代码逻辑是否正确，或者测试的预期值是否需要更新</span></li>
+                        <li><strong style="color: #333;">ImportError：</strong><span style="color: #333;">检查依赖是否安装，运行 <code style="color: #333;">pip install -r requirements.txt</code></span></li>
+                        <li><strong style="color: #333;">FileNotFoundError：</strong><span style="color: #333;">测试依赖的文件不存在，可能需要删除或更新此测试</span></li>
                     </ul>
                 </div>
             """
