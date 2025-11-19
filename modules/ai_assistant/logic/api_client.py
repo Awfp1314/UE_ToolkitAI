@@ -1,36 +1,37 @@
 """
 API 客户端模块
 重构为使用策略模式，支持多种 LLM 供应商（API / Ollama）
+✨ 使用 ThreadManager 进行线程管理
 """
 
 import json
 import os
 import time
 import requests
-from PyQt6.QtCore import QThread, pyqtSignal
+from PyQt6.QtCore import QObject, pyqtSignal
 from typing import Dict, Any, Optional
 from pathlib import Path
-from core.utils.thread_cleanup import ThreadCleanupMixin
+from core.utils.thread_utils import CancellationToken
 
 
-class APIClient(QThread, ThreadCleanupMixin):
+class APIClient(QObject):
     """
-    API 客户端线程（重构版）
+    API 客户端（重构版）
 
     使用策略模式，通过工厂动态选择 LLM 供应商（API / Ollama）
     支持流式输出
-    使用 ThreadCleanupMixin 确保线程资源正确释放（Requirement 4.1, 4.2, 4.3）
+    ✨ 使用 ThreadManager 进行线程管理
     """
     # 信号定义
     chunk_received = pyqtSignal(str)      # 接收到数据块
     request_finished = pyqtSignal()       # 请求完成
     token_usage = pyqtSignal(dict)        # Token使用量统计
     error_occurred = pyqtSignal(str)      # 发生错误
-    
+
     def __init__(self, messages, model=None, temperature=None, tools=None, config=None):
         """
         初始化 API 客户端
-        
+
         Args:
             messages: 消息历史列表
             model: 模型名称（可选，用于覆盖配置，向后兼容）
@@ -43,20 +44,13 @@ class APIClient(QThread, ThreadCleanupMixin):
         self.model = model  # 保留以向后兼容
         self.temperature = temperature if temperature is not None else 0.8
         self.tools = tools
-        self.is_running = True
-        
+        self._task_id: Optional[str] = None
+
         # 加载配置
         self.config = self._load_config() if config is None else config
-        
-        # 创建策略客户端（延迟到 run() 中，避免初始化阻塞）
+
+        # 创建策略客户端（延迟到执行时，避免初始化阻塞）
         self.strategy_client = None
-
-    def request_stop(self) -> None:
-        """请求线程停止（实现 ThreadCleanupMixin 抽象方法）
-
-        Requirement 4.1: 实现 request_stop() 方法
-        """
-        self.is_running = False
 
     def _load_config(self) -> Dict[str, Any]:
         """从配置文件加载 AI 助手配置"""
@@ -89,27 +83,36 @@ class APIClient(QThread, ThreadCleanupMixin):
                 f"错误详情: {str(e)}"
             )
     
-    def run(self):
-        """执行 LLM 请求（使用策略模式）"""
+    def _execute_request(self, cancel_token: CancellationToken):
+        """执行 LLM 请求（使用策略模式）
+
+        Args:
+            cancel_token: 取消令牌
+        """
         # 关键调试：追踪APIClient启动
         import traceback
         call_stack = ''.join(traceback.format_stack())
         print(f"\n{'='*80}")
-        print(f"[API_CLIENT] !!! APIClient.run() 被调用！")
+        print(f"[API_CLIENT] !!! APIClient._execute_request() 被调用！")
         print(f"[API_CLIENT] 消息数量: {len(self.messages)}")
         print(f"[API_CLIENT] 工具数量: {len(self.tools) if self.tools else 0}")
         print(f"[API_CLIENT] 调用堆栈:\n{call_stack}")
         print(f"{'='*80}\n")
-        
+
         try:
+            # 检查是否被取消
+            if cancel_token.is_cancelled():
+                print("[API_CLIENT] 请求被取消（启动前）")
+                return
+
             # 创建策略客户端
             from modules.ai_assistant.clients import create_llm_client
-            
+
             self.strategy_client = create_llm_client(self.config)
             provider = self.config.get('llm_provider', 'api')
-            
+
             print(f"[LLM] 使用供应商: {provider}, 模型: {self.strategy_client.get_model_name()}")
-            
+
             # 调用策略生成响应
             response_generator = self.strategy_client.generate_response(
                 context_messages=self.messages,
@@ -117,46 +120,68 @@ class APIClient(QThread, ThreadCleanupMixin):
                 temperature=self.temperature,
                 tools=self.tools
             )
-            
+
             # 处理生成器输出，发送信号到 UI
             for chunk in response_generator:
-                if not self.is_running:
+                # 检查是否被取消
+                if cancel_token.is_cancelled():
+                    print("[API_CLIENT] 请求被取消（处理中）")
                     break
-                
+
                 if chunk:
                     # 支持新格式（dict）和旧格式（str）
                     if isinstance(chunk, dict):
                         chunk_type = chunk.get('type')
-                        
+
                         # 处理文本内容
                         if chunk_type == 'content':
                             text = chunk.get('text', '')
                             if text:
                                 self.chunk_received.emit(text)
-                        
+
                         # ⚡ 处理 token 使用量统计
                         elif chunk_type == 'token_usage':
                             usage = chunk.get('usage', {})
                             self.token_usage.emit(usage)
-                        
+
                         # 忽略 tool_calls 类型（由协调器处理）
                     else:
                         # 旧格式：纯字符串
                         self.chunk_received.emit(chunk)
-            
+
             # 请求完成
-            if self.is_running:
+            if not cancel_token.is_cancelled():
                 self.request_finished.emit()
-        
+
         except Exception as e:
             error_msg = str(e)
             print(f"[ERROR] LLM 请求失败: {error_msg}")
             self.error_occurred.emit(error_msg)
     
+    def start(self):
+        """启动 API 请求（使用 ThreadManager）"""
+        from core.utils.thread_utils import get_thread_manager
+        thread_manager = get_thread_manager()
+
+        try:
+            _, _, task_id = thread_manager.run_in_thread(
+                module_name="ai_assistant",
+                task_name="api_request",
+                func=self._execute_request
+            )
+            self._task_id = task_id
+            print(f"[API_CLIENT] 任务已提交，task_id: {task_id}")
+        except Exception as e:
+            print(f"[ERROR] 提交 API 请求任务失败: {e}")
+            self.error_occurred.emit(str(e))
+
     def stop(self):
         """停止请求"""
-        self.is_running = False
-        self.quit()
+        if self._task_id:
+            from core.utils.thread_utils import get_thread_manager
+            thread_manager = get_thread_manager()
+            thread_manager.cancel_task(self._task_id)
+            print(f"[API_CLIENT] 任务已取消，task_id: {self._task_id}")
     
     @staticmethod
     def send(
