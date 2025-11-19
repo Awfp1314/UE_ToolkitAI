@@ -37,7 +37,7 @@
 
 - [ ] 3. 实现 UILauncher 组件
 
-  - [ ] 3.1 实现主题配置加载
+  - [x] 3.1 实现主题配置加载
 
     - 从 `AppData/ue_toolkit/ui_settings.json` 读取主题配置
     - 支持旧版本配置映射（dark → modern_dark, light → modern_light）
