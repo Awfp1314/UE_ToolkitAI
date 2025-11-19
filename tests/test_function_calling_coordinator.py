@@ -274,8 +274,8 @@ class TestFunctionCallingCoordinatorImplementation(unittest.TestCase):
         with open(file_path, 'r', encoding='utf-8') as f:
             content = f.read()
         
-        # 检查注释说明避免重复 API 调用
-        self.assertIn('避免重复API', content, 
+        # 检查注释说明避免重复 API 调用（更新为新的注释文字）
+        self.assertIn('避免第二次API调用', content,
                      "应该有注释说明避免重复 API 调用")
         
         # 检查使用第一次调用的结果
@@ -354,17 +354,18 @@ class TestFunctionCallingCoordinatorNoRetry(unittest.TestCase):
         found_error_handler_in_run = False
 
         for line in lines:
-            if 'def run(self):' in line:
+            # 更新为新的方法名 _execute_coordination
+            if 'def _execute_coordination(self' in line:
                 in_run_method = True
-            elif in_run_method and 'def ' in line and 'def run' not in line:
-                # 进入下一个方法，退出 run 方法
+            elif in_run_method and 'def ' in line and 'def _execute_coordination' not in line:
+                # 进入下一个方法，退出当前方法
                 break
             elif in_run_method and 'ErrorHandler' in line:
                 found_error_handler_in_run = True
                 break
 
         self.assertTrue(found_error_handler_in_run,
-                       "run() 方法中应该使用 ErrorHandler")
+                       "_execute_coordination() 方法中应该使用 ErrorHandler")
 
     def test_friendly_error_message_emitted(self):
         """测试向 UI 发送友好的错误消息
@@ -406,9 +407,9 @@ class TestFunctionCallingCoordinatorNoRetry(unittest.TestCase):
         with open(file_path, 'r', encoding='utf-8') as f:
             content = f.read()
 
-        # 检查优化注释
+        # 检查优化注释（更新为新的注释文字）
         self.assertIn('[OPTIMIZATION]', content, "应该有优化标记")
-        self.assertIn('避免重复API请求', content, "应该说明避免重复 API 请求")
+        self.assertIn('避免第二次API调用', content, "应该说明避免重复 API 调用")
 
 
 if __name__ == '__main__':
