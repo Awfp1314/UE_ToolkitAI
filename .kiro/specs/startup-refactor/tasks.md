@@ -35,7 +35,7 @@
     - 返回 (QApplication, SingleInstanceManager, success) 元组
     - _需求: 2.3, 2.4, 2.5, 2.6_
 
-- [ ] 3. 实现 UILauncher 组件
+- [x] 3. 实现 UILauncher 组件
 
   - [x] 3.1 实现主题配置加载
 
@@ -53,7 +53,7 @@
     - 显示 Splash 并刷新 UI
     - _需求: 4.1, 4.2, 4.5_
 
-  - [ ] 3.3 实现 UI 显示阶段（show_ui）
+  - [x] 3.3 实现 UI 显示阶段（show_ui）
     - 创建 UEMainWindow 实例并传入 module_provider
     - 启动 SingleInstanceManager 本地服务器
     - 调用 `main_window.load_initial_module()` 加载初始模块

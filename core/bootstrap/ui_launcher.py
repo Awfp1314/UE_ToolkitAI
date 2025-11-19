@@ -65,8 +65,49 @@ class UILauncher:
         Returns:
             bool: 是否成功
         """
-        # 占位符：将在任务 3.3 中实现
-        pass
+        try:
+            # 创建主窗口
+            self.main_window = self._create_main_window(module_provider)
+
+            # 启动单实例服务器
+            single_instance.start_server(self.main_window)
+            self.logger.info("单实例服务器已启动")
+
+            # 调用 main_window.load_initial_module() 加载初始模块
+            # 在回调中关闭 Splash 并显示主窗口
+            def on_initial_module_loaded():
+                """初始模块加载完成回调"""
+                self.logger.info("初始模块加载完成")
+                # 多次处理事件，确保UI更新
+                for _ in range(3):
+                    app.processEvents()
+
+                # 关闭 Splash
+                if self.splash:
+                    self.splash.finish()
+                    self.logger.info("启动界面已关闭")
+
+                # 显示主窗口
+                if self.main_window:
+                    self.main_window.show()
+                    self.main_window.raise_()
+                    self.main_window.activateWindow()
+                    self.logger.info("主窗口已显示")
+
+            # 使用 QTimer 延迟加载，避免阻塞
+            from PyQt6.QtCore import QTimer
+            def load_initial_module():
+                self.logger.info("开始加载初始模块")
+                if self.main_window:
+                    self.main_window.load_initial_module(on_complete=on_initial_module_loaded)
+
+            QTimer.singleShot(500, load_initial_module)
+
+            return True
+
+        except Exception as e:
+            self.logger.error(f"显示 UI 失败: {e}", exc_info=True)
+            return False
 
     def _load_theme_config(self) -> str:
         """加载主题配置
@@ -152,5 +193,7 @@ class UILauncher:
         Returns:
             UEMainWindow: 主窗口实例
         """
-        # 占位符：将在任务 3.3 中实现
-        pass
+        self.logger.info("创建主窗口")
+        main_window = UEMainWindow(module_provider)
+        self.logger.info("主窗口创建完成")
+        return main_window
