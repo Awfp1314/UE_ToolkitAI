@@ -9,59 +9,6 @@
 
 ## 📋 当前存在的问题
 
-### 🔴 高优先级问题
-
-#### 问题 2：线程与资源管理不统一
-
-**现状**：
-
-- 有 `ThreadManager` 统一管理线程
-- 但部分模块仍使用裸 `QThread`
-- 取消机制不一致（有 `CancellationToken`，但不是所有任务都支持）
-- 清理契约不统一（有 `ThreadCleanupMixin`，但不是所有模块都用）
-
-**问题**：
-
-- 线程泄漏风险
-- 取消任务不可靠
-- 退出时可能卡顿或崩溃
-- 难以追踪和调试线程问题
-
-**期望改进**：
-
-1. **强制使用 ThreadManager**：禁止直接创建 `QThread`
-2. **统一取消机制**：所有耗时任务必须支持 `CancellationToken`
-3. **统一清理契约**：所有模块必须实现 `cleanup()` 方法
-4. **添加超时机制**：长时间运行的任务自动超时
-
-```python
-# 规范示例
-class MyModule(IModule, ThreadCleanupMixin):
-    def __init__(self):
-        super().__init__()
-        self.thread_manager = ThreadManager()
-
-    def long_task(self, cancel_token):
-        """所有耗时任务必须接受 cancel_token"""
-        for i in range(100):
-            if cancel_token.is_cancelled():
-                return None
-            # 执行任务
-        return result
-
-    def cleanup(self):
-        """必须实现清理方法"""
-        self.thread_manager.cleanup()
-```
-
-**改进收益**：
-
-- ✅ 消除线程泄漏
-- ✅ 可靠的任务取消
-- ✅ 稳定的退出流程
-- ✅ 便于调试和监控
-
----
 
 ### 🟡 中优先级问题
 
@@ -329,6 +276,6 @@ def process_data(self, data: Dict[str, Any]) -> Optional[ProcessedData]:
 ---
 
 **文档创建时间**：2025-11-16
-**最后更新时间**：2025-11-18
-**文档状态**：问题 5 (AssetManagerLogic) 已完成，其他问题待解决
-**下一步**：继续问题 2 (线程管理不统一) 或问题 4 (启动流程复杂)
+**最后更新时间**：2025-11-19
+**文档状态**：问题 2 (线程管理不统一) 已完成，问题 5 (AssetManagerLogic) 已完成
+**下一步**：继续问题 4 (启动流程复杂)

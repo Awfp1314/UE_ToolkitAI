@@ -9,6 +9,7 @@ from PyQt6.QtWidgets import QWidget
 
 from core.logger import get_logger
 from core.services import style_service
+from core.utils.cleanup_result import CleanupResult
 from .logic import AssetManagerLogic
 from .ui import AssetManagerUI
 
@@ -57,18 +58,29 @@ class AssetManagerModule:
 
         return self.ui
     
-    def cleanup(self):
-        """清理资源"""
+    def request_stop(self) -> None:
+        """请求模块停止操作（在 cleanup 之前调用）"""
+        logger.info("请求资产管理模块停止")
+        # 资产管理模块没有长时间运行的任务，无需特殊处理
+
+    def cleanup(self) -> CleanupResult:
+        """清理资源
+
+        Returns:
+            CleanupResult: 清理结果
+        """
         try:
             if self.ui:
                 self.ui.deleteLater()
                 self.ui = None
-            
+
             if self.logic:
                 self.logic.deleteLater()
                 self.logic = None
-            
+
             logger.info("资产管理模块清理完成")
-            
+            return CleanupResult.success_result()
+
         except Exception as e:
             logger.error(f"清理资产管理模块资源时出错: {e}", exc_info=True)
+            return CleanupResult.failure_result(str(e))

@@ -8,6 +8,7 @@ from PyQt6.QtWidgets import QWidget
 from typing import Optional
 
 from core.logger import get_logger
+from core.utils.cleanup_result import CleanupResult
 from modules.site_recommendations.logic.site_recommendations_logic import SiteRecommendationsLogic
 
 logger = get_logger(__name__)
@@ -92,18 +93,29 @@ class SiteRecommendationsModule:
         
         logger.info("站点推荐UI数据初始化完成")
     
-    def cleanup(self):
-        """清理资源"""
+    def request_stop(self) -> None:
+        """请求模块停止操作（在 cleanup 之前调用）"""
+        logger.info("请求站点推荐模块停止")
+        # 站点推荐模块没有长时间运行的任务，无需特殊处理
+
+    def cleanup(self) -> CleanupResult:
+        """清理资源
+
+        Returns:
+            CleanupResult: 清理结果
+        """
         logger.info("清理站点推荐模块资源")
         try:
             if self.logic:
                 self.logic.save_config()
-            
+
             if self.ui:
                 self.ui = None
-            
+
             logger.info("站点推荐模块资源清理完成")
+            return CleanupResult.success_result()
         except Exception as e:
             logger.error(f"清理站点推荐模块资源时发生错误: {e}", exc_info=True)
+            return CleanupResult.failure_result(str(e))
 
 

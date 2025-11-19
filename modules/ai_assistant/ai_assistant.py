@@ -12,6 +12,7 @@ from contextlib import contextmanager
 
 from core.logger import get_logger
 from core.services import thread_service
+from core.utils.cleanup_result import CleanupResult
 # from modules.ai_assistant.ui.chat_window import ChatWindow  # TODO: 待实现新 UI
 
 logger = get_logger(__name__)
@@ -432,17 +433,31 @@ class AIAssistantModule:
         if self.chat_window and hasattr(self.chat_window, 'set_config_tool_logic'):
             self.chat_window.set_config_tool_logic(config_tool_logic)
     
-    def cleanup(self):
-        """清理资源"""
-        logger.info("清理 AI 助手模块资源")
+    def request_stop(self) -> None:
+        """请求模块停止操作（在 cleanup 之前调用）"""
+        logger.info("请求 AI 助手模块停止")
         try:
             if self.chat_window:
                 # 停止当前的 API 请求
                 if hasattr(self.chat_window, 'current_api_client') and self.chat_window.current_api_client:
                     self.chat_window.current_api_client.stop()
+        except Exception as e:
+            logger.error(f"请求停止时发生错误: {e}", exc_info=True)
+
+    def cleanup(self) -> CleanupResult:
+        """清理资源
+
+        Returns:
+            CleanupResult: 清理结果
+        """
+        logger.info("清理 AI 助手模块资源")
+        try:
+            if self.chat_window:
                 self.chat_window = None
-            
+
             logger.info("AI 助手模块资源清理完成")
+            return CleanupResult.success_result()
         except Exception as e:
             logger.error(f"清理模块资源时发生错误: {e}", exc_info=True)
+            return CleanupResult.failure_result(str(e))
 
