@@ -11,7 +11,7 @@
   - 创建空的 `app_initializer.py`、`module_loader.py`、`ui_launcher.py`、`app_bootstrap.py` 文件
   - _需求: 8.1, 8.2, 8.3, 8.4_
 
-- [ ] 2. 实现 AppInitializer 组件
+- [x] 2. 实现 AppInitializer 组件
 
   - [x] 2.1 实现日志系统配置
 
@@ -28,7 +28,7 @@
     - 设置 Windows AppUserModelID（Windows 平台）
     - _需求: 2.2, 12.1, 12.2, 12.3_
 
-  - [ ] 2.3 实现单例检查逻辑
+  - [x] 2.3 实现单例检查逻辑
     - 创建 SingleInstanceManager 实例
     - 调用 `is_running()` 检查是否已有实例
     - 如果已有实例，发送激活消息并返回 False

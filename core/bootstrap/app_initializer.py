@@ -108,5 +108,14 @@ class AppInitializer:
         Returns:
             bool: True=可以继续启动, False=已有实例运行
         """
-        # 占位符：将在任务 2.3 中实现
-        pass
+        # 调用 is_running() 检查是否已有实例
+        if single_instance.is_running():
+            # 如果已有实例，发送激活消息（is_running内部已经发送）
+            if self.logger:
+                self.logger.info("程序已经在运行，激活现有实例")
+            return False
+
+        # 没有其他实例运行，可以继续启动
+        if self.logger:
+            self.logger.info("单例检查通过，继续启动")
+        return True
