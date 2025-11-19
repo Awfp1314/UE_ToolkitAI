@@ -19,7 +19,7 @@
     - 调用 `setup_console_encoding()` 设置控制台编码（Windows）
     - _需求: 2.1_
 
-  - [ ] 2.2 实现 QApplication 创建和配置
+  - [x] 2.2 实现 QApplication 创建和配置
 
     - 创建 QApplication 实例
     - 设置应用程序名称为 "ue_toolkit"
