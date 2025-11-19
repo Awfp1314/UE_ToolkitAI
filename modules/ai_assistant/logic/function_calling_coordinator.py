@@ -4,15 +4,16 @@
 Function Calling 协调器
 实现真正的两段式 Function Calling：LLM → 工具执行 → LLM 最终回复
 支持多轮工具调用和循环限制
+✨ 使用 ThreadManager 进行线程管理
 """
 
 import json
 import traceback
 import time
 from typing import Dict, List, Callable, Optional, Any
-from PyQt6.QtCore import QThread, pyqtSignal
+from PyQt6.QtCore import QObject, pyqtSignal
 from core.utils.error_handler import ErrorHandler
-from core.utils.thread_cleanup import ThreadCleanupMixin
+from core.utils.thread_utils import CancellationToken
 from core.logger import get_logger
 
 
@@ -37,7 +38,7 @@ def format_tool_result(result: Dict) -> str:
         return f"工具执行失败。错误: {error_msg}"
 
 
-class FunctionCallingCoordinator(QThread, ThreadCleanupMixin):
+class FunctionCallingCoordinator(QObject):
     """
     Function Calling 协调器
 
@@ -46,9 +47,9 @@ class FunctionCallingCoordinator(QThread, ThreadCleanupMixin):
     2. 检测 tool_calls 并执行工具
     3. 将工具结果返回 LLM 生成最终回复
     4. 提供 UI 回调支持
-    5. 使用 ThreadCleanupMixin 确保线程资源正确释放（Requirement 4.1, 4.2, 4.3）
+    ✨ 使用 ThreadManager 进行线程管理
     """
-    
+
     # 信号定义
     tool_start = pyqtSignal(str)  # 工具开始执行：tool_name
     tool_complete = pyqtSignal(str, dict)  # 工具完成：tool_name, result
@@ -56,7 +57,7 @@ class FunctionCallingCoordinator(QThread, ThreadCleanupMixin):
     request_finished = pyqtSignal()  # 请求完成
     token_usage = pyqtSignal(dict)  # Token 使用量统计
     error_occurred = pyqtSignal(str)  # 错误发生：error_message
-    
+
     def __init__(
         self,
         messages: List[Dict],
@@ -66,7 +67,7 @@ class FunctionCallingCoordinator(QThread, ThreadCleanupMixin):
     ):
         """
         初始化协调器
-        
+
         Args:
             messages: 初始消息列表
             tools_registry: 工具注册表实例
@@ -78,27 +79,19 @@ class FunctionCallingCoordinator(QThread, ThreadCleanupMixin):
         self.tools_registry = tools_registry
         self.llm_client = llm_client
         self.max_iterations = max_iterations
-        self._should_stop = False
+        self._task_id: Optional[str] = None
         self.logger = get_logger(__name__)
-        
+
         # API 调用计数器（用于测试和监控）
         self.api_call_count = 0
     
-    def stop(self):
-        """停止执行（向后兼容方法）"""
-        self.request_stop()
-
-    def request_stop(self) -> None:
-        """请求线程停止（实现 ThreadCleanupMixin 抽象方法）
-
-        Requirement 4.1: 实现 request_stop() 方法
-        """
-        self._should_stop = True
-    
-    def run(self):
+    def _execute_coordination(self, cancel_token: CancellationToken):
         """
         执行 Function Calling 流程
-        
+
+        Args:
+            cancel_token: 取消令牌
+
         流程：
         1. 调用 LLM（带 tools 参数）
         2. 检查响应是否包含 tool_calls
@@ -109,32 +102,32 @@ class FunctionCallingCoordinator(QThread, ThreadCleanupMixin):
         import traceback
         call_stack = ''.join(traceback.format_stack())
         print(f"\n{'='*80}")
-        print(f"[COORDINATOR] !!! FunctionCallingCoordinator.run() 被调用！")
+        print(f"[COORDINATOR] !!! FunctionCallingCoordinator._execute_coordination() 被调用！")
         print(f"[COORDINATOR] 消息数量: {len(self.messages)}")
         tools_count = len(self.tools_registry.openai_tool_schemas()) if self.tools_registry else 0
         print(f"[COORDINATOR] 工具数量: {tools_count}")
         print(f"[COORDINATOR] 调用堆栈:\n{call_stack}")
         print(f"{'='*80}\n")
-        
+
         try:
             iteration = 0
-            
-            while iteration < self.max_iterations and not self._should_stop:
+
+            while iteration < self.max_iterations and not cancel_token.is_cancelled():
                 
                 # 获取工具定义
                 tools = self.tools_registry.openai_tool_schemas() if self.tools_registry else None
                 
                 # 调用 LLM（非流式，用于检测 tool_calls）
                 response_data = self._call_llm_non_streaming(self.messages, tools)
-                
-                if self._should_stop:
+
+                if cancel_token.is_cancelled():
                     break
-                
+
                 # 检查响应类型
                 if response_data['type'] == 'tool_calls':
                     # LLM 决定调用工具
                     tool_calls = response_data['tool_calls']
-                    
+
                     # 构建 assistant 消息（包含 tool_calls）
                     assistant_message = {
                         "role": "assistant",
@@ -142,10 +135,10 @@ class FunctionCallingCoordinator(QThread, ThreadCleanupMixin):
                         "tool_calls": tool_calls
                     }
                     self.messages.append(assistant_message)
-                    
+
                     # 执行每个工具
                     for tool_call in tool_calls:
-                        if self._should_stop:
+                        if cancel_token.is_cancelled():
                             break
                         
                         tool_name = tool_call['function']['name']
@@ -439,4 +432,29 @@ class FunctionCallingCoordinator(QThread, ThreadCleanupMixin):
                 'result': None,
                 'error': f"工具执行异常: {str(e)}"
             }
+
+    def start(self):
+        """启动协调器（使用 ThreadManager）"""
+        from core.utils.thread_utils import get_thread_manager
+        thread_manager = get_thread_manager()
+
+        try:
+            _, _, task_id = thread_manager.run_in_thread(
+                module_name="ai_assistant",
+                task_name="function_calling_coordination",
+                func=self._execute_coordination
+            )
+            self._task_id = task_id
+            self.logger.info(f"[COORDINATOR] 任务已提交，task_id: {task_id}")
+        except Exception as e:
+            self.logger.error(f"[COORDINATOR] 提交任务失败: {e}")
+            self.error_occurred.emit(str(e))
+
+    def stop(self):
+        """停止协调器"""
+        if self._task_id:
+            from core.utils.thread_utils import get_thread_manager
+            thread_manager = get_thread_manager()
+            thread_manager.cancel_task(self._task_id)
+            self.logger.info(f"[COORDINATOR] 任务已取消，task_id: {self._task_id}")
 
