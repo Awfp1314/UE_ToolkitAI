@@ -12,6 +12,7 @@ AppBootstrap - 启动流程协调器
 from typing import Optional
 
 from PyQt6.QtWidgets import QApplication
+from PyQt6 import sip
 
 from core.logger import get_logger
 from core.single_instance import SingleInstanceManager
@@ -169,10 +170,12 @@ class AppBootstrap:
             # 关闭 Splash Screen（如果存在）
             if self.splash:
                 try:
-                    self.splash.close()
-                    self.logger.info("Splash Screen 已关闭")
+                    # 检查 Splash 是否仍然有效
+                    if not sip.isdeleted(self.splash):
+                        self.splash.close()
+                        self.logger.info("Splash Screen 已关闭")
                 except Exception as e:
-                    self.logger.warning(f"关闭 Splash Screen 失败: {e}")
+                    self.logger.debug(f"关闭 Splash Screen 失败（可能已被清理）: {e}")
                 finally:
                     self.splash = None
 
