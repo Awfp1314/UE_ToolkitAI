@@ -69,7 +69,7 @@
     - 返回是否成功
     - _需求: 3.2_
 
-  - [ ] 4.2 实现异步模块加载
+  - [x] 4.2 实现异步模块加载
 
     - 定义内部回调函数处理 on_complete、on_error、on_progress
     - 调用 `app_manager.start_async()` 异步加载模块
