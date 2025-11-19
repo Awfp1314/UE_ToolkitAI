@@ -4,12 +4,14 @@
 异步记忆压缩器
 
 在后台线程执行记忆压缩，避免阻塞主线程
+✨ 使用 ThreadManager 进行线程管理
 
 ⚡ Requirement 9.1, 9.2, 9.3: 添加超时机制
 """
 
 from typing import List, Dict, Optional
-from PyQt6.QtCore import QThread, pyqtSignal, QTimer
+from PyQt6.QtCore import QObject, pyqtSignal, QTimer
+from core.utils.thread_utils import CancellationToken
 import logging
 
 
@@ -18,15 +20,16 @@ def _get_logger():
     return logging.getLogger("ue_toolkit.modules.ai_assistant.logic.async_memory_compressor")
 
 
-class AsyncMemoryCompressor(QThread):
+class AsyncMemoryCompressor(QObject):
     """
-    异步记忆压缩工作线程
+    异步记忆压缩器
 
     职责：
     1. 在后台线程执行记忆压缩
     2. 避免阻塞主线程
     3. 通过信号返回压缩结果
     4. ⚡ 支持超时机制（默认30秒）
+    ✨ 使用 ThreadManager 进行线程管理
     """
 
     # 信号定义
@@ -49,10 +52,15 @@ class AsyncMemoryCompressor(QThread):
         self.timeout_seconds = timeout_seconds
         self._is_timeout = False
         self._is_completed = False
+        self._task_id: Optional[str] = None
+        self._timeout_timer: Optional[QTimer] = None
     
-    def run(self):
+    def _execute_compression(self, cancel_token: CancellationToken):
         """
         在后台线程执行压缩
+
+        Args:
+            cancel_token: 取消令牌
 
         ⚡ Requirement 9.1, 9.2: 添加超时机制
         此方法在独立线程中运行，不会阻塞主线程
@@ -68,15 +76,24 @@ class AsyncMemoryCompressor(QThread):
                 Qt.ConnectionType.QueuedConnection
             )
 
+            # 检查是否被取消
+            if cancel_token.is_cancelled():
+                self.logger.warning("[异步压缩] 压缩被取消（启动前）")
+                return
+
             # 执行压缩
             success = self.memory_manager.compress_old_context(self.conversation_history)
 
             # 标记完成
             self._is_completed = True
 
-            # 检查是否超时
+            # 检查是否超时或被取消
             if self._is_timeout:
                 self.logger.warning("⏱️ [异步压缩] 压缩已超时，忽略结果")
+                return
+
+            if cancel_token.is_cancelled():
+                self.logger.warning("[异步压缩] 压缩被取消（完成后）")
                 return
 
             if success:
@@ -90,9 +107,13 @@ class AsyncMemoryCompressor(QThread):
         except Exception as e:
             self._is_completed = True
 
-            # 检查是否超时
+            # 检查是否超时或被取消
             if self._is_timeout:
                 self.logger.warning("⏱️ [异步压缩] 压缩已超时，忽略错误")
+                return
+
+            if cancel_token.is_cancelled():
+                self.logger.warning("[异步压缩] 压缩被取消（错误时）")
                 return
 
             self.logger.error(f"❌ [异步压缩] 压缩失败: {e}", exc_info=True)
@@ -125,8 +146,26 @@ class AsyncMemoryCompressor(QThread):
             # ⚡ Requirement 9.4: 超时时发送失败信号
             self.compression_complete.emit(False)
 
-            # 尝试终止线程（注意：这可能不安全，但作为最后手段）
-            if self.isRunning():
-                self.logger.warning("⚠️ [异步压缩] 尝试终止超时线程...")
-                self.terminate()
-                self.wait(1000)  # 等待最多1秒
+            # 取消任务
+            if self._task_id:
+                from core.utils.thread_utils import get_thread_manager
+                thread_manager = get_thread_manager()
+                thread_manager.cancel_task(self._task_id)
+                self.logger.warning("⚠️ [异步压缩] 已取消超时任务")
+
+    def start(self):
+        """启动异步压缩（使用 ThreadManager）"""
+        from core.utils.thread_utils import get_thread_manager
+        thread_manager = get_thread_manager()
+
+        try:
+            _, _, task_id = thread_manager.run_in_thread(
+                module_name="ai_assistant",
+                task_name="memory_compression",
+                func=self._execute_compression
+            )
+            self._task_id = task_id
+            self.logger.info(f"[异步压缩] 任务已提交，task_id: {task_id}")
+        except Exception as e:
+            self.logger.error(f"[异步压缩] 提交任务失败: {e}")
+            self.compression_complete.emit(False)
