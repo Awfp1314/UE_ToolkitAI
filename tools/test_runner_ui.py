@@ -10,8 +10,8 @@ from enum import Enum
 
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
-    QTreeWidget, QTreeWidgetItem, QTextEdit, QPushButton, QLabel,
-    QSplitter, QProgressBar, QGroupBox, QMessageBox
+    QTreeWidget, QTreeWidgetItem, QTreeWidgetItemIterator, QTextEdit,
+    QPushButton, QLabel, QSplitter, QProgressBar, QGroupBox, QMessageBox
 )
 from PyQt6.QtCore import Qt, QThread, pyqtSignal, QTimer
 from PyQt6.QtGui import QColor, QFont, QIcon
