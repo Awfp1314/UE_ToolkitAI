@@ -11,6 +11,10 @@ jobs:
     name: Validate Thread Migration
     runs-on: windows-latest
 
+    env:
+      PYTHONIOENCODING: utf-8
+      PYTHONUTF8: 1
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
