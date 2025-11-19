@@ -1,6 +1,7 @@
 """
 本地 NLU 模块
 基于当前AI身份动态生成寒暄模板，零成本处理简单对话
+✨ 使用 ThreadManager 进行线程管理
 """
 
 import json
@@ -11,7 +12,8 @@ from pathlib import Path
 from typing import Optional, Dict, List
 from datetime import datetime
 from .nlu_templates import NEUTRAL_TEMPLATES, TEMPLATE_GENERATION_PROMPT
-from PyQt6.QtCore import QThread, pyqtSignal
+from PyQt6.QtCore import QObject, pyqtSignal
+from core.utils.thread_utils import CancellationToken
 
 
 class IntentClassifier:
@@ -383,22 +385,37 @@ class TemplateGenerator:
             return None
 
 
-class AsyncTemplateGeneratorThread(QThread):
-    """异步模板生成器（QThread）"""
-    
+class AsyncTemplateGeneratorThread(QObject):
+    """异步模板生成器 ✨ 使用 ThreadManager 进行线程管理"""
+
     # 信号
     generation_finished = pyqtSignal(dict)  # 生成成功：templates_dict
     generation_failed = pyqtSignal(str)     # 生成失败：error_message
-    
+
     def __init__(self, identity: str):
         super().__init__()
         self.identity = identity
-    
-    def run(self):
-        """在后台线程中生成模板"""
+        self._task_id: Optional[str] = None
+
+    def _execute_generation(self, cancel_token):
+        """在后台线程中生成模板
+
+        Args:
+            cancel_token: 取消令牌
+        """
         try:
+            # 检查是否被取消
+            if cancel_token.is_cancelled():
+                print("[AsyncTemplateGenerator] 模板生成被取消（启动前）")
+                return
+
             templates = TemplateGenerator.generate_templates_sync(self.identity)
-            
+
+            # 检查是否被取消
+            if cancel_token.is_cancelled():
+                print("[AsyncTemplateGenerator] 模板生成被取消（完成后）")
+                return
+
             if templates:
                 self.generation_finished.emit(templates)
             else:
@@ -410,6 +427,23 @@ class AsyncTemplateGeneratorThread(QThread):
             import traceback
             traceback.print_exc()
             self.generation_failed.emit(error_msg)
+
+    def start(self):
+        """启动模板生成（使用 ThreadManager）"""
+        from core.utils.thread_utils import get_thread_manager
+        thread_manager = get_thread_manager()
+
+        try:
+            _, _, task_id = thread_manager.run_in_thread(
+                module_name="ai_assistant",
+                task_name="template_generation",
+                func=self._execute_generation
+            )
+            self._task_id = task_id
+            print(f"[AsyncTemplateGenerator] 任务已提交，task_id: {task_id}")
+        except Exception as e:
+            print(f"[AsyncTemplateGenerator] [ERROR] 提交任务失败: {e}")
+            self.generation_failed.emit(str(e))
 
 
 class LocalNLU:
