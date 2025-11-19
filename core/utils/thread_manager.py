@@ -155,6 +155,9 @@ class EnhancedThreadManager:
         if task_info.timeout_timer:
             task_info.timeout_timer.stop()
 
+        if task_info.grace_timer:
+            task_info.grace_timer.stop()
+
         duration_ms = int((time.time() - task_info.start_time) * 1000)
         if task_info.state == ThreadState.RUNNING:
             task_info.state = ThreadState.COMPLETED
@@ -211,6 +214,12 @@ class EnhancedThreadManager:
 
             grace_timer.timeout.connect(on_grace_expired)
             grace_timer.start(self.config.grace_period)
+
+            # Store grace_timer in TaskInfo to prevent garbage collection
+            with self._lock:
+                info = self._active_tasks.get(task_id)
+                if info:
+                    info.grace_timer = grace_timer
 
         timer.timeout.connect(on_timeout_triggered)
         timer.start(timeout_ms)

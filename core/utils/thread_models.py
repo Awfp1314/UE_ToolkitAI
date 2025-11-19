@@ -32,6 +32,7 @@ class TaskInfo:
     start_time: float
     timeout_ms: Optional[int]
     timeout_timer: Optional[QTimer] = None
+    grace_timer: Optional[QTimer] = None  # Grace period timer to prevent GC
     timeout_recorded: bool = False
 
 

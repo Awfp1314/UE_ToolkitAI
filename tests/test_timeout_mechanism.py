@@ -134,7 +134,7 @@ class TestTimeoutMechanism:
         qtbot.wait(200)
 
     def test_task_stuck_after_grace_period(self, thread_manager, qtbot):
-        """Test that task stuck after grace period triggers timeout state."""
+        """Test that task stuck after grace period triggers timeout callback."""
         result_holder = {"timeout_called": False}
 
         def stuck_task(cancel_token):
@@ -167,18 +167,16 @@ class TestTimeoutMechanism:
         # Wait for grace period to expire (500ms)
         qtbot.wait(600)
 
-        # Note: The on_timeout callback may not be called due to grace_timer being garbage collected
-        # This is a known issue in the ThreadManager implementation
-        # Instead, we verify that the task state is set to TIMEOUT
+        # Timeout callback should have been called (grace_timer is now stored in TaskInfo)
+        assert result_holder["timeout_called"], "Timeout callback should be called after grace period"
 
-        # Task should be marked as TIMEOUT or still RUNNING (if grace timer was GC'd)
+        # Task should be marked as TIMEOUT
         with thread_manager._lock:
             task_info = thread_manager._active_tasks.get(task_id)
             if task_info:
-                # The state should be TIMEOUT if grace timer worked
-                # But we accept RUNNING if the timer was garbage collected
-                assert task_info.state in [ThreadState.TIMEOUT, ThreadState.RUNNING], \
-                    f"Task should be in TIMEOUT or RUNNING state, got {task_info.state}"
+                assert task_info.state == ThreadState.TIMEOUT, "Task should be in TIMEOUT state"
+                # Verify grace_timer is stored
+                assert task_info.grace_timer is not None, "Grace timer should be stored in TaskInfo"
 
         # Cancel the stuck task to clean up
         thread_manager.cancel_task(task_id)
