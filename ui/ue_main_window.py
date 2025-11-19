@@ -513,8 +513,8 @@ class UEMainWindow(QMainWindow):
             theme_name = 'dark'
 
         # 应用新主题（使用统一服务层）
-        app = QApplication.instance()
-        style_service.apply_theme(app, new_theme)
+        # 注意：apply_theme 的参数顺序是 (theme_name, app)，app 参数可选
+        style_service.apply_theme(new_theme)
 
         # 保存主题设置到配置文件
         self._save_theme_setting(new_theme)
