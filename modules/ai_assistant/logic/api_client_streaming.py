@@ -1,11 +1,13 @@
 """
 增强型流式 API 客户端（7.0-P8）
 支持智能缓冲、中文/emoji处理、工具调用检测
+✨ 使用 ThreadManager 进行线程管理
 """
 
 import time
 from typing import Dict, Any, Generator, Optional
-from PyQt6.QtCore import QThread, pyqtSignal
+from PyQt6.QtCore import QObject, pyqtSignal
+from core.utils.thread_utils import CancellationToken
 
 
 class ChunkBuffer:
@@ -87,35 +89,36 @@ class ChunkBuffer:
             return False
 
 
-class StreamingAPIClient(QThread):
+class StreamingAPIClient(QObject):
     """
     增强型流式API客户端
-    
+
     功能：
     - 智能缓冲输出
     - 检测和处理工具调用
     - 更好的错误处理和重试
+    ✨ 使用 ThreadManager 进行线程管理
     """
-    
+
     # 信号定义
     chunk_received = pyqtSignal(str)         # 文本chunk
     tool_call_detected = pyqtSignal(dict)    # 工具调用检测到
     request_finished = pyqtSignal()          # 请求完成
     token_usage = pyqtSignal(dict)           # Token使用量
     error_occurred = pyqtSignal(str)         # 错误
-    
+
     def __init__(
-        self, 
-        messages, 
-        model=None, 
-        temperature=None, 
-        tools=None, 
+        self,
+        messages,
+        model=None,
+        temperature=None,
+        tools=None,
         config=None,
         buffer_ms: int = 30
     ):
         """
         初始化流式API客户端
-        
+
         Args:
             messages: 消息历史
             model: 模型名称
@@ -130,18 +133,21 @@ class StreamingAPIClient(QThread):
         self.temperature = temperature if temperature is not None else 0.8
         self.tools = tools
         self.config = config
-        self.is_running = True
-        
+        self._task_id: Optional[str] = None
+
         # 创建智能缓冲器
         self.chunk_buffer = ChunkBuffer(flush_interval_ms=buffer_ms)
-        
+
         # 工具调用累积器
         self.current_tool_call = None
     
-    def run(self):
+    def _execute_request(self, cancel_token: CancellationToken):
         """
         执行流式请求
-        
+
+        Args:
+            cancel_token: 取消令牌
+
         流程：
         1. 创建策略客户端
         2. 启动流式生成
@@ -150,20 +156,25 @@ class StreamingAPIClient(QThread):
         5. 完成后统计token
         """
         try:
+            # 检查是否被取消
+            if cancel_token.is_cancelled():
+                print("[7.0-P8] 请求被取消（启动前）")
+                return
+
             # 导入策略客户端工厂
             from modules.ai_assistant.clients import create_llm_client
             from pathlib import Path
-            
+
             # 加载配置（如果未提供）
             if self.config is None:
                 self.config = self._load_config()
-            
+
             # 创建策略客户端
             strategy_client = create_llm_client(self.config)
             provider = self.config.get('llm_provider', 'api')
-            
+
             print(f"[7.0-P8] 启动流式请求，供应商: {provider}, 模型: {strategy_client.get_model_name()}")
-            
+
             # 启动流式生成
             response_generator = strategy_client.generate_response(
                 context_messages=self.messages,
@@ -171,29 +182,31 @@ class StreamingAPIClient(QThread):
                 temperature=self.temperature,
                 tools=self.tools
             )
-            
+
             # 处理生成器输出
             response_text = ""
             for chunk in response_generator:
-                if not self.is_running:
+                # 检查是否被取消
+                if cancel_token.is_cancelled():
+                    print("[7.0-P8] 请求被取消（处理中）")
                     break
-                
+
                 if chunk:
                     # 处理不同类型的chunk
                     if isinstance(chunk, dict):
                         chunk_type = chunk.get('type', 'content')
-                        
+
                         if chunk_type == 'content':
                             # 文本内容
                             text = chunk.get('text', '')
                             if text:
                                 response_text += text
-                                
+
                                 # 添加到缓冲器
                                 buffered = self.chunk_buffer.add(text)
                                 if buffered:
                                     self.chunk_received.emit(buffered)
-                        
+
                         elif chunk_type == 'tool_call':
                             # 工具调用（delta累积）
                             self._accumulate_tool_call(chunk.get('data', {}))
@@ -203,26 +216,26 @@ class StreamingAPIClient(QThread):
                         buffered = self.chunk_buffer.add(chunk)
                         if buffered:
                             self.chunk_received.emit(buffered)
-            
+
             # 刷新剩余缓冲
             remaining = self.chunk_buffer.flush()
             if remaining:
                 self.chunk_received.emit(remaining)
-            
+
             # 如果有未完成的工具调用，发送
             if self.current_tool_call:
                 self.tool_call_detected.emit(self.current_tool_call)
                 self.current_tool_call = None
-            
+
             # 计算token使用量
-            if self.is_running:
+            if not cancel_token.is_cancelled():
                 token_stats = self._estimate_tokens(response_text)
                 self.token_usage.emit(token_stats)
-            
+
             # 请求完成
-            if self.is_running:
+            if not cancel_token.is_cancelled():
                 self.request_finished.emit()
-            
+
         except Exception as e:
             error_msg = f"流式请求失败: {str(e)}"
             print(f"[ERROR] [7.0-P8] {error_msg}")
@@ -299,7 +312,28 @@ class StreamingAPIClient(QThread):
             print(f"[ERROR] [7.0-P8] 加载配置失败: {e}")
             raise
     
+    def start(self):
+        """启动流式请求（使用 ThreadManager）"""
+        from core.utils.thread_utils import get_thread_manager
+        thread_manager = get_thread_manager()
+
+        try:
+            _, _, task_id = thread_manager.run_in_thread(
+                module_name="ai_assistant",
+                task_name="streaming_api_request",
+                func=self._execute_request
+            )
+            self._task_id = task_id
+            print(f"[7.0-P8] 任务已提交，task_id: {task_id}")
+        except Exception as e:
+            print(f"[ERROR] [7.0-P8] 提交流式请求任务失败: {e}")
+            self.error_occurred.emit(str(e))
+
     def stop(self):
         """停止请求"""
-        self.is_running = False
+        if self._task_id:
+            from core.utils.thread_utils import get_thread_manager
+            thread_manager = get_thread_manager()
+            thread_manager.cancel_task(self._task_id)
+            print(f"[7.0-P8] 任务已取消，task_id: {self._task_id}")
 
