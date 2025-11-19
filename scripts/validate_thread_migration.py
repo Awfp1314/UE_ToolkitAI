@@ -38,7 +38,8 @@ def validate_module(module_name: str, module_path: Path) -> tuple[bool, list]:
     if result.violations:
         print(f"❌ Found {result.violation_count} violations:")
         for v in result.violations:
-            print(f"  {v.file}:{v.line} - {v.pattern}")
+            print(f"  {v.file_path}:{v.line_number} - {v.violation_type}")
+            print(f"    Code: {v.code_snippet}")
         return False, result.violations
     else:
         print(f"✅ No violations found")
