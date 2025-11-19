@@ -43,9 +43,57 @@ class TestResult:
 
 class TestCategory:
     """测试分类"""
-    THREAD_MANAGEMENT = "Thread Management 测试"
-    INTEGRATION = "集成测试"
-    OTHER = "其他功能测试"
+    THREAD_MANAGEMENT = "🧵 线程管理测试"
+    INTEGRATION = "🔗 集成测试"
+    OTHER = "⚙️ 功能测试"
+
+
+# 测试名称映射 - 把文件名翻译成友好的中文描述
+TEST_NAME_MAP = {
+    # Thread Management 测试
+    'test_thread_manager': '线程管理器 - 核心功能测试',
+    'test_worker': '工作线程 - Worker 测试',
+    'test_thread_monitor': '线程监控器 - 监控功能测试',
+    'test_thread_configuration': '线程配置 - 配置管理测试',
+    'test_thread_cleanup': '线程清理 - 资源清理测试',
+    'test_thread_pool_backpressure': '线程池背压 - 流量控制测试',
+    'test_timeout_mechanism': '超时机制 - 超时处理测试',
+    'test_cancellation_token_injection': '取消令牌 - 任务取消测试',
+    'test_thread_service': '线程服务 - ThreadService 测试',
+    'test_cleanup_contract': '清理契约 - 清理接口测试',
+    'test_shutdown_orchestrator': '关闭编排器 - 优雅关闭测试',
+    'test_shutdown_sequence': '关闭序列 - 关闭顺序测试',
+    'test_app_manager_shutdown': '应用管理器 - 关闭流程测试',
+
+    # 集成测试
+    'test_config_service': '配置服务 - ConfigService 集成测试',
+    'test_service_singleton': '服务单例 - 单例模式测试',
+    'test_thread_service': '线程服务 - ThreadService 集成测试',
+
+    # 其他功能测试
+    'test_migration_validator': '迁移验证器 - QThread 违规检测',
+    'test_feature_flags': '功能开关 - Feature Flags 测试',
+    'test_module_interface': '模块接口 - 模块接口测试',
+    'test_asset_manager_lazy_loading': '资产管理器 - 懒加载测试',
+    'test_lazy_asset_loader': '懒加载器 - 资产懒加载测试',
+    'test_lru_cache': 'LRU 缓存 - 缓存功能测试',
+    'test_memory_retrieval_accuracy': '记忆检索 - AI 记忆准确性测试',
+    'test_function_calling_coordinator': '函数调用协调器 - 协调器测试',
+    'test_streaming_buffer_manager': '流式缓冲 - 缓冲管理器测试',
+    'test_tool_status_display': '工具状态显示 - UI 状态测试',
+    'test_error_handler': '错误处理器 - 错误处理测试',
+    'test_file_operations': '文件操作 - 文件处理测试',
+    'test_log_analyzer': '日志分析器 - 日志分析测试',
+    'test_safe_print': '安全打印 - 打印功能测试',
+    'test_pytest_setup': 'Pytest 设置 - 测试环境测试',
+    'test_performance_regression': '性能回归 - 性能测试',
+    'test_performance_validation': '性能验证 - 性能验证测试',
+}
+
+
+def get_friendly_test_name(test_file_name: str) -> str:
+    """获取友好的测试名称"""
+    return TEST_NAME_MAP.get(test_file_name, test_file_name)
 
 
 class TestCollector:
@@ -185,7 +233,29 @@ class TestRunnerUI(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("🧪 测试运行器 - UE Toolkit AI")
-        self.setGeometry(100, 100, 1200, 800)
+        self.setGeometry(100, 100, 1400, 900)
+
+        # 设置窗口样式
+        self.setStyleSheet("""
+            QMainWindow {
+                background-color: #f5f5f5;
+            }
+            QGroupBox {
+                font-size: 14px;
+                font-weight: bold;
+                border: 2px solid #e0e0e0;
+                border-radius: 8px;
+                margin-top: 10px;
+                padding-top: 10px;
+                background-color: white;
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                left: 15px;
+                padding: 0 5px;
+                color: #2196F3;
+            }
+        """)
 
         # 收集测试
         self.tests_dir = PROJECT_ROOT / 'tests'
@@ -290,9 +360,41 @@ class TestRunnerUI(QMainWindow):
 
         self.test_tree = QTreeWidget()
         self.test_tree.setHeaderLabels(["测试名称", "状态", "耗时"])
-        self.test_tree.setColumnWidth(0, 400)
-        self.test_tree.setColumnWidth(1, 100)
+        self.test_tree.setColumnWidth(0, 500)
+        self.test_tree.setColumnWidth(1, 120)
+        self.test_tree.setColumnWidth(2, 80)
         self.test_tree.itemClicked.connect(self.on_test_selected)
+
+        # 设置树的样式
+        self.test_tree.setStyleSheet("""
+            QTreeWidget {
+                background-color: white;
+                border: 1px solid #e0e0e0;
+                border-radius: 4px;
+                font-family: 'Microsoft YaHei UI', Arial;
+                font-size: 12px;
+                padding: 5px;
+            }
+            QTreeWidget::item {
+                padding: 8px;
+                border-bottom: 1px solid #f0f0f0;
+            }
+            QTreeWidget::item:hover {
+                background-color: #e3f2fd;
+            }
+            QTreeWidget::item:selected {
+                background-color: #bbdefb;
+                color: black;
+            }
+            QHeaderView::section {
+                background-color: #f5f5f5;
+                padding: 8px;
+                border: none;
+                border-bottom: 2px solid #2196F3;
+                font-weight: bold;
+                font-size: 13px;
+            }
+        """)
 
         # 添加测试项
         self.populate_test_tree()
@@ -312,17 +414,80 @@ class TestRunnerUI(QMainWindow):
         self.result_text.setReadOnly(True)
         self.result_text.setStyleSheet("""
             QTextEdit {
-                background-color: #1e1e1e;
-                color: #d4d4d4;
-                font-family: 'Consolas', 'Monaco', monospace;
-                font-size: 12px;
+                background-color: white;
+                color: #333;
+                font-family: 'Microsoft YaHei UI', Arial;
+                font-size: 13px;
                 padding: 10px;
+                border: 1px solid #e0e0e0;
+                border-radius: 4px;
             }
         """)
+
+        # 显示欢迎信息
+        self.show_welcome_message()
+
         layout.addWidget(self.result_text)
 
         group.setLayout(layout)
         return group
+
+    def show_welcome_message(self):
+        """显示欢迎信息"""
+        total_tests = sum(len(files) for files in self.all_tests.values())
+
+        html = f"""
+            <div style="padding: 30px; font-family: 'Microsoft YaHei UI', Arial; text-align: center;">
+                <h1 style="color: #2196F3; margin-bottom: 20px;">🧪 欢迎使用测试运行器</h1>
+
+                <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 30px; border-radius: 12px; margin: 20px 0;">
+                    <h2 style="margin: 0 0 15px 0;">📊 测试统计</h2>
+                    <p style="font-size: 18px; margin: 10px 0;">
+                        共有 <strong style="font-size: 24px;">{total_tests}</strong> 个测试
+                    </p>
+                    <div style="display: flex; justify-content: space-around; margin-top: 20px; text-align: center;">
+                        <div>
+                            <p style="font-size: 16px; margin: 5px 0;">🧵 线程管理</p>
+                            <p style="font-size: 20px; font-weight: bold; margin: 5px 0;">{len(self.all_tests.get(TestCategory.THREAD_MANAGEMENT, []))}</p>
+                        </div>
+                        <div>
+                            <p style="font-size: 16px; margin: 5px 0;">🔗 集成测试</p>
+                            <p style="font-size: 20px; font-weight: bold; margin: 5px 0;">{len(self.all_tests.get(TestCategory.INTEGRATION, []))}</p>
+                        </div>
+                        <div>
+                            <p style="font-size: 16px; margin: 5px 0;">⚙️ 功能测试</p>
+                            <p style="font-size: 20px; font-weight: bold; margin: 5px 0;">{len(self.all_tests.get(TestCategory.OTHER, []))}</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div style="background-color: #e3f2fd; padding: 25px; border-radius: 8px; margin: 20px 0; text-align: left;">
+                    <h3 style="color: #1976d2; margin-top: 0;">🚀 快速开始</h3>
+                    <ol style="color: #666; line-height: 2; font-size: 14px;">
+                        <li>点击左侧的测试项，查看测试详情</li>
+                        <li>点击 <strong style="color: #4CAF50;">"▶ 运行所有测试"</strong> 运行全部测试</li>
+                        <li>或者选择特定的测试，点击 <strong style="color: #2196F3;">"▶ 运行选中测试"</strong></li>
+                        <li>查看右侧的测试结果和错误信息</li>
+                    </ol>
+                </div>
+
+                <div style="background-color: #fff3e0; padding: 20px; border-radius: 8px; margin: 20px 0; text-align: left;">
+                    <h3 style="color: #F57C00; margin-top: 0;">💡 使用技巧</h3>
+                    <ul style="color: #666; line-height: 2; font-size: 14px; list-style-type: none; padding-left: 0;">
+                        <li>✨ <strong>分类运行：</strong>选择整个分类（如"线程管理测试"），一次运行该分类下的所有测试</li>
+                        <li>✨ <strong>查看详情：</strong>点击任意测试项，右侧会显示详细说明</li>
+                        <li>✨ <strong>错误提示：</strong>测试失败时，会显示详细的错误信息和修复建议</li>
+                        <li>✨ <strong>实时进度：</strong>底部进度条显示测试运行进度</li>
+                    </ul>
+                </div>
+
+                <p style="color: #999; font-size: 12px; margin-top: 30px;">
+                    💫 让测试变得简单有趣！
+                </p>
+            </div>
+        """
+
+        self.result_text.setHtml(html)
 
     def create_status_bar(self) -> QHBoxLayout:
         """创建状态栏"""
@@ -351,17 +516,22 @@ class TestRunnerUI(QMainWindow):
 
             # 创建分类节点
             category_item = QTreeWidgetItem(self.test_tree)
-            category_item.setText(0, f"{category} ({len(test_files)})")
-            category_item.setFont(0, QFont("Arial", 11, QFont.Weight.Bold))
+            category_item.setText(0, f"{category} ({len(test_files)} 个测试)")
+            category_item.setFont(0, QFont("Microsoft YaHei UI", 11, QFont.Weight.Bold))
+            category_item.setForeground(0, QColor("#2196F3"))
 
             # 添加测试文件
             for test_file in sorted(test_files):
                 test_item = QTreeWidgetItem(category_item)
                 test_name = test_file.stem
-                test_item.setText(0, test_name)
+
+                # 使用友好的名称
+                friendly_name = get_friendly_test_name(test_name)
+                test_item.setText(0, friendly_name)
                 test_item.setText(1, "⚪ 未运行")
                 test_item.setText(2, "-")
                 test_item.setData(0, Qt.ItemDataRole.UserRole, test_file)
+                test_item.setFont(0, QFont("Microsoft YaHei UI", 10))
 
         self.test_tree.expandAll()
 
@@ -372,60 +542,99 @@ class TestRunnerUI(QMainWindow):
             return
 
         test_name = test_file.stem
+        friendly_name = get_friendly_test_name(test_name)
 
         # 显示测试信息
         if test_name in self.test_results:
             result = self.test_results[test_name]
-            self.display_test_result(result)
+            self.display_test_result(result, friendly_name)
         else:
             self.result_text.setHtml(f"""
-                <h2 style="color: #4CAF50;">📝 {test_name}</h2>
-                <p style="color: #888;">测试尚未运行</p>
-                <p style="color: #888;">点击"运行选中测试"按钮来运行此测试</p>
+                <div style="padding: 20px;">
+                    <h2 style="color: #2196F3; font-family: 'Microsoft YaHei UI';">📝 {friendly_name}</h2>
+                    <hr style="border: none; border-top: 2px solid #e0e0e0; margin: 15px 0;">
+                    <p style="color: #666; font-size: 14px; line-height: 1.6;">
+                        <strong>状态：</strong>⚪ 尚未运行
+                    </p>
+                    <p style="color: #666; font-size: 14px; line-height: 1.6;">
+                        <strong>说明：</strong>点击上方的 <span style="color: #2196F3; font-weight: bold;">"▶ 运行选中测试"</span> 按钮来运行此测试
+                    </p>
+                    <div style="background-color: #e3f2fd; padding: 15px; border-radius: 8px; margin-top: 20px;">
+                        <p style="color: #1976d2; font-size: 13px; margin: 0;">
+                            💡 <strong>提示：</strong>你也可以选择整个分类（如"线程管理测试"），然后点击运行按钮，一次运行该分类下的所有测试。
+                        </p>
+                    </div>
+                </div>
             """)
 
-    def display_test_result(self, result: TestResult):
+    def display_test_result(self, result: TestResult, friendly_name: str = None):
         """显示测试结果"""
         if result.status == TestStatus.PASSED:
             color = "#4CAF50"
+            bg_color = "#e8f5e9"
             icon = "✅"
-            message = "测试通过！"
+            status_text = "测试通过"
         elif result.status == TestStatus.FAILED:
             color = "#f44336"
+            bg_color = "#ffebee"
             icon = "❌"
-            message = "测试失败！"
+            status_text = "测试失败"
         else:
             color = "#FFC107"
+            bg_color = "#fff3e0"
             icon = "⚠️"
-            message = "测试跳过"
+            status_text = "测试跳过"
+
+        display_name = friendly_name or get_friendly_test_name(result.name)
 
         html = f"""
-            <h2 style="color: {color};">{icon} {result.name}</h2>
-            <p><strong>状态:</strong> <span style="color: {color};">{result.status.value}</span></p>
-            <p><strong>耗时:</strong> {result.duration:.2f}s</p>
+            <div style="padding: 20px; font-family: 'Microsoft YaHei UI', Arial;">
+                <div style="background-color: {bg_color}; padding: 20px; border-radius: 8px; border-left: 5px solid {color};">
+                    <h2 style="color: {color}; margin: 0 0 10px 0;">{icon} {display_name}</h2>
+                    <p style="color: #666; margin: 5px 0; font-size: 14px;">
+                        <strong>文件名：</strong><code style="background-color: rgba(0,0,0,0.05); padding: 2px 6px; border-radius: 3px;">{result.name}.py</code>
+                    </p>
+                </div>
+
+                <div style="margin-top: 20px; padding: 15px; background-color: #f5f5f5; border-radius: 8px;">
+                    <p style="margin: 8px 0; font-size: 14px;">
+                        <strong>状态：</strong><span style="color: {color}; font-weight: bold;">{icon} {status_text}</span>
+                    </p>
+                    <p style="margin: 8px 0; font-size: 14px;">
+                        <strong>耗时：</strong><span style="color: #666;">{result.duration:.2f} 秒</span>
+                    </p>
+                </div>
         """
 
         if result.error_message:
             html += f"""
-                <hr>
-                <h3 style="color: #f44336;">错误信息:</h3>
-                <pre style="background-color: #2d2d2d; padding: 10px; border-radius: 4px; color: #ff6b6b;">
-{result.error_message}
-                </pre>
-            """
+                <div style="margin-top: 20px;">
+                    <h3 style="color: #f44336; margin-bottom: 10px;">❌ 错误信息</h3>
+                    <div style="background-color: #2d2d2d; padding: 15px; border-radius: 8px; overflow-x: auto;">
+                        <pre style="color: #ff6b6b; margin: 0; font-family: 'Consolas', 'Monaco', monospace; font-size: 12px; line-height: 1.5;">{result.error_message}</pre>
+                    </div>
+                </div>
 
-            # 添加建议
+                <div style="margin-top: 20px; background-color: #fff3e0; padding: 15px; border-radius: 8px; border-left: 4px solid #FFC107;">
+                    <h3 style="color: #F57C00; margin: 0 0 10px 0;">💡 修复建议</h3>
+                    <ul style="color: #666; margin: 0; padding-left: 20px; line-height: 1.8;">
+                        <li><strong>AttributeError / TypeError：</strong>代码接口可能发生了变化，需要更新测试脚本</li>
+                        <li><strong>AssertionError：</strong>检查代码逻辑是否正确，或者测试的预期值是否需要更新</li>
+                        <li><strong>ImportError：</strong>检查依赖是否安装，运行 <code>pip install -r requirements.txt</code></li>
+                        <li><strong>FileNotFoundError：</strong>测试依赖的文件不存在，可能需要删除或更新此测试</li>
+                    </ul>
+                </div>
+            """
+        else:
             html += """
-                <hr>
-                <h3 style="color: #FFC107;">💡 建议:</h3>
-                <ul style="color: #d4d4d4;">
-                    <li>如果错误是 <code>AttributeError</code> 或 <code>TypeError</code>，可能是代码接口发生了变化，需要更新测试</li>
-                    <li>如果错误是 <code>AssertionError</code>，检查代码逻辑是否正确</li>
-                    <li>如果错误是 <code>ImportError</code>，检查依赖是否安装</li>
-                    <li>查看完整错误信息，定位问题所在</li>
-                </ul>
+                <div style="margin-top: 20px; background-color: #e8f5e9; padding: 15px; border-radius: 8px; border-left: 4px solid #4CAF50;">
+                    <p style="color: #2e7d32; margin: 0; font-size: 14px;">
+                        🎉 <strong>太棒了！</strong>所有测试都通过了，代码运行正常！
+                    </p>
+                </div>
             """
 
+        html += "</div>"
         self.result_text.setHtml(html)
 
     def run_all_tests(self):
@@ -553,12 +762,24 @@ class TestRunnerUI(QMainWindow):
 
     def update_tree_item_status(self, test_name: str, status: str, duration: str):
         """更新树中测试项的状态"""
+        friendly_name = get_friendly_test_name(test_name)
         iterator = QTreeWidgetItemIterator(self.test_tree)
         while iterator.value():
             item = iterator.value()
-            if item.text(0) == test_name:
+            # 通过友好名称或原始名称匹配
+            if item.text(0) == friendly_name or item.text(0) == test_name:
                 item.setText(1, status)
                 item.setText(2, duration)
+
+                # 根据状态设置颜色
+                if "通过" in status:
+                    item.setForeground(1, QColor("#4CAF50"))
+                elif "失败" in status:
+                    item.setForeground(1, QColor("#f44336"))
+                elif "运行中" in status:
+                    item.setForeground(1, QColor("#2196F3"))
+                else:
+                    item.setForeground(1, QColor("#9E9E9E"))
                 break
             iterator += 1
 
