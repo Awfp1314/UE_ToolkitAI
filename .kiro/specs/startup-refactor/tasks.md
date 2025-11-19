@@ -60,7 +60,7 @@
     - 在回调中关闭 Splash 并显示主窗口
     - _需求: 4.6, 4.7, 4.8_
 
-- [ ] 4. 实现 ModuleLoader 组件
+- [x] 4. 实现 ModuleLoader 组件
 
   - [x] 4.1 实现 AppManager 设置
 
@@ -76,7 +76,7 @@
     - 在 on_progress 回调中调用外部 on_progress
     - _需求: 3.3, 3.4, 5.3_
 
-  - [ ] 4.3 实现模块依赖连接
+  - [x] 4.3 实现模块依赖连接
 
     - 获取 ai_assistant、asset_manager、config_tool、site_recommendations 模块
     - 将 asset_manager 逻辑层注入 ai_assistant
@@ -85,7 +85,7 @@
     - 如果依赖模块未加载，记录警告并继续
     - _需求: 3.5, 7.1, 7.2, 7.3, 7.4, 7.5_
 
-  - [ ] 4.4 实现 ModuleProviderAdapter 创建
+  - [x] 4.4 实现 ModuleProviderAdapter 创建
     - 在模块加载完成后创建 ModuleProviderAdapter
     - 通过 on_complete 回调返回
     - _需求: 3.6_
