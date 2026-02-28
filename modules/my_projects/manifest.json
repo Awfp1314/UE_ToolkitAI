@@ -1,0 +1,10 @@
+{
+  "name": "my_projects",
+  "display_name": "我的工程",
+  "version": "1.0.0",
+  "description": "UE工程管理模块",
+  "author": "HUTAO",
+  "icon": "",
+  "dependencies": [],
+  "entry_point": "my_projects:MyProjectsModule"
+}

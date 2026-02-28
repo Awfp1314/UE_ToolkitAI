@@ -1,0 +1,225 @@
+/* ========================================
+   资产管理器主界面样式
+   ======================================== */
+
+/* ===== 透明容器 ===== */
+#AssetFilterArea,
+#AssetScrollContent,
+#AssetGridWidget {
+    background-color: transparent;
+}
+
+/* ===== 搜索框 ===== */
+#AssetSearchInput {
+    background-color: ${search_input_bg};
+    border: none;
+    border-radius: 18px;
+    padding: 8px 16px;
+    color: ${text_primary};
+    font-size: 14px;
+}
+
+#AssetSearchInput:focus {
+    background-color: ${search_input_bg_focus};
+    border: none;
+}
+
+#AssetSearchInput::placeholder {
+    color: ${search_input_placeholder};
+}
+
+/* ===== 视图切换按钮 ===== */
+#ViewToggleIconButton {
+    background: transparent;
+    color: ${text_secondary};
+    border: none;
+    border-radius: 8px;
+    font-size: 28px;
+    font-weight: 300;
+    padding: 8px;
+    outline: none;
+}
+
+#ViewToggleIconButton:hover {
+    background: ${bg_hover};
+    color: ${text_primary};
+}
+
+#ViewToggleIconButton:pressed {
+    background: ${bg_active};
+    padding-top: 9px;
+    padding-bottom: 7px;
+}
+
+#ViewToggleIconButton:focus {
+    outline: none;
+}
+
+/* ===== 滚动区域 ===== */
+#AssetScrollArea {
+    border: none;
+    background-color: transparent;
+}
+
+#AssetScrollArea QScrollBar:vertical {
+    background: transparent;
+    width: 8px;
+    margin: 0px;
+}
+
+#AssetScrollArea QScrollBar::handle:vertical {
+    background: ${scrollbar_handle};
+    border-radius: 4px;
+    min-height: 20px;
+}
+
+#AssetScrollArea QScrollBar::handle:vertical:hover {
+    background: ${scrollbar_handle_hover};
+}
+
+#AssetScrollArea QScrollBar::add-line:vertical,
+#AssetScrollArea QScrollBar::sub-line:vertical {
+    height: 0px;
+}
+
+#AssetScrollArea QScrollBar::add-page:vertical,
+#AssetScrollArea QScrollBar::sub-page:vertical {
+    background: none;
+}
+
+/* ===== 分类筛选下拉框 ===== */
+#AssetCategoryFilter {
+    background-color: ${search_input_bg};
+    border: none;
+    border-radius: 18px;
+    padding: 8px 16px;
+    color: ${text_primary};
+    font-size: 14px;
+    text-align: center;
+}
+
+#AssetCategoryFilter:hover {
+    background-color: ${search_input_bg_focus};
+    border: none;
+}
+
+#AssetCategoryFilter:focus {
+    background-color: ${search_input_bg_focus};
+    border: none;
+    outline: none;
+}
+
+#AssetCategoryFilter::drop-down {
+    border: none;
+    width: 0px;
+}
+
+#AssetCategoryFilter::down-arrow {
+    image: none;
+    width: 0px;
+    height: 0px;
+}
+
+/* 分类下拉列表 */
+#AssetCategoryFilter QAbstractItemView {
+    background-color: ${dialog_bg};
+    border: ${input_border};
+    padding: 4px;
+    outline: none;
+    selection-background-color: ${primary_color};
+    selection-color: ${text_primary};
+}
+
+#AssetCategoryFilter QAbstractItemView::item {
+    height: 32px;
+    padding: 4px 12px;
+    border-radius: 4px;
+    color: ${text_primary};
+}
+
+#AssetCategoryFilter QAbstractItemView::item:hover {
+    background-color: ${bg_hover};
+}
+
+#AssetCategoryFilter QAbstractItemView::item:selected {
+    background-color: ${primary_color};
+    color: ${text_primary};
+}
+
+/* ===== 排序下拉框 ===== */
+#AssetSortCombo {
+    background-color: ${search_input_bg};
+    border: none;
+    border-radius: 18px;
+    padding: 8px 16px;
+    color: ${text_primary};
+    font-size: 14px;
+    text-align: center;
+}
+
+#AssetSortCombo:hover {
+    background-color: ${search_input_bg_focus};
+    border: none;
+}
+
+#AssetSortCombo:focus {
+    background-color: ${search_input_bg_focus};
+    border: none;
+    outline: none;
+}
+
+#AssetSortCombo::drop-down {
+    border: none;
+    width: 0px;
+}
+
+#AssetSortCombo::down-arrow {
+    image: none;
+    width: 0px;
+    height: 0px;
+}
+
+/* 排序下拉列表 */
+#AssetSortCombo QAbstractItemView {
+    background-color: ${dialog_bg};
+    border: ${input_border};
+    padding: 4px;
+    outline: none;
+    selection-background-color: ${primary_color};
+    selection-color: ${text_primary};
+}
+
+#AssetSortCombo QAbstractItemView::item {
+    height: 32px;
+    padding: 4px 12px;
+    border-radius: 4px;
+    color: ${text_primary};
+}
+
+#AssetSortCombo QAbstractItemView::item:hover {
+    background-color: ${bg_hover};
+}
+
+#AssetSortCombo QAbstractItemView::item:selected {
+    background-color: ${primary_color};
+    color: ${text_primary};
+}
+
+/* ===== 添加资产按钮 ===== */
+#AddAssetButton {
+    background: ${search_input_bg};
+    border: none;
+    border-radius: 18px;
+    padding: 8px 16px;
+    color: ${text_primary};
+    font-size: 14px;
+    font-weight: 500;
+}
+
+#AddAssetButton:hover {
+    background: ${search_input_bg_focus};
+}
+
+#AddAssetButton:pressed {
+    background: ${bg_active};
+}

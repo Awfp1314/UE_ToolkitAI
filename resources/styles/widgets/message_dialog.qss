@@ -1,0 +1,89 @@
+/* ===== 消息对话框 ===== */
+
+/* 对话框本身 - 透明背景 */
+#MessageDialog {
+    background-color: transparent;
+}
+
+/* 容器 - 主要内容区域 */
+#MessageDialogContainer {
+    background-color: ${bg_secondary};
+    border: 2px solid ${border_primary};
+    border-radius: 0px;
+}
+
+/* ===== 标题栏 ===== */
+#MessageDialogTitleBar {
+    background-color: ${bg_tertiary};
+    border-top: 1px solid ${border_primary};
+    border-bottom: 2px solid ${border_shadow};
+    padding: 0px;
+}
+
+#MessageDialogIcon {
+    color: ${text_primary};
+    font-size: 20px;
+    background-color: transparent;
+    border: none;
+}
+
+#MessageDialogTitleLabel {
+    color: ${text_primary};
+    font-size: 14px;
+    font-weight: bold;
+    padding-left: 10px;
+    background-color: transparent;
+    border: none;
+}
+
+/* ===== 内容区域 ===== */
+#MessageDialogText {
+    color: ${text_primary};
+    font-size: 14px;
+    line-height: 1.6;
+    padding: 5px;
+}
+
+/* ===== 按钮 ===== */
+#MessageDialogOkBtn,
+#MessageDialogSettingsBtn {
+    background-color: ${primary};
+    color: white;
+    border: none;
+    font-weight: bold;
+    padding: 6px 20px;
+    border-radius: 4px;
+    font-size: 13px;
+    min-width: 80px;
+    min-height: 32px;
+}
+
+#MessageDialogOkBtn:hover,
+#MessageDialogSettingsBtn:hover {
+    background-color: ${primary_hover};
+}
+
+#MessageDialogOkBtn:pressed,
+#MessageDialogSettingsBtn:pressed {
+    background-color: ${primary_active};
+}
+
+#MessageDialogCancelBtn {
+    background-color: ${bg_tertiary};
+    color: ${text_primary};
+    border: none;
+    font-weight: 500;
+    padding: 6px 20px;
+    border-radius: 4px;
+    font-size: 13px;
+    min-width: 80px;
+    min-height: 32px;
+}
+
+#MessageDialogCancelBtn:hover {
+    background-color: ${bg_hover};
+}
+
+#MessageDialogCancelBtn:pressed {
+    background-color: ${bg_active};
+}

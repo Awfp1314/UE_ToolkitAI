@@ -1,0 +1,122 @@
+/* ===== 工程配置界面样式 ===== */
+
+/* 主容器 */
+#ConfigToolUI {
+    background-color: ${bg_primary};
+}
+
+/* 标题 */
+#ConfigToolTitle {
+    color: ${text_primary};
+}
+
+/* 添加按钮 */
+#ConfigToolAddBtn {
+    background-color: ${bg_tertiary};
+    color: ${text_primary};
+    border: none;
+    border-radius: 6px;
+    padding: 8px 20px;
+    font-size: 13px;
+    font-weight: bold;
+}
+
+#ConfigToolAddBtn:hover {
+    background-color: ${bg_hover};
+}
+
+#ConfigToolAddBtn:pressed {
+    background-color: ${bg_active};
+}
+
+/* 分隔线 */
+#ConfigToolSeparator {
+    background: qlineargradient(
+        x1:0, y1:0, x2:1, y2:0,
+        stop:0 transparent,
+        stop:0.5 ${primary_border},
+        stop:1 transparent
+    );
+    border: none;
+}
+
+/* 滚动区域 */
+#ConfigToolScroll {
+    background-color: transparent;
+    border: none;
+}
+
+#ConfigToolContent {
+    background-color: transparent;
+}
+
+/* 空状态标签 */
+#ConfigToolEmptyLabel {
+    color: ${text_disabled};
+    font-size: 16px;
+}
+
+/* ===== 配置模板卡片 ===== */
+#ConfigTemplateCard {
+    background: qlineargradient(
+        x1:0, y1:0, x2:0, y2:1,
+        stop:0 ${asset_card_bg_start},
+        stop:0.3 ${asset_card_bg_mid1},
+        stop:0.7 ${asset_card_bg_mid2},
+        stop:1 ${asset_card_bg_end}
+    );
+    border: 1px solid ${asset_card_border};
+    border-radius: 8px;
+}
+
+#ConfigTemplateCard:hover {
+    background: qlineargradient(
+        x1:0, y1:0, x2:0, y2:1,
+        stop:0 ${asset_card_hover_start},
+        stop:0.3 ${asset_card_hover_mid1},
+        stop:0.7 ${asset_card_hover_mid2},
+        stop:1 ${asset_card_hover_end}
+    );
+    border: 1px solid ${primary_border_hover};
+}
+
+/* 卡片名称 */
+#ConfigTemplateCardName {
+    color: ${text_primary};
+}
+
+/* 卡片描述 */
+#ConfigTemplateCardDesc {
+    color: ${text_tertiary};
+    font-size: 11px;
+}
+
+/* 卡片信息 */
+#ConfigTemplateCardInfo {
+    color: ${text_disabled};
+    font-size: 10px;
+}
+
+/* 右键菜单 */
+#ConfigTemplateCardMenu {
+    background-color: ${menu_bg};
+    border: 1px solid ${menu_border};
+    border-radius: 6px;
+    padding: 5px;
+}
+
+#ConfigTemplateCardMenu::item {
+    color: ${menu_text};
+    padding: 8px 20px;
+    border-radius: 4px;
+}
+
+#ConfigTemplateCardMenu::item:selected {
+    background-color: ${menu_item_hover};
+}
+
+#ConfigTemplateCardMenu::separator {
+    height: 1px;
+    background: ${menu_separator};
+    margin: 5px 10px;
+}

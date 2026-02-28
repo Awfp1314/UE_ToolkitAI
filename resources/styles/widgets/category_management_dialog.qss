@@ -1,0 +1,197 @@
+/* ========================================
+   分类管理对话框样式
+   从内联样式迁移到QSS系统
+   ======================================== */
+
+/* ===== 对话框容器 ===== */
+#CategoryDialogContainer {
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+        stop:0 ${bg_tertiary},
+        stop:0.03 ${bg_secondary},
+        stop:1 ${bg_primary});
+    border: 1px solid ${border_secondary};
+    border-radius: 0px;
+}
+
+/* ===== 标题栏 ===== */
+#CategoryDialogTitleBar {
+    background: transparent;
+    border-bottom: 1px solid ${border_tertiary};
+}
+
+#CategoryDialogTitle {
+    color: ${text_primary};
+    font-size: 18px;
+    font-weight: 700;
+    background: transparent;
+}
+
+#CategoryDialogCloseButton {
+    background: transparent;
+    color: ${text_secondary};
+    border: none;
+    border-radius: 6px;
+    font-size: 20px;
+    font-weight: 300;
+}
+
+#CategoryDialogCloseButton:hover {
+    background: ${bg_hover};
+    color: ${text_primary};
+}
+
+#CategoryDialogCloseButton:pressed {
+    background: ${bg_active};
+}
+
+/* ===== 内容区域 ===== */
+#CategoryDialogContent {
+    background: transparent;
+}
+
+/* ===== 区域标签 ===== */
+#SectionLabel {
+    color: ${text_primary};
+    font-size: 14px;
+    font-weight: 600;
+    background: transparent;
+}
+
+/* ===== 输入框 ===== */
+#CategoryInput {
+    background-color: ${bg_tertiary};
+    border: none;
+    border-radius: 8px;
+    padding: 0 16px;
+    color: ${text_primary};
+    font-size: 14px;
+}
+
+#CategoryInput:focus {
+    background-color: ${bg_secondary};
+    border: none;
+}
+
+#CategoryInput::placeholder {
+    color: ${text_disabled};
+}
+
+/* ===== 添加按钮 ===== */
+#AddButton {
+    background-color: ${primary};
+    color: ${text_primary};
+    border: none;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 600;
+}
+
+#AddButton:hover {
+    background-color: ${primary_hover};
+}
+
+#AddButton:pressed {
+    background-color: ${primary_active};
+}
+
+/* ===== 错误标签 ===== */
+#ErrorLabel {
+    color: ${error};
+    font-size: 13px;
+    background: transparent;
+}
+
+/* ===== 分类列表 ===== */
+#CategoryList {
+    background-color: ${bg_tertiary};
+    border: none;
+    border-radius: 8px;
+    padding: 8px;
+    color: ${text_primary};
+    font-size: 14px;
+    outline: none;
+}
+
+#CategoryList::item {
+    padding: 12px 16px;
+    border-radius: 6px;
+    border: none;
+    outline: none;
+}
+
+#CategoryList::item:selected {
+    background-color: ${primary};
+    color: ${text_primary};
+}
+
+#CategoryList::item:hover:!selected {
+    background-color: ${bg_hover};
+}
+
+#CategoryList::item:selected:hover {
+    background-color: ${primary_hover};
+}
+
+/* ===== 分类列表滚动条 ===== */
+#CategoryList QScrollBar:vertical {
+    background-color: transparent;
+    width: 8px;
+    margin: 0px;
+    border: none;
+}
+
+#CategoryList QScrollBar::handle:vertical {
+    background-color: ${scrollbar_handle};
+    border-radius: 4px;
+    min-height: 20px;
+    border: none;
+}
+
+#CategoryList QScrollBar::handle:vertical:hover {
+    background-color: ${scrollbar_handle_hover};
+}
+
+#CategoryList QScrollBar::add-line:vertical,
+#CategoryList QScrollBar::sub-line:vertical {
+    height: 0px;
+    background: none;
+    border: none;
+}
+
+#CategoryList QScrollBar::add-page:vertical,
+#CategoryList QScrollBar::sub-page:vertical {
+    background: none;
+    border: none;
+}
+
+#CategoryList QScrollBar::up-arrow:vertical,
+#CategoryList QScrollBar::down-arrow:vertical {
+    width: 0px;
+    height: 0px;
+    background: none;
+}
+
+/* ===== 删除按钮 ===== */
+#DeleteButton {
+    background-color: ${error};
+    color: ${text_primary};
+    border: none;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 600;
+}
+
+#DeleteButton:hover {
+    background-color: #f87171;
+}
+
+#DeleteButton:pressed {
+    background-color: #dc2626;
+}
+
+/* ===== 提示信息 ===== */
+#InfoLabel {
+    color: ${text_tertiary};
+    font-size: 12px;
+    background: transparent;
+}

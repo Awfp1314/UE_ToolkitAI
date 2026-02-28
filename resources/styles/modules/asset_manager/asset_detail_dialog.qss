@@ -1,0 +1,155 @@
+/* ===== 资产详情对话框 ===== */
+#AssetDetailContainer {
+    background: ${bg_secondary};
+    border-radius: 0px;
+    border: 1px solid ${border_primary};
+}
+
+#AssetDetailTitleBar {
+    background: ${bg_tertiary};
+}
+
+#DialogTitle {
+    font-size: 16px;
+    font-weight: 600;
+    color: ${text_primary};
+}
+
+#AssetDetailButtonBar {
+    background: ${bg_tertiary};
+    border-top: 1px solid ${border_secondary};
+}
+
+/* ===== 关闭按钮 ===== */
+#CloseButton {
+    background: transparent;
+    color: ${text_secondary};
+    font-size: 24px;
+    border: none;
+    border-radius: 6px;
+}
+
+#CloseButton:hover {
+    background: rgba(255, 70, 70, 0.15);
+    color: #ff6b6b;
+}
+
+/* ===== 缩略图容器 ===== */
+#ThumbnailContainer {
+    background: ${bg_tertiary};
+    border-radius: 10px;
+}
+
+/* ===== 占位符图标 ===== */
+#ThumbnailPlaceholder {
+    font-size: 42px;
+    color: ${text_disabled};
+    background: transparent;
+}
+
+/* ===== 信息标签 ===== */
+/* ===== 信息区域容器 ===== */
+#InfoSection {
+    background: ${bg_tertiary};
+    border-radius: 6px;
+}
+
+#InfoLabel {
+    font-size: 13px;
+    color: ${text_secondary};
+}
+
+#InfoValue {
+    font-size: 13px;
+    color: ${text_primary};
+}
+
+/* ===== 文档区域 ===== */
+#DocTitle {
+    font-size: 13px;
+    font-weight: 600;
+    color: ${text_primary};
+}
+
+#DocText {
+    font-size: 12px;
+    color: ${text_secondary};
+    background: ${bg_tertiary};
+    border: none;
+    border-radius: 6px;
+    padding: 10px;
+}
+
+#DocText QScrollBar:vertical {
+    background: ${scrollbar_track};
+    width: 8px;
+    margin: 0px;
+    border-radius: 4px;
+}
+
+#DocText QScrollBar::handle:vertical {
+    background: ${scrollbar_thumb};
+    border-radius: 4px;
+    min-height: 20px;
+}
+
+#DocText QScrollBar::handle:vertical:hover {
+    background: ${scrollbar_thumb_hover};
+}
+
+#DocText QScrollBar::handle:vertical:pressed {
+    background: ${scrollbar_thumb_pressed};
+}
+
+#DocText QScrollBar::add-line:vertical,
+#DocText QScrollBar::sub-line:vertical {
+    height: 0px;
+}
+
+#DocText QScrollBar::add-page:vertical,
+#DocText QScrollBar::sub-page:vertical {
+    background: none;
+}
+
+#NoDoc {
+    font-size: 12px;
+    color: ${text_disabled};
+    padding: 8px 0;
+}
+
+/* ===== 预览按钮 ===== */
+#PreviewButton {
+    background: ${bg_tertiary};
+    color: ${text_primary};
+    border: 1px solid ${border_primary};
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 500;
+}
+
+#PreviewButton:hover {
+    background: ${bg_hover};
+    border: 1px solid ${border_hover};
+}
+
+#PreviewButton:pressed {
+    background: ${bg_active};
+}
+
+/* ===== 导入按钮 ===== */
+#ImportButton {
+    background: ${primary};
+    color: #ffffff;
+    border: none;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 500;
+}
+
+#ImportButton:hover {
+    background: ${primary_hover};
+}
+
+#ImportButton:pressed {
+    background: ${primary_active};
+}

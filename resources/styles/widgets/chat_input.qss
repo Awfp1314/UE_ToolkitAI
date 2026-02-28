@@ -1,0 +1,79 @@
+/* ========================================
+   AI助手聊天输入框样式
+   ======================================== */
+
+/* ===== 聊天区域 ===== */
+#ChatScrollArea {
+    background-color: transparent;
+    border: none;
+}
+
+#ChatMessageContainer {
+    background-color: transparent;
+}
+
+#ChatInputWrapper {
+    background-color: transparent;
+}
+
+/* ===== 输入框容器 ===== */
+#ChatInputContainer {
+    background-color: ${chat_input_bg};
+    border: none;
+    border-radius: 26px;
+}
+
+/* ===== 文本输入框 ===== */
+#ChatInput {
+    background-color: transparent;
+    border: none;
+    color: ${chat_input_text};
+    font-size: 16px;
+    font-weight: 500;
+    font-family: "Segoe UI", "Microsoft YaHei UI", "Microsoft YaHei", sans-serif;
+    selection-background-color: ${chat_input_selection};
+    padding: 0px 4px;
+    line-height: 1.4;
+}
+
+#ChatInput:focus {
+    outline: none;
+}
+
+/* ===== 滚动条 ===== */
+#ChatInput QScrollBar:vertical {
+    background: transparent;
+    width: 6px;
+    margin: 2px;
+}
+
+#ChatInput QScrollBar::handle:vertical {
+    background: ${chat_input_scrollbar};
+    border-radius: 3px;
+    min-height: 20px;
+}
+
+#ChatInput QScrollBar::handle:vertical:hover {
+    background: ${chat_input_scrollbar_hover};
+}
+
+#ChatInput QScrollBar::add-line:vertical,
+#ChatInput QScrollBar::sub-line:vertical {
+    height: 0px;
+}
+
+#ChatInput QScrollBar::add-page:vertical,
+#ChatInput QScrollBar::sub-page:vertical {
+    background: none;
+}
+
+/* ===== 按钮样式 ===== */
+/* 注意：按钮的背景、悬停效果由 paintEvent 自定义绘制 */
+/* QSS只控制基础属性，不设置background避免覆盖 */
+#ChatAddButton {
+    border: none;
+}
+
+#ChatSendButton {
+    border: none;
+}

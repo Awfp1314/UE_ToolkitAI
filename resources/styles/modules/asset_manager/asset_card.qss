@@ -1,0 +1,242 @@
+/* ========================================
+   现代化资产卡片样式
+   从 modern_asset_card.py 迁移的内联样式
+   ======================================== */
+
+/* ===== 标准资产卡片 (ModernAssetCard) ===== */
+#AssetCard {
+    background: transparent;
+    border: none;
+}
+
+#AssetCard:hover {
+    background: transparent;
+    border: none;
+}
+
+/* ===== 紧凑资产卡片 (CompactAssetCard) ===== */
+#CompactAssetCard {
+    background: transparent;
+    border: none;
+}
+
+#CompactAssetCard:hover {
+    background: transparent;
+    border: none;
+}
+
+/* ===== 缩略图容器 ===== */
+#AssetCard #ThumbnailContainer,
+#CompactAssetCard #ThumbnailContainer {
+    background-color: transparent;
+}
+
+/* ===== 分类标签 ===== */
+/* 注意：分类标签使用内联样式，不在此定义 */
+
+/* ===== 资产类型图标 ===== */
+#AssetCard #TypeLabel {
+    font-size: 18px;
+    background-color: transparent;
+    border: none;
+    padding: 0px;
+}
+
+#CompactAssetCard #TypeLabel {
+    font-size: 16px;
+    background-color: transparent;
+    border: none;
+    padding: 0px;
+}
+
+/* ===== 内容区域 ===== */
+#AssetCard #ContentWidget,
+#CompactAssetCard #ContentWidget {
+    background-color: transparent;
+}
+
+/* ===== 资产名称 ===== */
+#AssetCard #NameLabel {
+    color: ${asset_name_text};
+    font-size: 14px;
+    font-weight: 700;
+    background-color: transparent;
+}
+
+#CompactAssetCard #NameLabel {
+    color: ${asset_name_text};
+    font-size: 12px;
+    font-weight: 700;
+    background-color: transparent;
+}
+
+/* ===== 渐变分隔线 ===== */
+#AssetCard #Separator {
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+        stop:0 transparent,
+        stop:0.2 ${asset_separator_start},
+        stop:0.5 ${asset_separator_mid},
+        stop:0.8 ${asset_separator_end},
+        stop:1 transparent);
+    border: none;
+}
+
+/* ===== 信息标签（标题） ===== */
+#AssetCard #InfoTitleLabel {
+    color: ${asset_info_title_text};
+    font-size: 9px;
+    font-weight: 400;
+    background-color: transparent;
+}
+
+/* ===== 信息标签（值） ===== */
+#AssetCard #InfoValueLabel {
+    color: ${asset_info_value_text};
+    font-size: 9px;
+    font-weight: 600;
+    background-color: transparent;
+}
+
+/* ===== 预览按钮（标准卡片） ===== */
+#AssetCard #PreviewButton {
+    background: ${button_secondary_bg};
+    color: ${button_secondary_text};
+    border: none;
+    border-radius: 0px;
+    font-size: 13px;
+    font-weight: 600;
+    padding: 8px 16px;
+    outline: none;
+}
+
+#AssetCard #PreviewButton:hover {
+    background: ${button_secondary_bg_hover};
+    border: none;
+    color: ${text_primary};
+}
+
+#AssetCard #PreviewButton:pressed {
+    background: ${button_secondary_bg_active};
+    border: none;
+    padding-top: 9px;
+    padding-bottom: 7px;
+}
+
+#AssetCard #PreviewButton:focus {
+    outline: none;
+}
+
+/* ===== 预览按钮（紧凑卡片） ===== */
+#CompactAssetCard #PreviewButton {
+    background: ${button_secondary_bg};
+    color: ${button_secondary_text};
+    border: none;
+    border-radius: 0px;
+    font-size: 12px;
+    font-weight: 600;
+    padding: 6px 12px;
+    outline: none;
+}
+
+#CompactAssetCard #PreviewButton:hover {
+    background: ${button_secondary_bg_hover};
+    border: none;
+    color: ${text_primary};
+}
+
+#CompactAssetCard #PreviewButton:pressed {
+    background: ${button_secondary_bg_active};
+    border: none;
+    padding-top: 7px;
+    padding-bottom: 5px;
+}
+
+#CompactAssetCard #PreviewButton:focus {
+    outline: none;
+}
+
+/* ===== 导入按钮（标准卡片） ===== */
+#AssetCard #ImportButton {
+    background: ${button_secondary_bg};
+    color: ${button_secondary_text};
+    border: none;
+    border-radius: 0px;
+    font-size: 16px;
+    font-weight: 400;
+    padding: 0px;
+    outline: none;
+}
+
+#AssetCard #ImportButton:hover {
+    background: ${button_secondary_bg_hover};
+    border: none;
+    color: ${text_primary};
+}
+
+#AssetCard #ImportButton:pressed {
+    background: ${button_secondary_bg_active};
+    border: none;
+}
+
+#AssetCard #ImportButton:focus {
+    outline: none;
+}
+
+/* ===== 导入按钮（紧凑卡片） ===== */
+#CompactAssetCard #ImportButton {
+    background: ${button_secondary_bg};
+    color: ${button_secondary_text};
+    border: none;
+    border-radius: 0px;
+    font-size: 14px;
+    font-weight: 400;
+    padding: 0px;
+    outline: none;
+}
+
+#CompactAssetCard #ImportButton:hover {
+    background: ${button_secondary_bg_hover};
+    border: none;
+    color: ${text_primary};
+}
+
+#CompactAssetCard #ImportButton:pressed {
+    background: ${button_secondary_bg_active};
+    border: none;
+}
+
+#CompactAssetCard #ImportButton:focus {
+    outline: none;
+}
+
+/* ===== 右键菜单 ===== */
+QMenu#AssetCardMenu {
+    background-color: ${menu_bg};
+    border: 1px solid ${menu_border};
+    border-radius: 0px;
+    padding: 4px;
+    color: ${menu_text};
+    font-size: 12px;
+}
+
+QMenu#AssetCardMenu::item {
+    background-color: transparent;
+    padding: 8px 16px;
+    border-radius: 0px;
+    margin: 1px;
+}
+
+QMenu#AssetCardMenu::item:selected {
+    background-color: ${menu_item_hover};
+    border: 1px solid ${primary_border};
+}
+
+QMenu#AssetCardMenu::item:pressed {
+    background-color: ${primary_light};
+}
+
+QMenu#AssetCardMenu::separator {
+    height: 1px;
+    background-color: ${menu_separator};
+    margin: 4px 8px;
+}

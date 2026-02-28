@@ -1,0 +1,129 @@
+/* ===== 预览工程选择对话框 ===== */
+
+/* 对话框本身 - 透明背景 */
+#ProjectSelectorDialog {
+    background-color: transparent;
+}
+
+/* 容器 - 主要内容区域 */
+#ProjectSelectorContainer {
+    background-color: ${bg_secondary};
+    border: 2px solid ${border_primary};
+    border-radius: 0px;
+}
+
+/* ===== 标题栏 ===== */
+#ProjectSelectorTitleBar {
+    background-color: ${bg_tertiary};
+    border-top: 1px solid ${border_primary};
+    border-bottom: 2px solid ${border_shadow};
+    padding: 0px;
+}
+
+#ProjectSelectorTitleLabel {
+    color: ${text_primary};
+    font-size: 14px;
+    font-weight: bold;
+    padding-left: 15px;
+    background-color: transparent;
+    border: none;
+}
+
+/* ===== 内容区域 ===== */
+#ProjectSelectorDialog QLabel {
+    color: ${text_primary};
+    font-size: 14px;
+    padding: 2px 0px;
+}
+
+/* ===== 下拉框 ===== */
+#ProjectSelectorCombo {
+    background-color: ${bg_tertiary};
+    border: none;
+    border-radius: 4px;
+    padding: 8px 12px;
+    color: ${text_primary};
+    font-size: 13px;
+    min-height: 32px;
+}
+
+#ProjectSelectorCombo:focus {
+    border: none;
+    outline: none;
+}
+
+/* 隐藏下拉箭头 */
+#ProjectSelectorCombo::drop-down {
+    border: none;
+    width: 0px;
+}
+
+#ProjectSelectorCombo::down-arrow {
+    image: none;
+    width: 0px;
+    height: 0px;
+}
+
+/* 下拉列表 */
+#ProjectSelectorCombo QAbstractItemView {
+    background-color: ${bg_tertiary};
+    border: 1px solid ${border_primary};
+    selection-background-color: ${primary};
+    selection-color: white;
+    color: ${text_primary};
+    outline: none;
+    padding: 2px;
+    show-decoration-selected: 1;
+}
+
+/* 下拉列表项 */
+#ProjectSelectorCombo QAbstractItemView::item {
+    min-height: 28px;
+    padding: 4px 10px;
+    border: none;
+    background-color: transparent;
+}
+
+#ProjectSelectorCombo QAbstractItemView::item:selected {
+    background-color: ${primary};
+    color: white;
+}
+
+#ProjectSelectorCombo QAbstractItemView::item:hover {
+    background-color: ${combo_item_hover};
+    color: ${text_primary};
+}
+
+/* ===== 按钮 ===== */
+#ProjectSelectorDialog QPushButton {
+    background-color: ${bg_tertiary};
+    color: ${text_primary};
+    border: none;
+    padding: 6px 20px;
+    border-radius: 4px;
+    font-size: 13px;
+    min-width: 70px;
+    min-height: 28px;
+    font-weight: 500;
+}
+
+#ProjectSelectorDialog QPushButton:hover {
+    background-color: ${bg_hover};
+}
+
+/* 确定按钮 */
+#ProjectSelectorOkBtn {
+    background-color: ${primary};
+    color: white;
+    border: none;
+    font-weight: bold;
+}
+
+#ProjectSelectorOkBtn:hover {
+    background-color: ${primary_hover};
+}
+
+#ProjectSelectorOkBtn:pressed {
+    background-color: ${primary_active};
+}
+

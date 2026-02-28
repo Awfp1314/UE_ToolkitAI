@@ -1,0 +1,466 @@
+/* ========================================
+   设置界面样式
+   ======================================== */
+
+/* ===== 设置选项卡 ===== */
+#SettingsTabWidget::pane {
+    background: transparent;
+    border: none;
+}
+
+#SettingsTabWidget QTabBar::tab {
+    background: transparent;
+    border: none;
+    border-bottom: 3px solid transparent;
+    color: ${text_tertiary};
+    padding: 14px 28px;
+    margin-right: 8px;
+    font-size: 14px;
+    font-weight: 500;
+}
+
+#SettingsTabWidget QTabBar::tab:hover {
+    background: ${bg_hover};
+    border-bottom: 3px solid rgba(74, 158, 255, 0.4);
+    color: ${text_secondary};
+}
+
+#SettingsTabWidget QTabBar::tab:selected {
+    border-bottom: 3px solid rgba(74, 158, 255, 0.9);
+    color: ${text_primary};
+    font-weight: 600;
+}
+
+/* ===== 选项卡页面 ===== */
+#TabPage {
+    background: transparent;
+}
+
+/* ===== 滚动区域 ===== */
+#SettingsScrollArea {
+    background: transparent;
+    border: none;
+}
+
+#SettingsScrollContent {
+    background: transparent;
+}
+
+/* ===== 滚动条样式 ===== */
+#SettingsScrollArea QScrollBar:vertical {
+    background: transparent;
+    width: 8px;
+    margin: 0px;
+}
+
+#SettingsScrollArea QScrollBar::handle:vertical {
+    background: ${scrollbar_handle};
+    border-radius: 4px;
+    min-height: 20px;
+}
+
+#SettingsScrollArea QScrollBar::handle:vertical:hover {
+    background: ${scrollbar_handle_hover};
+}
+
+#SettingsScrollArea QScrollBar::add-line:vertical,
+#SettingsScrollArea QScrollBar::sub-line:vertical {
+    height: 0px;
+}
+
+#SettingsScrollArea QScrollBar::add-page:vertical,
+#SettingsScrollArea QScrollBar::sub-page:vertical {
+    background: none;
+}
+
+/* ===== 区块内容 ===== */
+#SectionContent {
+    background: transparent;
+    border: none;
+    border-radius: 0px;
+}
+
+/* ===== 设置行 ===== */
+#SettingRow {
+    background: transparent;
+    border: none;
+}
+
+/* ===== 子区块标题 ===== */
+#SubSectionLabel {
+    color: ${primary};
+    font-size: 15px;
+    font-weight: 600;
+    padding: 12px 0px 8px 0px;
+    background: transparent;
+    border: none;
+}
+
+/* ===== 路径卡片 ===== */
+#PathCard {
+    background: ${bg_hover};
+    border: none;
+    border-radius: 8px;
+}
+
+#PathCard:hover {
+    background: ${bg_active};
+    border-color: ${border_tertiary};
+}
+
+#StatusIcon {
+    color: ${primary};
+    font-size: 16px;
+    font-weight: bold;
+}
+
+#CardNameLabel {
+    color: ${text_hover};
+    font-size: 13px;
+    font-weight: 600;
+}
+
+#CardPathLabel {
+    color: ${text_tertiary};
+    font-size: 11px;
+}
+
+#CardButton {
+    background: ${bg_active};
+    border: none;
+    border-radius: 4px;
+    color: ${text_secondary};
+    font-size: 12px;
+}
+
+#CardButton:hover {
+    background: ${bg_hover};
+    color: ${text_primary};
+}
+
+#CardDeleteButton {
+    background: rgba(255, 80, 80, 0.15);
+    border: none;
+    border-radius: 4px;
+    color: rgba(255, 100, 100, 0.9);
+    font-size: 12px;
+}
+
+#CardDeleteButton:hover {
+    background: rgba(255, 80, 80, 0.25);
+    color: rgba(255, 120, 120, 1.0);
+}
+
+#AddProjectButton {
+    background: ${primary_light};
+    border: none;
+    border-radius: 6px;
+    color: ${primary};
+    font-size: 13px;
+    font-weight: 500;
+}
+
+#AddProjectButton:hover {
+    background: rgba(74, 158, 255, 0.25);
+    color: ${primary};
+}
+
+/* ===== 标签 ===== */
+#SettingLabel {
+    color: ${text_primary};
+    font-size: 13px;
+    font-weight: 500;
+}
+
+#DescriptionLabel {
+    color: ${text_quaternary};
+    font-size: 11px;
+}
+
+#PlaceholderLabel {
+    color: ${text_quaternary};
+    font-size: 14px;
+    padding: 60px 20px;
+}
+
+#ValueLabel {
+    color: ${primary};
+    font-size: 12px;
+    font-weight: 600;
+}
+
+/* ===== 复选框 ===== */
+#SettingCheckBox {
+    color: ${text_primary};
+    font-size: 13px;
+    spacing: 8px;
+}
+
+#SettingCheckBox::indicator {
+    width: 18px;
+    height: 18px;
+    border-radius: 4px;
+    border: none;
+    background: rgba(20, 20, 30, 0.9);
+}
+
+#SettingCheckBox::indicator:hover {
+    background: rgba(74, 158, 255, 0.2);
+}
+
+#SettingCheckBox::indicator:checked {
+    background: qlineargradient(
+        x1:0, y1:0, x2:1, y2:1,
+        stop:0 rgba(74, 158, 255, 0.8),
+        stop:1 rgba(74, 158, 255, 0.6)
+    );
+}
+
+/* ===== 单选按钮 ===== */
+#ThemeRadio {
+    color: ${text_primary};
+    font-size: 13px;
+    spacing: 8px;
+}
+
+#ThemeRadio::indicator {
+    width: 20px;
+    height: 20px;
+    border-radius: 10px;
+    border: none;
+    background: ${bg_active};
+}
+
+#ThemeRadio::indicator:hover {
+    background: ${bg_hover};
+}
+
+#ThemeRadio::indicator:checked {
+    border: none;
+    background: qradialgradient(
+        cx:0.5, cy:0.5, radius:0.5,
+        fx:0.5, fy:0.5,
+        stop:0 ${primary},
+        stop:0.45 ${primary},
+        stop:0.5 ${bg_active},
+        stop:1 ${bg_active}
+    );
+}
+
+/* ===== 下拉框 ===== */
+#SettingComboBox {
+    background: ${bg_hover};
+    border: none;
+    border-radius: 6px;
+    color: ${text_primary};
+    padding: 6px 12px;
+    font-size: 13px;
+}
+
+#SettingComboBox:hover {
+    background: ${bg_active};
+}
+
+#SettingComboBox::drop-down {
+    border: none;
+    background: transparent;
+}
+
+#SettingComboBox QAbstractItemView {
+    background: ${bg_tertiary};
+    border: none;
+    selection-background-color: rgba(74, 158, 255, 0.3);
+    selection-color: ${text_primary};
+    color: ${text_primary};
+    outline: none;
+    padding: 6px;
+    margin: 2px;
+}
+
+#SettingComboBox QAbstractItemView::item {
+    border: none;
+    border-radius: 4px;
+    padding: 6px 10px;
+    margin: 1px 2px;
+    color: ${text_primary};
+}
+
+#SettingComboBox QAbstractItemView::item:hover {
+    background: rgba(74, 158, 255, 0.2);
+    color: ${text_primary};
+}
+
+#SettingComboBox QAbstractItemView::item:selected {
+    background: rgba(74, 158, 255, 0.3);
+    color: ${text_primary};
+}
+
+/* ===== 滑块 ===== */
+#SettingSlider::groove:horizontal {
+    height: 6px;
+    background: rgba(20, 20, 30, 0.9);
+    border-radius: 3px;
+}
+
+#SettingSlider::handle:horizontal {
+    width: 16px;
+    height: 16px;
+    margin: -5px 0;
+    border-radius: 8px;
+    background: qlineargradient(
+        x1:0, y1:0, x2:1, y2:1,
+        stop:0 rgba(74, 158, 255, 0.9),
+        stop:1 rgba(74, 158, 255, 0.7)
+    );
+}
+
+#SettingSlider::handle:horizontal:hover {
+    background: qlineargradient(
+        x1:0, y1:0, x2:1, y2:1,
+        stop:0 ${primary},
+        stop:1 rgba(74, 158, 255, 0.8)
+    );
+}
+
+/* ===== 输入框 ===== */
+#PathLineEdit {
+    background: ${bg_hover};
+    border: none;
+    border-radius: 6px;
+    color: ${text_primary};
+    padding: 8px 12px;
+    font-size: 12px;
+}
+
+#PathLineEdit:focus {
+    background: ${bg_active};
+}
+
+/* ===== 按钮 ===== */
+#BrowseButton, #ResetButton {
+    background: ${bg_active};
+    border: none;
+    border-radius: 6px;
+    color: ${text_secondary};
+    padding: 6px 16px;
+    font-size: 12px;
+    font-weight: 500;
+}
+
+#BrowseButton:hover, #ResetButton:hover {
+    background: ${bg_hover};
+    color: ${text_primary};
+}
+
+/* ===== 密码显示切换按钮 ===== */
+#PasswordToggleButton {
+    background: ${bg_active};
+    border: none;
+    border-radius: 6px;
+    color: ${text_secondary};
+    font-size: 18px;
+    padding: 0px;
+}
+
+#PasswordToggleButton:hover {
+    background: ${bg_hover};
+    color: ${text_primary};
+}
+
+/* ===== 密码输入框容器 ===== */
+#PasswordInputContainer {
+    background: transparent;
+}
+
+/* ===== 密码输入框（带内嵌按钮） ===== */
+#PasswordLineEdit {
+    background: ${bg_hover};
+    border: none;
+    border-radius: 6px;
+    color: ${text_primary};
+    padding: 8px 12px;
+    padding-right: 45px;
+    font-size: 12px;
+}
+
+#PasswordLineEdit:focus {
+    background: ${bg_active};
+}
+
+/* ===== 内嵌的可见性切换按钮 ===== */
+#PasswordToggleButtonInline {
+    background: transparent;
+    border: none;
+    border-radius: 4px;
+    color: ${text_quaternary};  /* 灰白色 */
+    font-size: 16px;
+    padding: 0px;
+}
+
+#PasswordToggleButtonInline:hover {
+    background: rgba(255, 255, 255, 0.08);
+    color: ${text_tertiary};  /* 悬停时稍微亮一点 */
+}
+
+#PasswordToggleButtonInline:checked {
+    color: ${text_secondary};  /* 显示密码时更亮 */
+}
+
+#PasswordToggleButtonInline:checked:hover {
+    color: ${text_primary};  /* 显示密码悬停时最亮 */
+}
+
+#SaveButton {
+    background: qlineargradient(
+        x1:0, y1:0, x2:1, y2:0,
+        stop:0 rgba(74, 158, 255, 0.7),
+        stop:1 rgba(74, 158, 255, 0.5)
+    );
+    border: none;
+    border-radius: 6px;
+    color: ${text_primary};
+    padding: 6px 16px;
+    font-size: 13px;
+    font-weight: 600;
+}
+
+#SaveButton:hover {
+    background: qlineargradient(
+        x1:0, y1:0, x2:1, y2:0,
+        stop:0 rgba(74, 158, 255, 0.9),
+        stop:1 rgba(74, 158, 255, 0.7)
+    );
+}
+
+/* ===== 底部按钮容器 ===== */
+#BottomButtonContainer {
+    background: ${bg_secondary};
+    border-top: 1px solid ${border_quaternary};
+}
+
+/* ===== 获取API Key按钮 ===== */
+#GetApiKeyButton {
+    background: qlineargradient(
+        x1:0, y1:0, x2:1, y2:0,
+        stop:0 ${primary_color},
+        stop:1 ${primary_hover_color}
+    );
+    border: none;
+    border-radius: 6px;
+    color: ${button_text_color};
+    padding: 8px 16px;
+    font-size: 12px;
+    font-weight: 500;
+}
+
+#GetApiKeyButton:hover {
+    background: qlineargradient(
+        x1:0, y1:0, x2:1, y2:0,
+        stop:0 ${primary_hover_color},
+        stop:1 ${primary_color}
+    );
+}
+
+#GetApiKeyButton:pressed {
+    background: ${primary_pressed_color};
+}

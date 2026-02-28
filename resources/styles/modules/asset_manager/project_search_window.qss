@@ -1,0 +1,273 @@
+/* ========================================
+   工程搜索窗口样式
+   ======================================== */
+
+/* ===== 主容器 ===== */
+#ProjectSearchContainer {
+    background: ${bg_primary};
+    border-radius: 0px;
+    border: 1px solid ${border_primary};
+}
+
+/* ===== 标题栏 ===== */
+#ProjectSearchTitleBar {
+    background: ${bg_hover};
+}
+
+#ProjectSearchTitleText {
+    color: ${text_primary};
+}
+
+/* 标题栏按钮 */
+#ProjectSearchThemeButton,
+#ProjectSearchMinButton,
+#ProjectSearchMaxButton {
+    background: transparent;
+    border: none;
+    border-radius: 6px;
+    color: ${text_secondary};
+    font-size: 18px;
+}
+
+#ProjectSearchThemeButton:hover,
+#ProjectSearchMinButton:hover,
+#ProjectSearchMaxButton:hover {
+    background: ${bg_hover};
+}
+
+#ProjectSearchCloseButton {
+    background: transparent;
+    border: none;
+    border-radius: 6px;
+    color: ${text_secondary};
+    font-size: 24px;
+}
+
+#ProjectSearchCloseButton:hover {
+    background: ${close_button_hover};
+    color: #ff6b6b;
+}
+
+/* ===== 过滤区域 ===== */
+#ProjectSearchFilterArea {
+    background: transparent;
+}
+
+/* 搜索框 */
+#ProjectSearchInput {
+    background: ${search_input_bg};
+    border: none;
+    border-radius: 18px;
+    padding: 8px 16px;
+    color: ${text_primary};
+    font-size: 14px;
+}
+
+#ProjectSearchInput:focus {
+    background: ${search_input_bg_focus};
+}
+
+#ProjectSearchInput::placeholder {
+    color: ${search_input_placeholder};
+}
+
+/* 版本和排序下拉框 */
+#ProjectSearchVersionFilter,
+#ProjectSearchSortCombo {
+    background: ${search_input_bg};
+    border: none;
+    border-radius: 18px;
+    padding: 8px 16px;
+    color: ${text_primary};
+    font-size: 14px;
+    text-align: center;
+}
+
+#ProjectSearchVersionFilter:hover,
+#ProjectSearchSortCombo:hover {
+    background: ${search_input_bg_focus};
+}
+
+#ProjectSearchVersionFilter:focus,
+#ProjectSearchSortCombo:focus {
+    background: ${search_input_bg_focus};
+    outline: none;
+}
+
+#ProjectSearchVersionFilter::drop-down,
+#ProjectSearchSortCombo::drop-down {
+    border: none;
+    width: 0px;
+}
+
+#ProjectSearchVersionFilter::down-arrow,
+#ProjectSearchSortCombo::down-arrow {
+    image: none;
+    width: 0px;
+    height: 0px;
+}
+
+/* 下拉列表 */
+#ProjectSearchVersionFilter QAbstractItemView,
+#ProjectSearchSortCombo QAbstractItemView {
+    background: ${dialog_bg};
+    border: ${input_border};
+    padding: 4px;
+    outline: none;
+    selection-background-color: ${primary};
+    selection-color: ${text_primary};
+}
+
+#ProjectSearchVersionFilter QAbstractItemView::item,
+#ProjectSearchSortCombo QAbstractItemView::item {
+    height: 32px;
+    padding: 4px 12px;
+    border-radius: 4px;
+    color: ${text_primary};
+}
+
+#ProjectSearchVersionFilter QAbstractItemView::item:hover,
+#ProjectSearchSortCombo QAbstractItemView::item:hover {
+    background: ${bg_hover};
+}
+
+#ProjectSearchVersionFilter QAbstractItemView::item:selected,
+#ProjectSearchSortCombo QAbstractItemView::item:selected {
+    background: ${primary};
+    color: ${text_primary};
+}
+
+/* 刷新按钮 */
+#ProjectSearchRefreshButton {
+    background: ${search_input_bg};
+    border: none;
+    border-radius: 18px;
+    padding: 8px 16px;
+    color: ${text_primary};
+    font-size: 14px;
+    font-weight: 500;
+}
+
+#ProjectSearchRefreshButton:hover {
+    background: ${search_input_bg_focus};
+}
+
+#ProjectSearchRefreshButton:pressed {
+    background: ${bg_active};
+}
+
+/* 结果统计标签 */
+#ProjectSearchResultLabel {
+    color: ${text_tertiary};
+    font-size: 12px;
+}
+
+/* ===== 滚动区域 ===== */
+#ProjectSearchScrollArea {
+    background: transparent;
+    border: none;
+}
+
+#ProjectSearchScrollArea QScrollBar:vertical {
+    background: ${scrollbar_track};
+    width: 8px;
+    border-radius: 4px;
+}
+
+#ProjectSearchScrollArea QScrollBar::handle:vertical {
+    background: ${scrollbar_thumb};
+    border-radius: 4px;
+    min-height: 20px;
+}
+
+#ProjectSearchScrollArea QScrollBar::handle:vertical:hover {
+    background: ${scrollbar_thumb_hover};
+}
+
+#ProjectSearchScrollArea QScrollBar::add-line:vertical,
+#ProjectSearchScrollArea QScrollBar::sub-line:vertical {
+    height: 0px;
+}
+
+#ProjectSearchScrollArea QScrollBar::add-page:vertical,
+#ProjectSearchScrollArea QScrollBar::sub-page:vertical {
+    background: none;
+}
+
+/* 工程列表容器 */
+#ProjectSearchList {
+    background: transparent;
+}
+
+/* ===== 工程卡片 ===== */
+#ProjectCard {
+    background: qlineargradient(
+        x1:0, y1:0, x2:0, y2:1,
+        stop:0 ${asset_card_bg_start},
+        stop:0.33 ${asset_card_bg_mid1},
+        stop:0.66 ${asset_card_bg_mid2},
+        stop:1 ${asset_card_bg_end}
+    );
+    border: 1px solid ${asset_card_border};
+    border-radius: 0px;
+}
+
+#ProjectCard:hover {
+    background: qlineargradient(
+        x1:0, y1:0, x2:0, y2:1,
+        stop:0 ${asset_card_hover_start},
+        stop:0.33 ${asset_card_hover_mid1},
+        stop:0.66 ${asset_card_hover_mid2},
+        stop:1 ${asset_card_hover_end}
+    );
+    border: 1px solid ${asset_card_border_hover};
+}
+
+/* 卡片缩略图区域 */
+#ProjectCardThumb {
+    background: ${bg_hover};
+    border-top-left-radius: 0px;
+    border-top-right-radius: 0px;
+}
+
+/* 卡片信息区域 */
+#ProjectCardInfo {
+    background: transparent;
+}
+
+/* 卡片工程名称 */
+#ProjectCardName {
+    color: ${asset_name_text};
+}
+
+/* 卡片修改时间 */
+#ProjectCardTime {
+    color: ${text_tertiary};
+}
+
+/* 卡片导入按钮 */
+#ProjectCardImportButton {
+    background: ${button_secondary_bg};
+    color: ${button_secondary_text};
+    border: none;
+    border-radius: 10px;
+    font-weight: 600;
+    font-size: 11px;
+    padding: 8px 16px;
+    outline: none;
+}
+
+#ProjectCardImportButton:hover {
+    background: ${button_secondary_bg_hover};
+    color: ${text_primary};
+}
+
+#ProjectCardImportButton:pressed {
+    background: ${button_secondary_bg_active};
+    padding-top: 9px;
+    padding-bottom: 7px;
+}
+
+#ProjectCardImportButton:focus {
+    outline: none;
+}

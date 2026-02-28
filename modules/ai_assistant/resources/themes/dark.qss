@@ -1,0 +1,383 @@
+/* ========================================
+   AI 助手 - 深色主题
+   modules/ai_assistant/ui/chat_window.py
+   ======================================== */
+
+/* ========================================
+   全局字体设置（ChatGPT 风格 - 清晰舒服）
+   ======================================== */
+* {
+    font-family: "Microsoft YaHei UI", "PingFang SC", "Noto Sans CJK SC",
+                 "Source Han Sans CN", "Hiragino Sans GB",
+                 "Segoe UI", "Inter", "Roboto", Arial, sans-serif;
+    font-size: 18px;
+    font-weight: 500;
+    letter-spacing: 1px;
+    color: #EDEDED;
+}
+
+/* 深色主题 */
+QMainWindow {
+    background-color: #444654;
+}
+
+/* 侧边栏 */
+#sidebar {
+    background-color: #202123;
+    border-right: 1px solid #2f2f2f;
+}
+
+#new_chat_button {
+    background-color: transparent;
+    color: #ececf1;
+    border: 1px solid #565869;
+    border-radius: 8px;
+    padding: 10px;
+}
+
+#new_chat_button:hover {
+    background-color: #2a2b32;
+}
+
+#sidebar_label {
+    color: #8e8ea0;
+}
+
+#history_list {
+    background-color: transparent;
+    border: none;
+    color: #ececf1;
+}
+
+#history_list::item {
+    padding: 10px;
+    border-radius: 6px;
+    margin: 2px 0;
+}
+
+#history_list::item:hover {
+    background-color: #2a2b32;
+}
+
+#history_list::item:selected {
+    background-color: #343541;
+}
+
+#sidebar_button {
+    background-color: transparent;
+    color: #ececf1;
+    border: 1px solid #565869;
+    border-radius: 6px;
+    text-align: left;
+    padding-left: 12px;
+}
+
+#sidebar_button:hover {
+    background-color: #2a2b32;
+}
+
+/* 收起/展开按钮 - ChatGPT 风格描边按钮 */
+SidebarToggleButton, QToolButton#collapse_button, QToolButton#expand_button {
+    background-color: transparent;
+    border: none;
+    padding: 0px;
+}
+
+/* 聊天区域 */
+QWidget#chat_area {
+    background-color: #212121;
+}
+
+QWidget#header {
+    background-color: #212121;
+    border-bottom: 1px solid #4a4a5f;
+}
+
+#title_label {
+    color: #ececf1;
+}
+
+#theme_button {
+    background-color: transparent;
+    border: none;
+    border-radius: 6px;
+}
+
+#theme_button:hover {
+    background-color: #444654;
+}
+
+QScrollArea#messages_scroll {
+    background-color: #212121;
+    border: none;
+}
+
+/* AI 消息内容区域 */
+QTextBrowser#assistant_message_content {
+    background-color: transparent;
+    border: none;
+}
+
+/* 消息气泡 */
+QFrame#message_bubble[is_user="false"] {
+    background-color: #444654;
+    border-radius: 12px;
+    border: none;
+}
+
+QFrame#message_bubble[is_user="true"] {
+    background-color: #2a6f3f;
+    border-radius: 12px;
+    border: none;
+}
+
+/* 用户消息气泡（ChatGPT 风格 - 粉紫渐变） */
+QFrame#user_bubble {
+    background-color: qlineargradient(
+        x1:0, y1:0, x2:1, y2:1,
+        stop:0 #8B5CF6,
+        stop:1 #EC4899
+    );
+    border-radius: 18px;
+    border: 1px solid transparent;
+}
+
+QLabel#user_text_label {
+    color: #FFFFFF;
+    background-color: transparent;
+}
+
+#role_label {
+    color: #ececf1;
+}
+
+#message_content {
+    color: #ececf1;
+}
+
+#typing_indicator {
+    color: #10a37f;
+}
+
+/* 错误气泡 */
+#error_bubble {
+    background-color: #5c1a1a;
+    border-radius: 10px;
+    border-left: 4px solid #ef4444;
+}
+
+#error_text {
+    color: #fecaca;
+}
+
+/* 输入区域 */
+QWidget#input_container {
+    background-color: #212121;
+    border-top: 1px solid #4a4a5f;
+}
+
+#model_label {
+    color: #8e8ea0;
+}
+
+#model_combo {
+    background-color: #40414f;
+    color: #ececf1;
+    border: 1px solid #565869;
+    border-radius: 6px;
+    padding: 5px 10px;
+}
+
+#model_combo::drop-down {
+    border: none;
+}
+
+#model_combo QAbstractItemView {
+    background-color: #40414f;
+    color: #ececf1;
+    selection-background-color: #1e88e5;
+    selection-color: #ffffff;
+    border: 1px solid #565869;
+}
+
+/* 输入区域外层容器 */
+QWidget#BottomBar {
+    background-color: #212121;
+}
+
+/* ChatGPT 风格输入容器 */
+QFrame#ChatInputBar {
+    background-color: #40414f;
+    border: 1px solid #565869;
+    border-radius: 24px;
+}
+
+#input_wrapper {
+    background-color: #40414f;
+    border: 1px solid #565869;
+    border-radius: 12px;
+}
+
+/* 输入框 - ChatGPT 风格 */
+#input_field, #input_field_chatgpt {
+    background-color: #40414f;
+    color: #ffffff;
+    border: none;
+    font-size: 15px;
+    padding: 6px 12px;
+    selection-background-color: #1e88e5;
+    selection-color: #ffffff;
+}
+
+#input_field:focus, #input_field_chatgpt:focus {
+    background-color: #4a4b5f;
+}
+
+/* 发送按钮 - ChatGPT 风格白色圆形 */
+QPushButton#send_button_chatgpt {
+    background-color: #ffffff;
+    color: #343541;
+    border: none;
+    border-radius: 18px;
+    padding: 0px;
+    text-align: center;
+    font-size: 16px;
+    font-weight: bold;
+}
+
+QPushButton#send_button_chatgpt:hover {
+    background-color: #f0f0f0;
+}
+
+QPushButton#send_button_chatgpt:pressed {
+    background-color: #e0e0e0;
+}
+
+QPushButton#send_button_chatgpt:disabled {
+    background-color: #565869;
+    color: #8e8ea0;
+}
+
+/* 停止按钮 - 使用属性选择器，红色警告样式 */
+QPushButton#send_button_chatgpt[buttonState="stop"] {
+    background-color: #ef4444;
+    color: white;
+    border: none;
+    border-radius: 18px;  /* 圆形，和发送按钮一致 */
+    font-size: 20px;
+    font-weight: bold;
+    padding: 0px;
+    text-align: center;
+}
+
+QPushButton#send_button_chatgpt[buttonState="stop"]:hover {
+    background-color: #dc2626;
+}
+
+QPushButton#send_button_chatgpt[buttonState="stop"]:pressed {
+    background-color: #b91c1c;
+}
+
+/* + 按钮 */
+QPushButton#add_button {
+    background-color: transparent;
+    color: #8e8ea0;
+    border: 1px solid #565869;
+    border-radius: 16px;
+}
+
+QPushButton#add_button:hover {
+    background-color: rgba(255, 255, 255, 0.05);
+    border-color: #6b7280;
+}
+
+/* 提示文本 */
+QLabel#hint_label {
+    color: rgba(255, 255, 255, 0.4);
+    font-size: 13px;
+}
+
+/* 图片预览区域 - 深色主题 */
+QScrollArea#image_preview_scroll {
+    background-color: transparent;
+    border: none;
+}
+
+QWidget#image_preview_container {
+    background-color: transparent;
+}
+
+QFrame#image_card {
+    background-color: #40414f;
+    border: 1px solid #565869;
+    border-radius: 8px;
+}
+
+QLabel#image_preview_label {
+    background-color: transparent;
+    border: none;
+}
+
+QPushButton#image_close_btn {
+    background-color: rgba(239, 68, 68, 0.9);
+    color: white;
+    border: none;
+    border-radius: 10px;
+    font-size: 14px;
+    font-weight: bold;
+}
+
+QPushButton#image_close_btn:hover {
+    background-color: rgba(220, 38, 38, 1);
+}
+
+/* 滚动条 */
+QScrollArea#messages_scroll QScrollBar:vertical {
+    background-color: #212121;
+    width: 12px;
+    border-radius: 6px;
+}
+
+QScrollArea#messages_scroll QScrollBar::handle:vertical {
+    background-color: #565869;
+    border-radius: 6px;
+    min-height: 20px;
+}
+
+QScrollArea#messages_scroll QScrollBar::handle:vertical:hover {
+    background-color: #6e6e80;
+}
+
+QScrollArea#messages_scroll QScrollBar::add-line:vertical,
+QScrollArea#messages_scroll QScrollBar::sub-line:vertical {
+    height: 0px;
+}
+
+/* 消息操作按钮（复制、重新生成） */
+QPushButton#action_button {
+    background-color: transparent;
+    border: none;  /* 移除边框 */
+    border-radius: 4px;
+    padding: 4px;
+}
+
+QPushButton#action_button:hover {
+    background-color: rgba(255, 255, 255, 0.08);  /* 统一的半透明背景 */
+    border: none;  /* 悬停时也无边框 */
+}
+
+QPushButton#action_button:pressed {
+    background-color: rgba(255, 255, 255, 0.12);
+    border: none;
+}
+
+
+/* 宸ュ叿璋冪敤鐘舵€佹爣绛?*/
+QLabel#tool_status {
+    color: #FFA500;  /* 姗欒壊锛岃〃绀烘鍦ㄦ墽琛?*/
+    font-size: 12px;
+    padding: 5px;
+    background-color: rgba(255, 165, 0, 0.1);
+    border-radius: 3px;
+    margin-bottom: 5px;
+}

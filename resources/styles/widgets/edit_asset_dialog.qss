@@ -1,0 +1,257 @@
+/* ========================================
+   编辑资产对话框样式
+   从内联样式迁移到QSS系统
+   ======================================== */
+
+/* ===== 对话框容器 ===== */
+#EditAssetDialogContainer {
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+        stop:0 ${bg_tertiary},
+        stop:0.03 ${bg_secondary},
+        stop:1 ${bg_primary});
+    border: 1px solid ${border_secondary};
+    border-radius: 0px;
+}
+
+/* ===== 标题栏 ===== */
+#EditAssetDialogTitleBar {
+    background: transparent;
+    border-bottom: 1px solid ${border_tertiary};
+}
+
+#EditAssetDialogTitle {
+    color: ${text_primary};
+    font-size: 18px;
+    font-weight: 700;
+    background: transparent;
+}
+
+#EditAssetDialogCloseButton {
+    background: transparent;
+    color: ${text_secondary};
+    border: none;
+    border-radius: 6px;
+    font-size: 20px;
+    font-weight: 300;
+}
+
+#EditAssetDialogCloseButton:hover {
+    background: ${bg_hover};
+    color: ${text_primary};
+}
+
+#EditAssetDialogCloseButton:pressed {
+    background: ${bg_active};
+}
+
+/* ===== 内容区域 ===== */
+#EditAssetDialogContent {
+    background: transparent;
+}
+
+/* ===== 区域标签 ===== */
+#SectionLabel {
+    color: ${text_primary};
+    font-size: 14px;
+    font-weight: 600;
+    background: transparent;
+}
+
+/* ===== 输入框 ===== */
+#EditAssetInput {
+    background-color: ${input_bg};
+    border: none;
+    border-radius: 8px;
+    padding: 0 16px;
+    color: ${text_primary};
+    font-size: 14px;
+}
+
+#EditAssetInput:focus {
+    background-color: ${input_bg_hover};
+    border: none;
+    outline: none;
+}
+
+#EditAssetInput::placeholder {
+    color: ${text_disabled};
+}
+
+/* ===== 分类选择框 ===== */
+#EditAssetCategoryCombo {
+    background-color: ${input_bg};
+    border: none;
+    border-radius: 8px;
+    padding: 0 16px;
+    color: ${text_primary};
+    font-size: 14px;
+}
+
+#EditAssetCategoryCombo:hover {
+    background-color: ${input_bg_hover};
+    border: none;
+}
+
+#EditAssetCategoryCombo:focus {
+    background-color: ${input_bg_hover};
+    border: none;
+    outline: none;
+}
+
+#EditAssetCategoryCombo::drop-down {
+    border: none;
+    width: 0px;
+}
+
+#EditAssetCategoryCombo::down-arrow {
+    image: none;
+    width: 0px;
+    height: 0px;
+    border: none;
+}
+
+#EditAssetCategoryCombo QAbstractItemView {
+    background-color: ${bg_tertiary};
+    border: 1px solid ${border_secondary};
+    selection-background-color: ${primary};
+    color: ${text_primary};
+    padding: 2px;
+    outline: none;
+    margin: 0px;
+}
+
+#EditAssetCategoryCombo QAbstractItemView::item {
+    padding: 8px 12px;
+    border-radius: 4px;
+    border: none;
+}
+
+#EditAssetCategoryCombo QAbstractItemView::item:hover {
+    background-color: ${bg_hover};
+}
+
+#EditAssetCategoryCombo QAbstractItemView::item:selected {
+    background-color: ${primary};
+    color: ${text_primary};
+}
+
+/* ===== 错误标签 ===== */
+#ErrorLabel {
+    color: ${error};
+    font-size: 13px;
+    background: transparent;
+}
+
+/* ===== 取消按钮 ===== */
+#CancelButton {
+    background-color: ${button_secondary_bg};
+    color: ${text_primary};
+    border: none;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 600;
+}
+
+#CancelButton:hover {
+    background-color: ${button_secondary_hover};
+}
+
+#CancelButton:pressed {
+    background-color: ${button_secondary_active};
+}
+
+/* ===== 确定按钮 ===== */
+#OkButton {
+    background-color: ${primary};
+    color: ${text_primary};
+    border: none;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 600;
+}
+
+#OkButton:hover {
+    background-color: ${primary_hover};
+}
+
+#OkButton:pressed {
+    background-color: ${primary_active};
+}
+
+/* ===== 编辑文档按钮 ===== */
+#EditDocButton {
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+        stop:0 ${doc_button_bg_start},
+        stop:1 ${doc_button_bg_end});
+    color: ${doc_button_text};
+    border: none;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 500;
+    padding: 0 12px;
+}
+
+#EditDocButton:hover {
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+        stop:0 ${doc_button_bg_start_hover},
+        stop:1 ${doc_button_bg_end_hover});
+    color: ${doc_button_text_hover};
+}
+
+#EditDocButton:pressed {
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+        stop:0 ${doc_button_bg_start_pressed},
+        stop:1 ${doc_button_bg_end_pressed});
+}
+
+/* ===== 删除文档按钮 ===== */
+#DeleteDocButton {
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+        stop:0 ${delete_button_bg_start},
+        stop:1 ${delete_button_bg_end});
+    color: ${delete_button_text};
+    border: none;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 500;
+    padding: 0 12px;
+}
+
+#DeleteDocButton:hover {
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+        stop:0 ${delete_button_bg_start_hover},
+        stop:1 ${delete_button_bg_end_hover});
+    color: ${delete_button_text_hover};
+}
+
+#DeleteDocButton:pressed {
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+        stop:0 ${delete_button_bg_start_pressed},
+        stop:1 ${delete_button_bg_end_pressed});
+}
+
+/* ===== 创建文档按钮 ===== */
+#CreateDocButton {
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+        stop:0 ${create_button_bg_start},
+        stop:1 ${create_button_bg_end});
+    color: ${create_button_text};
+    border: none;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 500;
+    padding: 0 12px;
+}
+
+#CreateDocButton:hover {
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+        stop:0 ${create_button_bg_start_hover},
+        stop:1 ${create_button_bg_end_hover});
+    color: ${create_button_text_hover};
+}
+
+#CreateDocButton:pressed {
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+        stop:0 ${create_button_bg_start_pressed},
+        stop:1 ${create_button_bg_end_pressed});
+}

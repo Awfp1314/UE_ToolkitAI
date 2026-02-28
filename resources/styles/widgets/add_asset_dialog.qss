@@ -1,0 +1,241 @@
+/* ===== 添加资产对话框样式 ===== */
+
+/* 对话框本身 */
+#AddAssetDialog {
+    background-color: transparent;
+}
+
+/* 主容器 */
+#AddAssetDialogContainer {
+    background: qlineargradient(
+        x1:0, y1:0, x2:1, y2:1,
+        stop:0 ${bg_primary},
+        stop:1 ${bg_secondary}
+    );
+    border: 1px solid ${border_primary};
+    border-radius: 0px;
+}
+
+/* 标题栏 */
+#AddAssetDialogTitleBar {
+    background: ${bg_secondary};
+    border-bottom: 1px solid ${border_secondary};
+}
+
+#AddAssetDialogTitleIcon {
+    font-size: 24px;
+    padding: 0px 8px;
+}
+
+#AddAssetDialogTitleLabel {
+    color: ${text_primary};
+    font-size: 16px;
+    font-weight: 600;
+    padding-left: 5px;
+}
+
+/* 内容区域 */
+#AddAssetDialogContent {
+    background-color: transparent;
+}
+
+/* 标签 */
+#AddAssetDialogLabel {
+    color: ${text_secondary};
+    font-size: 13px;
+    font-weight: 600;
+    padding: 3px 0px;
+}
+
+/* 输入框 */
+#AddAssetDialogInput,
+#AddAssetDialogPathInput {
+    background-color: ${bg_tertiary};
+    border: none;
+    border-radius: 8px;
+    padding: 10px 15px;
+    color: ${text_primary};
+    font-size: 13px;
+    selection-background-color: ${primary};
+}
+
+#AddAssetDialogInput:focus,
+#AddAssetDialogPathInput:focus {
+    border: none;
+    background-color: ${bg_hover};
+}
+
+#AddAssetDialogInput::placeholder,
+#AddAssetDialogPathInput::placeholder {
+    color: ${text_tertiary};
+}
+
+/* 下拉框 */
+#AddAssetDialogCombo {
+    background-color: ${bg_tertiary};
+    border: none;
+    border-radius: 8px;
+    padding: 10px 15px;
+    padding-right: 15px;
+    color: ${text_primary};
+    font-size: 13px;
+}
+
+#AddAssetDialogCombo:hover {
+    border: none;
+    background-color: ${bg_hover};
+}
+
+#AddAssetDialogCombo:focus {
+    border: none;
+}
+
+#AddAssetDialogCombo::drop-down {
+    border: none;
+    width: 0px;
+}
+
+#AddAssetDialogCombo::down-arrow {
+    image: none;
+    width: 0px;
+    height: 0px;
+}
+
+#AddAssetDialogCombo QAbstractItemView {
+    background-color: ${bg_secondary};
+    border: 1px solid ${border_primary};
+    selection-background-color: ${primary};
+    selection-color: ${text_primary};
+    color: ${text_primary};
+    padding: 5px;
+    outline: none;
+}
+
+#AddAssetDialogCombo QAbstractItemView::item {
+    padding: 8px 12px;
+    border-radius: 4px;
+    min-height: 30px;
+}
+
+#AddAssetDialogCombo QAbstractItemView::item:hover {
+    background-color: ${bg_hover};
+}
+
+#AddAssetDialogCombo QAbstractItemView::item:selected {
+    background-color: ${primary};
+}
+
+/* 复选框 */
+#AddAssetDialogCheckbox {
+    color: ${text_primary};
+    font-size: 13px;
+    spacing: 8px;
+}
+
+#AddAssetDialogCheckbox::indicator {
+    width: 18px;
+    height: 18px;
+    border: none;
+    border-radius: 3px;
+    background-color: ${bg_tertiary};
+}
+
+#AddAssetDialogCheckbox::indicator:hover {
+    border: none;
+    background-color: ${bg_hover};
+}
+
+#AddAssetDialogCheckbox::indicator:checked {
+    background-color: ${primary};
+    border: none;
+}
+
+/* 错误标签 */
+#AddAssetDialogErrorLabel {
+    color: ${error};
+    font-size: 13px;
+    font-weight: 600;
+    padding: 12px;
+    background-color: ${bg_tertiary};
+    border: none;
+    border-radius: 8px;
+}
+
+/* 浏览按钮 */
+#AddAssetDialogBrowseBtn {
+    background: ${bg_tertiary};
+    border: none;
+    border-radius: 8px;
+    color: ${text_primary};
+    font-size: 13px;
+    font-weight: 600;
+    padding: 10px 18px;
+    min-width: 70px;
+}
+
+#AddAssetDialogBrowseBtn:hover {
+    background: ${bg_hover};
+}
+
+#AddAssetDialogBrowseBtn:pressed {
+    background: ${bg_active};
+}
+
+/* 取消按钮 */
+#AddAssetDialogCancelBtn {
+    background-color: ${bg_tertiary};
+    border: none;
+    border-radius: 8px;
+    color: ${text_primary};
+    font-size: 13px;
+    font-weight: 600;
+}
+
+#AddAssetDialogCancelBtn:hover {
+    background-color: ${bg_hover};
+}
+
+#AddAssetDialogCancelBtn:pressed {
+    background-color: ${bg_active};
+}
+
+/* 添加按钮 */
+#AddAssetDialogAddBtn {
+    background: ${primary};
+    border: none;
+    border-radius: 8px;
+    color: ${text_primary};
+    font-size: 13px;
+    font-weight: 600;
+}
+
+#AddAssetDialogAddBtn:hover {
+    background: ${primary_hover};
+}
+
+#AddAssetDialogAddBtn:pressed {
+    background: ${primary_active};
+}
+
+/* 右键菜单 */
+#AddAssetDialogMenu {
+    background-color: ${bg_tertiary};
+    border: 1px solid ${border_primary};
+    border-radius: 8px;
+    padding: 5px;
+}
+
+#AddAssetDialogMenu::item {
+    color: ${text_primary};
+    padding: 10px 20px;
+    border-radius: 4px;
+    font-size: 14px;
+}
+
+#AddAssetDialogMenu::item:selected {
+    background-color: ${primary};
+}
+
+#AddAssetDialogMenu::item:hover {
+    background-color: ${bg_hover};
+}

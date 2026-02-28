@@ -1,0 +1,57 @@
+/* ===== AI回复消息气泡样式 ===== */
+
+/* AI消息气泡容器 */
+#AIMessageBubble {
+    background-color: transparent;
+    border: none;
+}
+
+/* AI消息内容容器 */
+#AIMessageContainer {
+    background-color: transparent;
+    border: none;
+}
+
+/* AI消息文本浏览器 */
+#AIMessageContent {
+    background-color: transparent;
+    border: none;
+    color: ${ai_message_text};
+    selection-background-color: #0078D4;  /* 蓝色选中背景 */
+    selection-color: #FFFFFF;  /* 白色选中文本 */
+}
+
+/* ======================================== 
+   操作按钮（复制、重新生成）- 主题切换
+   ======================================== */
+/* 深色主题按钮 */
+QPushButton#action_button[theme="dark"] {
+    background-color: transparent;
+    border: none;
+    border-radius: 6px;
+    padding: 4px;
+}
+
+QPushButton#action_button[theme="dark"]:hover {
+    background-color: ${action_button_hover_dark};
+}
+
+QPushButton#action_button[theme="dark"]:pressed {
+    background-color: ${action_button_pressed_dark};
+}
+
+/* 浅色主题按钮 */
+QPushButton#action_button[theme="light"] {
+    background-color: transparent;
+    border: none;
+    border-radius: 6px;
+    padding: 4px;
+}
+
+QPushButton#action_button[theme="light"]:hover {
+    background-color: ${action_button_hover_light};
+}
+
+QPushButton#action_button[theme="light"]:pressed {
+    background-color: ${action_button_pressed_light};
+}

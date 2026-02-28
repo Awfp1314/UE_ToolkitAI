@@ -1,0 +1,15 @@
+/* ========================================
+   基础样式 - Base Styles
+   ======================================== */
+
+/* ===== 全局重置 ===== */
+* {
+    outline: none;
+}
+
+/* ===== 默认字体 ===== */
+QWidget {
+    font-family: "Microsoft YaHei UI", "Segoe UI", sans-serif;
+    font-size: 14px;
+}
+

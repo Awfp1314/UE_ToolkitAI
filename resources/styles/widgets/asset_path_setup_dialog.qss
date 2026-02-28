@@ -1,0 +1,128 @@
+/* ===== 资产库路径设置弹窗样式 ===== */
+
+/* 容器 */
+#AssetPathSetupDialogContainer {
+    background-color: ${bg_secondary};
+    border: 1px solid ${primary_border};
+    border-radius: 0px;
+}
+
+/* 标题栏 */
+#AssetPathSetupDialogTitleBar {
+    background: qlineargradient(
+        x1:0, y1:0, x2:0, y2:1,
+        stop:0 rgba(74, 158, 255, 0.2),
+        stop:1 rgba(74, 158, 255, 0.1)
+    );
+    border-bottom: 1px solid ${primary_border};
+}
+
+/* 标题图标 */
+#AssetPathSetupDialogTitleIcon {
+    color: ${primary};
+    font-size: 18px;
+}
+
+/* 标题文字 */
+#AssetPathSetupDialogTitleLabel {
+    color: ${text_primary};
+    font-size: 14px;
+    font-weight: bold;
+}
+
+/* 内容区域 */
+#AssetPathSetupDialogContent {
+    background-color: ${bg_secondary};
+    border-bottom-left-radius: 8px;
+    border-bottom-right-radius: 8px;
+}
+
+/* 描述文字 */
+#AssetPathSetupDialogDescription {
+    color: ${text_secondary};
+    font-size: 13px;
+    line-height: 1.5;
+}
+
+/* 标签 */
+#AssetPathSetupDialogLabel {
+    color: ${text_primary};
+    font-size: 13px;
+    font-weight: bold;
+}
+
+/* 输入框 */
+#AssetPathSetupDialogInput {
+    background-color: ${bg_primary};
+    color: ${text_primary};
+    border: none;
+    border-radius: 5px;
+    padding: 8px 12px;
+    font-size: 13px;
+}
+
+#AssetPathSetupDialogInput:focus {
+    border: none;
+    background-color: ${bg_tertiary};
+}
+
+#AssetPathSetupDialogInput::placeholder {
+    color: ${text_disabled};
+}
+
+/* 浏览按钮 */
+#AssetPathSetupDialogBrowseBtn {
+    background-color: ${bg_tertiary};
+    color: ${text_primary};
+    border: none;
+    border-radius: 5px;
+    padding: 8px 20px;
+    font-size: 13px;
+    font-weight: bold;
+}
+
+#AssetPathSetupDialogBrowseBtn:hover {
+    background-color: ${bg_hover};
+}
+
+#AssetPathSetupDialogBrowseBtn:pressed {
+    background-color: ${bg_active};
+}
+
+/* 提示文字 */
+#AssetPathSetupDialogHint {
+    color: ${text_tertiary};
+    font-size: 12px;
+}
+
+#AssetPathSetupDialogHint[valid="true"] {
+    color: #4ade80;
+}
+
+#AssetPathSetupDialogHint[valid="false"] {
+    color: #fbbf24;
+}
+
+/* 确认按钮 */
+#AssetPathSetupDialogConfirmBtn {
+    background-color: ${primary};
+    color: white;
+    border: none;
+    border-radius: 5px;
+    padding: 10px 28px;
+    font-size: 13px;
+    font-weight: bold;
+}
+
+#AssetPathSetupDialogConfirmBtn:hover {
+    background-color: ${primary_hover};
+}
+
+#AssetPathSetupDialogConfirmBtn:pressed {
+    background-color: ${primary_active};
+}
+
+#AssetPathSetupDialogConfirmBtn:disabled {
+    background-color: ${bg_tertiary};
+    color: ${text_disabled};
+}
