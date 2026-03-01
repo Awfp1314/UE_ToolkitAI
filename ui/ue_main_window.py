@@ -446,41 +446,41 @@ class UEMainWindow(QMainWindow):
             self._update_license_status_ui()
 
     def _update_license_status_ui(self):
-        """根据本地授权数据更新标题栏状态 + 侧边栏试用提示"""
+        """根据本地授权数据更新标题栏状态"""
         try:
+            from core.security.license_manager import get_license_status
+            import time as _time
             from core.security.machine_id import MachineID
             from core.security.license_crypto import LicenseCrypto
 
-            machine = MachineID()
-            crypto = LicenseCrypto(machine.get_machine_id())
-            data = crypto.load()
-            license_type = data.get("license_type") if data else None
-
-            if license_type == "permanent" or license_type == "daily":
-                import time as _time
-                expire = data.get("expire_time")
-                if expire:
-                    # 天卡 — 显示剩余时间
-                    remaining_sec = max(0, expire - _time.time())
-                    remaining_hours = int(remaining_sec / 3600)
-                    remaining_days = int(remaining_sec / 86400)
-                    if remaining_days >= 1:
-                        self.license_status_label.setText(f"剩余 {remaining_days}天")
+            status = get_license_status()
+            
+            if status == "permanent":
+                # 永久授权 — 隐藏所有提示
+                self._license_container.hide()
+            elif status == "daily":
+                # 天卡 — 显示剩余时间
+                machine = MachineID()
+                crypto = LicenseCrypto(machine.get_machine_id())
+                data = crypto.load()
+                if data:
+                    expire = data.get("expire_time")
+                    if expire:
+                        remaining_sec = max(0, expire - _time.time())
+                        remaining_hours = int(remaining_sec / 3600)
+                        remaining_days = int(remaining_sec / 86400)
+                        if remaining_days >= 1:
+                            self.license_status_label.setText(f"剩余 {remaining_days}天")
+                        else:
+                            self.license_status_label.setText(f"剩余 {remaining_hours}小时")
+                        self._license_container.show()
                     else:
-                        self.license_status_label.setText(f"剩余 {remaining_hours}小时")
-                    self._license_container.show()
+                        self._license_container.hide()
                 else:
-                    # 永久授权 — 隐藏所有提示
                     self._license_container.hide()
-            elif license_type == "trial":
-                import time as _time
-                expire = data.get("expire_time", 0)
-                remaining = max(0, int((expire - _time.time()) / 86400)) if expire else 0
-                self.license_status_label.setText(f"试用 {remaining}天")
-                self._license_container.show()
             else:
-                self.license_status_label.setText("未授权")
-                self._license_container.show()
+                # 无授权或已过期 — 隐藏（Freemium 模式不强制显示）
+                self._license_container.hide()
         except Exception as e:
             self.logger.warning(f"更新授权状态UI失败: {e}")
             self._license_container.hide()
@@ -758,9 +758,124 @@ class UEMainWindow(QMainWindow):
 
     def switch_module(self, index):
         """切换模块"""
+        # 检查模块访问权限
+        if not self._check_module_access(index):
+            return
+        
         # 取消所有导航按钮的选中状态
         for btn in self.nav_buttons:
             btn.setChecked(False)
+
+        # 选中当前按钮
+        if 0 <= index < len(self.nav_buttons):
+            self.nav_buttons[index].setChecked(True)
+
+        # 先切换页面（立即响应），再异步懒加载
+        if self.content_stack is not None:
+            self.content_stack.setCurrentIndex(index)
+
+        # 更新副标题为模块名称
+        if hasattr(self, "module_names") and 0 <= index < len(self.module_names):
+            module_name = self.module_names[index]
+            
+            # 如果是AI助手模块，添加当前模型名称（灰色小字）
+            if module_name == "AI 助手":
+                model_info = self._get_ai_model_name()
+                if model_info:
+                    # 使用HTML设置不同样式：标题正常，模型名称灰色小字
+                    self.subtitle_label.setText(
+                        f'{module_name}    '
+                        f'<span style="font-size: 14px; color: #888; font-weight: normal;">{model_info}</span>'
+                    )
+                else:
+                    self.subtitle_label.setText(module_name)
+            else:
+                self.subtitle_label.setText(module_name)
+
+        # 首次切换到该模块时，延迟到下一个事件循环再懒加载，避免阻塞 UI
+        if index not in getattr(self, "_loaded_module_indices", set()):
+            from PyQt6.QtCore import QTimer
+            QTimer.singleShot(0, lambda idx=index: self._ensure_module_loaded(idx))
+    
+    def _check_module_access(self, index: int) -> bool:
+        """检查模块访问权限
+        
+        Args:
+            index: 模块索引
+            
+        Returns:
+            True: 允许访问
+            False: 拒绝访问（弹出激活引导）
+        """
+        # 免费模块列表（索引）
+        # 0: 我的工程, 1: 资产管理, 4: 站点推荐
+        FREE_MODULE_INDICES = [0, 1, 4]
+        
+        # 如果是免费模块，直接放行
+        if index in FREE_MODULE_INDICES:
+            return True
+        
+        # 付费模块：检查授权状态
+        from core.security.license_manager import get_license_status
+        status = get_license_status()
+        
+        # 有效授权：放行
+        if status in ["permanent", "daily"]:
+            return True
+        
+        # 无授权或已过期：弹出激活引导
+        self._show_activation_guide(status)
+        return False
+    
+    def _show_activation_guide(self, license_status: str):
+        """显示激活引导对话框
+        
+        Args:
+            license_status: 当前授权状态 ("none", "expired")
+        """
+        from ui.dialogs.activation_guide_dialog import ActivationGuideDialog
+        from core.security.license_manager import LicenseManager
+        
+        lm = LicenseManager()
+        purchase_link = lm._get_purchase_link()
+        
+        while True:
+            dialog = ActivationGuideDialog(
+                parent=self,
+                purchase_link=purchase_link,
+                license_status=license_status
+            )
+            dialog.exec()
+            
+            if dialog.result_action != ActivationGuideDialog.RESULT_ACTIVATED:
+                # 用户取消，不做任何操作
+                return
+            
+            # 用户输入了激活码，尝试激活
+            key = dialog.get_activation_key()
+            if not key:
+                continue
+            
+            # 显示加载状态
+            dialog.set_loading(True)
+            
+            # 尝试激活
+            if lm.activate(key):
+                # 激活成功
+                dialog.set_status("激活成功！", is_error=False)
+                from PyQt6.QtCore import QTimer
+                QTimer.singleShot(1000, dialog.accept)
+                
+                # 刷新授权状态UI
+                if hasattr(self, '_update_license_status_ui'):
+                    self._update_license_status_ui()
+                
+                return
+            else:
+                # 激活失败
+                dialog.set_loading(False)
+                dialog.set_status("激活码无效或已被使用，请检查后重试", is_error=True)
+                # 继续循环，让用户重试
 
         # 选中当前按钮
         if 0 <= index < len(self.nav_buttons):

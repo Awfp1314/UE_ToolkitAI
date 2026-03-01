@@ -111,7 +111,7 @@ class ActivationDialog(QDialog):
             content_layout.addWidget(buy_label)
 
         # 进群领码提示
-        from ui.dialogs.trial_expired_dialog import QQ_GROUP_NUMBER
+        QQ_GROUP_NUMBER = "1048699469"
         group_row = QHBoxLayout()
         group_row.setSpacing(6)
         group_hint = QLabel(f"进群领免费激活码：{QQ_GROUP_NUMBER}")
@@ -207,7 +207,7 @@ class ActivationDialog(QDialog):
 
     def _on_copy_group(self):
         """复制群号到剪贴板"""
-        from ui.dialogs.trial_expired_dialog import QQ_GROUP_NUMBER
+        QQ_GROUP_NUMBER = "1048699469"
         clipboard = QApplication.clipboard()
         if clipboard:
             clipboard.setText(QQ_GROUP_NUMBER)

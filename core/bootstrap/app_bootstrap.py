@@ -43,11 +43,8 @@ class AppBootstrap:
 
         self.logger = get_logger(__name__)
 
-    def run(self, license_pre_ok: bool = False) -> int:
+    def run(self) -> int:
         """执行完整的启动流程
-
-        Args:
-            license_pre_ok: 如果 quick_license_check 已返回 "ok"，跳过重复验证
 
         Returns:
             int: 退出码 (0=成功, 1=初始化失败, 2=模块加载失败, 3=UI创建失败)
@@ -68,17 +65,8 @@ class AppBootstrap:
 
             self.logger.info("应用初始化阶段完成")
 
-            # 授权验证（完整检查，可显示 UI）
-            from core.security.license_manager import _DEV_MODE
-            if not _DEV_MODE:
-                if license_pre_ok:
-                    self.logger.info("预检已通过，跳过重复授权验证")
-                else:
-                    from core.security.license_manager import LicenseManager
-                    lm = LicenseManager()
-                    if not lm.check_license():
-                        self.logger.error("授权验证失败")
-                        return 1
+            # Freemium 模式：不做授权验证拦截
+            # 授权检查在用户点击付费模块时进行
 
             # 5.3: UI 准备阶段
             self.logger.info("开始 UI 准备阶段")

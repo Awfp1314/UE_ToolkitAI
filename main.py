@@ -91,22 +91,12 @@ def main():
         _reset_license()
         return 0
 
-    # 快速静默授权预检（无 UI）
-    # 延迟导入，避免在开发模式下也加载 cryptography 等重量级依赖
-    license_pre_ok = False
-    from core.security.license_manager import _DEV_MODE
-    if not _DEV_MODE:
-        from core.security.license_manager import quick_license_check
-        result = quick_license_check()
-        if result == "ok":
-            license_pre_ok = True
-        # "needs_ui" → 交给 AppBootstrap 处理
-
-    # 创建 AppBootstrap 实例，传递预检结果避免重复验证
+    # Freemium 模式：直接启动，不做授权预检
+    # 授权检查在用户点击付费模块时进行
     bootstrap = AppBootstrap()
     
     # 调用 bootstrap.run() 并返回退出码
-    return bootstrap.run(license_pre_ok=license_pre_ok)
+    return bootstrap.run()
 
 
 if __name__ == "__main__":
