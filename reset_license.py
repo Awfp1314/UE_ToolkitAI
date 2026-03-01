@@ -79,6 +79,10 @@ def _reset_server_trial():
         from core.server_config import get_server_base_url
         from core.update_checker import UpdateChecker
 
+        # 创建无代理 opener（确保所有请求都绕过代理）
+        no_proxy_handler = urllib.request.ProxyHandler({})
+        opener = urllib.request.build_opener(no_proxy_handler)
+
         base_url = get_server_base_url()
         machine_id = MachineID().get_machine_id()
         
@@ -104,7 +108,7 @@ def _reset_server_trial():
             headers={"Content-Type": "application/json"},
             method="POST",
         )
-        with urllib.request.urlopen(login_req, timeout=5) as resp:
+        with opener.open(login_req, timeout=5) as resp:
             login_result = json.loads(resp.read().decode("utf-8"))
 
         token = login_result.get("token")
@@ -122,7 +126,7 @@ def _reset_server_trial():
         data = json.dumps({"machine_id": machine_id}).encode("utf-8")
         req = urllib.request.Request(url, data=data, headers=auth_headers, method="POST")
         try:
-            with urllib.request.urlopen(req, timeout=5) as resp:
+            with opener.open(req, timeout=5) as resp:
                 result = json.loads(resp.read().decode("utf-8"))
                 if result.get("success"):
                     print("  [OK] 已清除: 服务器端试用记录")
@@ -137,7 +141,7 @@ def _reset_server_trial():
             url = f"{base_url}/api/v2/admin/users/{user_id}"
             req = urllib.request.Request(url, headers=auth_headers, method="DELETE")
             try:
-                with urllib.request.urlopen(req, timeout=5) as resp:
+                with opener.open(req, timeout=5) as resp:
                     result = json.loads(resp.read().decode("utf-8"))
                     print(f"  [OK] 已清除: 用户统计记录 (user_id={user_id[:8]}...)")
                     user_cleared = True
@@ -156,7 +160,7 @@ def _reset_server_trial():
                 url = f"{base_url}/api/v2/admin/users"
                 req = urllib.request.Request(url, headers=auth_headers, method="DELETE")
                 try:
-                    with urllib.request.urlopen(req, timeout=5) as resp:
+                    with opener.open(req, timeout=5) as resp:
                         result = json.loads(resp.read().decode("utf-8"))
                         stats = result.get('stats_deleted', '?')
                         events = result.get('events_deleted', '?')
