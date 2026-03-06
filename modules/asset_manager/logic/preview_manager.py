@@ -313,7 +313,82 @@ class PreviewManager:
                 self._logger.error(f"Asset path not found: {asset_path}")
                 return False
 
-            target_path = preview_project.parent / "Content" / asset_path.name
+            # 检查是否为包装结构（包含 Content 子文件夹）
+            content_folder = asset_path / "Content"
+            if content_folder.exists():
+                # 新的包装结构：链接 Content 文件夹内的所有内容到预览工程的 Content 文件夹
+                target_base = preview_project.parent / "Content"
+                self._logger.info(f"Preview: 使用包装结构，从 {content_folder} 链接内容到 {target_base}")
+                
+                # 手动实现扁平化链接：遍历 Content 文件夹内的所有内容，逐个链接到预览工程的 Content 文件夹
+                self._logger.info(f"🔗 Preview mode: manually linking Content folder contents")
+                
+                # 确保目标目录存在
+                target_base.mkdir(parents=True, exist_ok=True)
+                
+                # 获取所有需要链接的项目
+                all_items = list(content_folder.rglob('*'))
+                total_items = len(all_items)
+                
+                if total_items == 0:
+                    self._logger.info("Preview: Content folder is empty")
+                    if progress_callback:
+                        progress_callback(100, 100, "Preview setup complete")
+                    return True
+                
+                self._logger.info(f"Preview: Linking {total_items} items from Content folder")
+                
+                # 逐个链接每个项目
+                success = True
+                processed = 0
+                
+                for item in all_items:
+                    try:
+                        # 计算相对路径（相对于 content_folder）
+                        rel_path = item.relative_to(content_folder)
+                        target_item = target_base / rel_path
+                        
+                        # 创建目标父目录
+                        target_item.parent.mkdir(parents=True, exist_ok=True)
+                        
+                        # 删除旧的目标（如果存在）
+                        if target_item.exists():
+                            if target_item.is_dir():
+                                import shutil
+                                shutil.rmtree(target_item)
+                            else:
+                                target_item.unlink()
+                        
+                        # 创建符号链接
+                        import os
+                        if item.is_dir():
+                            os.symlink(str(item.resolve()), str(target_item.resolve()), target_is_directory=True)
+                        else:
+                            os.symlink(str(item.resolve()), str(target_item.resolve()))
+                        
+                        processed += 1
+                        if progress_callback and processed % 10 == 0:
+                            progress = 30 + int((processed / total_items) * 30)
+                            progress_callback(progress, 100, f"Linking: {rel_path}")
+                        
+                    except Exception as e:
+                        self._logger.error(f"Preview: Failed to link {item}: {e}")
+                        success = False
+                        break
+                
+                if not success:
+                    self._logger.error("Preview: Manual linking failed")
+                    return False
+                
+                self._logger.info(f"Preview: Successfully linked {processed} items")
+                if progress_callback:
+                    progress_callback(100, 100, "Preview setup complete")
+                return True
+            else:
+                # 旧的直接结构：链接资产文件夹到预览工程的 Content 文件夹
+                target_path = preview_project.parent / "Content" / asset_path.name
+                self._logger.info(f"Preview: 使用直接结构，从 {asset_path} 链接到 {target_path}")
+                source_path = asset_path
 
             # 创建进度包装器，将文件级进度映射到30-60%范围
             def copy_progress_wrapper(current, total, message):
@@ -325,7 +400,7 @@ class PreviewManager:
 
             self._logger.info(f"🔗 Preview mode: using symlink for fast copy")
             success = self._file_ops.safe_copytree(
-                asset_path, 
+                source_path, 
                 target_path, 
                 progress_callback=copy_progress_wrapper,
                 incremental=False,  # 预览后会清空，不使用增量

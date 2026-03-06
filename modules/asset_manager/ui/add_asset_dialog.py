@@ -27,7 +27,7 @@ class AddAssetDialog(QDialog):
     
     def __init__(self, existing_asset_names: List[str], categories: List[str], 
                  prefill_path: Optional[str] = None, prefill_type: Optional[AssetType] = None,
-                 prefill_category: Optional[str] = None, parent=None):
+                 prefill_category: Optional[str] = None, prefill_name: Optional[str] = None, parent=None):
         """初始化对话框
         
         Args:
@@ -36,6 +36,7 @@ class AddAssetDialog(QDialog):
             prefill_path: 预填充的资产路径（可选）
             prefill_type: 预填充的资产类型（可选）
             prefill_category: 预填充的分类（可选）
+            prefill_name: 预填充的资产名称（可选）
             parent: 父组件
         """
         super().__init__(parent)
@@ -47,6 +48,7 @@ class AddAssetDialog(QDialog):
         self.prefill_path = prefill_path
         self.prefill_type = prefill_type
         self.prefill_category = prefill_category
+        self.prefill_name = prefill_name
         self.drag_position = QPoint()
         
         self.init_ui()
@@ -204,13 +206,17 @@ class AddAssetDialog(QDialog):
             self.asset_path = Path(self.prefill_path)
             self.asset_type = self.prefill_type
             
-            # 自动填充资产名称
-            path = Path(self.prefill_path)
-            if self.prefill_type == AssetType.FILE:
-                auto_name = path.stem
-            else:
-                auto_name = path.name
-            self.name_input.setText(auto_name)
+            # 如果有预填名称，使用预填名称
+            if self.prefill_name:
+                self.name_input.setText(self.prefill_name)
+            # 如果有预填路径但没有预填名称，自动填充名称
+            elif self.prefill_path:
+                path = Path(self.prefill_path)
+                if self.prefill_type == AssetType.FILE:
+                    auto_name = path.stem
+                else:
+                    auto_name = path.name
+                self.name_input.setText(auto_name)
         
         # 如果有预填分类，设置默认分类
         if self.prefill_category:

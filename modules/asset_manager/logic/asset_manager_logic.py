@@ -74,6 +74,7 @@ class AssetManagerLogic(QObject):
     error_occurred = pyqtSignal(str)
     progress_updated = pyqtSignal(int, int, str)
     asset_selected = pyqtSignal(dict)
+    new_asset_detected = pyqtSignal(str, object)  # path, AssetType
 
     def __init__(self, config_dir: Path):
         super().__init__()
@@ -197,6 +198,21 @@ class AssetManagerLogic(QObject):
             cached_assets_data = self._asset_scanner._fix_drive_letter_in_cache(
                 cached_assets_data, current_drive
             )
+            
+            # 修复资产库路径变更（如果资产库文件夹改名）
+            if cached_assets_data and cached_assets_data[0].get("path"):
+                # 从缓存中的第一个资产路径推断旧的资产库路径
+                first_asset_path = Path(cached_assets_data[0]["path"])
+                # 找到资产库根目录（假设资产在分类文件夹下）
+                # 例如：D:\OldName\默认分类\Asset -> D:\OldName
+                old_library_path = first_asset_path.parent.parent
+                new_library_path = Path(asset_library_path)
+                
+                if old_library_path != new_library_path:
+                    cached_assets_data = self._asset_scanner._fix_library_path_in_cache(
+                        cached_assets_data, str(old_library_path), str(new_library_path)
+                    )
+            
             logger.info(f"从缓存快速加载 {len(cached_assets_data)} 个资产")
             self._load_assets_from_config(cached_assets_data)
             self._search_engine.build_pinyin_cache(self.assets)
@@ -405,6 +421,14 @@ class AssetManagerLogic(QObject):
                          category: str, description: str, create_markdown: bool,
                          progress_callback: Optional[Callable] = None) -> Optional[Asset]:
         """添加资产的统一实现"""
+        # 暂时禁用自动检测器，避免在添加资产期间触发重复检测
+        auto_detector_was_enabled = False
+        if hasattr(self, '_auto_detector') and self._auto_detector:
+            auto_detector_was_enabled = self._auto_detector._enabled
+            if auto_detector_was_enabled:
+                logger.info("暂时禁用自动检测器（添加资产期间）")
+                self._auto_detector.stop()
+
         try:
             if progress_callback:
                 progress_callback(0, 100, "准备添加资产...")
@@ -430,23 +454,28 @@ class AssetManagerLogic(QObject):
             if not category_folder.exists():
                 category_folder.mkdir(parents=True, exist_ok=True)
 
-            # 确定目标路径（处理重名）
-            target_path = category_folder / asset_path.name
-            if target_path.exists():
-                base_name = asset_path.stem
-                suffix = asset_path.suffix
+            # 确定资产包装文件夹名称（用户命名，处理重名）
+            asset_wrapper_name = name if name else asset_path.name
+            wrapper_path = category_folder / asset_wrapper_name
+            if wrapper_path.exists():
                 counter = 1
-                while target_path.exists():
-                    if asset_type == AssetType.PACKAGE:
-                        target_path = category_folder / f"{base_name}_{counter}"
-                    else:
-                        target_path = category_folder / f"{base_name}_{counter}{suffix}"
+                while wrapper_path.exists():
+                    wrapper_path = category_folder / f"{asset_wrapper_name}_{counter}"
                     counter += 1
+                asset_wrapper_name = wrapper_path.name
+
+            # 创建包装结构：用户命名/Content/
+            wrapper_path.mkdir(parents=True, exist_ok=True)
+            content_folder = wrapper_path / "Content"
+            content_folder.mkdir(parents=True, exist_ok=True)
+            
+            # 目标路径是 Content 文件夹内
+            target_path = content_folder / asset_path.name
 
             if progress_callback:
                 progress_callback(10, 100, "移动资产文件...")
 
-            # 移动资产到资产库
+            # 移动资产到资产库的 Content 文件夹内
             logger.info(f"开始移动资产: {asset_path} -> {target_path}")
 
             def move_progress(current, total, message):
@@ -476,17 +505,17 @@ class AssetManagerLogic(QObject):
             if progress_callback:
                 progress_callback(80, 100, "创建资产记录...")
 
-            # 创建资产对象
+            # 创建资产对象（指向包装文件夹，而不是 Content 内的实际内容）
             asset_id = str(uuid.uuid4())
-            asset_name = name if name else target_path.name
-            size = self._file_ops.calculate_size(target_path)
-            file_extension = target_path.suffix.lower() if asset_type == AssetType.FILE else ""
+            asset_name = asset_wrapper_name  # 使用包装文件夹名称
+            size = self._file_ops.calculate_size(wrapper_path)  # 计算整个包装文件夹的大小
+            file_extension = ""  # 包装文件夹没有扩展名
 
             asset = Asset(
                 id=asset_id,
                 name=asset_name,
-                asset_type=asset_type,
-                path=target_path,
+                asset_type=AssetType.PACKAGE,  # 始终是 PACKAGE 类型
+                path=wrapper_path,  # 指向包装文件夹
                 category=category,
                 file_extension=file_extension,
                 size=size,
@@ -1173,3 +1202,20 @@ class AssetManagerLogic(QObject):
     def _migrate_local_config(self, config: Dict[str, Any]) -> Dict[str, Any]:
         """委托给 AssetLocalConfigManager"""
         return self._local_config._migrate_local_config(config)
+
+    # ─── 资产自动检测 ──────────────────────────────────────
+
+    def start_auto_detect(self) -> bool:
+        """启动资产自动检测（监控资产库 Content 文件夹）"""
+        # 自动检测功能已移除
+        return False
+
+    def stop_auto_detect(self):
+        """停止资产自动检测"""
+        # 自动检测功能已移除
+        pass
+
+    def refresh_auto_detect(self):
+        """刷新 Content 目录快照（资产增删后调用）"""
+        # 自动检测功能已移除
+        pass

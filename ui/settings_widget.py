@@ -1485,15 +1485,25 @@ class GeneralSection(SettingsSection):
         try:
             import sys
             import winreg
+            from pathlib import Path
             key = winreg.OpenKey(
                 winreg.HKEY_CURRENT_USER, self.AUTOSTART_KEY,
                 0, winreg.KEY_SET_VALUE,
             )
             if enabled:
-                exe_path = sys.executable
+                if getattr(sys, 'frozen', False):
+                    # 打包环境：直接使用 exe 路径
+                    cmd = f'"{sys.executable}"'
+                else:
+                    # 开发环境：用 pythonw.exe 启动 main.py（隐藏命令行窗口）
+                    pythonw = Path(sys.executable).parent / "pythonw.exe"
+                    if not pythonw.exists():
+                        pythonw = Path(sys.executable)
+                    main_py = Path(__file__).resolve().parents[1] / "main.py"
+                    cmd = f'"{pythonw}" "{main_py}"'
                 winreg.SetValueEx(
                     key, self.AUTOSTART_NAME,
-                    0, winreg.REG_SZ, f'"{exe_path}"',
+                    0, winreg.REG_SZ, cmd,
                 )
             else:
                 try:

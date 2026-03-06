@@ -212,14 +212,24 @@ class LicenseManager:
         try:
             import requests
             from core.server_config import get_server_base_url
+            
+            # 创建无代理的 session
+            session = requests.Session()
+            session.trust_env = False  # 忽略系统代理
+            
             url = f"{get_server_base_url()}/api/site-config/public"
-            resp = requests.get(url, timeout=3)
+            logger.info(f"正在获取购买链接: {url}")
+            resp = session.get(url, timeout=3)
+            logger.info(f"响应状态码: {resp.status_code}")
             if resp.status_code == 200:
                 data = resp.json()
+                logger.info(f"响应数据: {data}")
                 configs = data.get('configs', data.get('data', {}))
-                return configs.get('purchase_link', '')
+                purchase_link = configs.get('purchase_link', '')
+                logger.info(f"获取到购买链接: {purchase_link}")
+                return purchase_link
         except Exception as e:
-            logger.debug(f"Failed to fetch purchase_link: {e}")
+            logger.error(f"获取购买链接失败: {e}", exc_info=True)
         return ""
 
 

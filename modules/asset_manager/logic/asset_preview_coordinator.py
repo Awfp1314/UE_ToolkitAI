@@ -316,24 +316,75 @@ class AssetPreviewCoordinator:
                 self._logger.info("清空预览工程Content文件夹...")
                 shutil.rmtree(content_dir)
             content_dir.mkdir(parents=True, exist_ok=True)
-            
+
             # 链接资产到Content文件夹（使用符号链接，极快）
             self._logger.info(f"链接资产到预览工程: {asset.name}")
-            if asset.asset_type == AssetType.PACKAGE:
-                dest_dir = content_dir / asset.path.name
-                self._file_ops.safe_copytree(
-                    asset.path, 
-                    dest_dir, 
-                    progress_callback=progress_callback,
-                    use_symlink=True
-                )
+
+            # 检查资产是否使用包装结构（包含 Content 子文件夹）
+            asset_content_folder = asset.path / "Content"
+            if asset_content_folder.exists() and asset_content_folder.is_dir():
+                # 包装结构：将 Content 文件夹内的内容逐个链接到预览工程的 Content 文件夹
+                self._logger.info(f"检测到包装结构，从 {asset_content_folder} 链接内容到 {content_dir}")
+
+                # 获取所有需要链接的项目
+                all_items = list(asset_content_folder.iterdir())
+                total_items = len(all_items)
+
+                if total_items == 0:
+                    self._logger.info("Content 文件夹为空")
+                    if progress_callback:
+                        progress_callback(1, 1, "资产链接完成（空文件夹）")
+                else:
+                    self._logger.info(f"开始链接 {total_items} 个项目")
+
+                    # 逐个链接每个项目
+                    import os
+                    for idx, item in enumerate(all_items, 1):
+                        try:
+                            target_item = content_dir / item.name
+
+                            # 删除旧的目标（如果存在）
+                            if target_item.exists():
+                                if target_item.is_dir():
+                                    shutil.rmtree(target_item)
+                                else:
+                                    target_item.unlink()
+
+                            # 创建符号链接
+                            if item.is_dir():
+                                os.symlink(str(item.resolve()), str(target_item.resolve()), target_is_directory=True)
+                            else:
+                                os.symlink(str(item.resolve()), str(target_item.resolve()))
+
+                            if progress_callback and idx % 5 == 0:
+                                progress_callback(idx, total_items, f"链接: {item.name}")
+
+                            self._logger.debug(f"已链接: {item.name}")
+
+                        except Exception as e:
+                            self._logger.error(f"链接 {item.name} 失败: {e}")
+
+                    if progress_callback:
+                        progress_callback(total_items, total_items, f"已链接 {total_items} 个项目")
+                    self._logger.info(f"成功链接 {total_items} 个项目")
             else:
-                if progress_callback:
-                    progress_callback(0, 1, f"正在复制: {asset.path.name}")
-                dest_file = content_dir / asset.path.name
-                shutil.copy2(asset.path, dest_file)
-                if progress_callback:
-                    progress_callback(1, 1, "复制完成！")
+                # 旧的直接结构（不应该出现，但保留兼容性）
+                self._logger.warning(f"资产 {asset.name} 没有 Content 子文件夹，使用直接链接模式")
+                if asset.asset_type == AssetType.PACKAGE:
+                    dest_dir = content_dir / asset.path.name
+                    self._file_ops.safe_copytree(
+                        asset.path,
+                        dest_dir,
+                        progress_callback=progress_callback,
+                        use_symlink=True
+                    )
+                else:
+                    if progress_callback:
+                        progress_callback(0, 1, f"正在复制: {asset.path.name}")
+                    dest_file = content_dir / asset.path.name
+                    shutil.copy2(asset.path, dest_file)
+                    if progress_callback:
+                        progress_callback(1, 1, "复制完成！")
             
             # 启动虚幻引擎
             self._logger.info("启动虚幻引擎预览工程...")
@@ -369,11 +420,19 @@ class AssetPreviewCoordinator:
                         
                         # 同步 UE 中的修改回原始资产目录
                         try:
-                            if asset.asset_type == AssetType.PACKAGE:
-                                dest_dir = content_dir / asset.path.name
-                                self._sync_changes_back(dest_dir, asset.path)
-                                if save_config_callback:
-                                    save_config_callback()
+                            # 检查资产是否使用包装结构
+                            asset_content_folder = asset.path / "Content"
+                            if asset_content_folder.exists() and asset_content_folder.is_dir():
+                                # 包装结构：同步预览工程 Content 的内容到资产库的 Content 文件夹
+                                self._sync_changes_back(content_dir, asset_content_folder)
+                            else:
+                                # 旧的直接结构（不应该出现，但保留兼容性）
+                                if asset.asset_type == AssetType.PACKAGE:
+                                    dest_dir = content_dir / asset.path.name
+                                    self._sync_changes_back(dest_dir, asset.path)
+
+                            if save_config_callback:
+                                save_config_callback()
                         except Exception as e:
                             self._logger.error(f"同步修改回原始资产时出错: {e}", exc_info=True)
                         
@@ -406,39 +465,39 @@ class AssetPreviewCoordinator:
 
     # ─── 预览修改同步 ─────────────────────────────────────
 
-    def _sync_changes_back(self, content_asset_dir: Path, original_asset_dir: Path) -> None:
+    def _sync_changes_back(self, preview_content_dir: Path, asset_content_dir: Path) -> None:
         """将 UE 中的修改同步回原始资产目录
-        
+
         三种同步：
-        1. 修改：Content 中非符号链接的文件 → 覆盖回原始目录
-        2. 新增：Content 中非符号链接且原始目录没有的 → 复制到原始目录
-        3. 删除：原始目录有但 Content 中不存在的 → 从原始目录删除
-        
+        1. 修改：预览工程 Content 中非符号链接的文件 → 覆盖回资产库 Content
+        2. 新增：预览工程 Content 中非符号链接且资产库 Content 没有的 → 复制到资产库 Content
+        3. 删除：资产库 Content 有但预览工程 Content 中不存在的 → 从资产库 Content 删除
+
         Args:
-            content_asset_dir: Content 中的资产目录（如 Content/MyAsset/）
-            original_asset_dir: 原始资产目录（资产库中的路径）
+            preview_content_dir: 预览工程的 Content 目录（或其子目录）
+            asset_content_dir: 资产库中的 Content 目录（asset.path / "Content"）
         """
         import os
-        
-        if not content_asset_dir.exists():
+
+        if not preview_content_dir.exists():
             return
-        
+
         synced_count = 0
         new_count = 0
         deleted_count = 0
-        
-        # ── 第1步：同步修改和新增（Content → 原始资产）──
-        for item in content_asset_dir.rglob('*'):
+
+        # ── 第1步：同步修改和新增（预览工程 Content → 资产库 Content）──
+        for item in preview_content_dir.rglob('*'):
             if not item.is_file():
                 continue
-            
+
             # 跳过符号链接（未被修改的文件）
             if os.path.islink(str(item)):
                 continue
-            
+
             # 这是一个真实文件 — UE 修改或新建的
-            rel_path = item.relative_to(content_asset_dir)
-            target_path = original_asset_dir / rel_path
+            rel_path = item.relative_to(preview_content_dir)
+            target_path = asset_content_dir / rel_path
             
             try:
                 target_path.parent.mkdir(parents=True, exist_ok=True)
@@ -453,31 +512,31 @@ class AssetPreviewCoordinator:
                     self._logger.info(f"同步修改: {rel_path}")
             except Exception as e:
                 self._logger.error(f"同步文件失败 {rel_path}: {e}")
-        
-        # ── 第2步：同步删除（原始资产中有但 Content 中没有的）──
-        for item in original_asset_dir.rglob('*'):
+
+        # ── 第2步：同步删除（资产库 Content 中有但预览工程 Content 中没有的）──
+        for item in asset_content_dir.rglob('*'):
             if not item.is_file():
                 continue
-            
-            rel_path = item.relative_to(original_asset_dir)
-            content_item = content_asset_dir / rel_path
-            
-            # 如果 Content 中既没有符号链接也没有真实文件，说明被 UE 删了
-            if not content_item.exists() and not os.path.islink(str(content_item)):
+
+            rel_path = item.relative_to(asset_content_dir)
+            preview_item = preview_content_dir / rel_path
+
+            # 如果预览工程 Content 中既没有符号链接也没有真实文件，说明被 UE 删了
+            if not preview_item.exists() and not os.path.islink(str(preview_item)):
                 try:
                     item.unlink()
                     deleted_count += 1
                     self._logger.info(f"同步删除: {rel_path}")
                 except Exception as e:
                     self._logger.error(f"删除文件失败 {rel_path}: {e}")
-        
+
         # 清理空目录
         if deleted_count > 0:
-            for dirpath in sorted(original_asset_dir.rglob('*'), reverse=True):
+            for dirpath in sorted(asset_content_dir.rglob('*'), reverse=True):
                 if dirpath.is_dir() and not any(dirpath.iterdir()):
                     try:
                         dirpath.rmdir()
-                        self._logger.info(f"清理空目录: {dirpath.relative_to(original_asset_dir)}")
+                        self._logger.info(f"清理空目录: {dirpath.relative_to(asset_content_dir)}")
                     except Exception:
                         pass
         
@@ -822,22 +881,77 @@ class AssetPreviewCoordinator:
                 return False
             
             self._logger.info(f"迁移资产到目标工程: {asset.name}")
-            if asset.asset_type == AssetType.PACKAGE:
-                dest_dir = target_content / asset.path.name
-                
-                if dest_dir.exists():
-                    if progress_callback:
-                        progress_callback(0, 1, "正在删除已有的同名文件夹...")
-                    shutil.rmtree(dest_dir)
 
-                self._file_ops.safe_copytree(asset.path, dest_dir, progress_callback=progress_callback)
+            # 检查资产是否使用包装结构（包含 Content 子文件夹）
+            asset_content_folder = asset.path / "Content"
+            if asset_content_folder.exists() and asset_content_folder.is_dir():
+                # 包装结构：将 Content 文件夹内的内容复制到目标工程的 Content 文件夹
+                self._logger.info(f"检测到包装结构，从 {asset_content_folder} 复制内容到 {target_content}")
+
+                # 获取所有需要复制的项目
+                all_items = list(asset_content_folder.iterdir())
+                total_items = len(all_items)
+
+                if total_items == 0:
+                    self._logger.info("Content 文件夹为空")
+                    if progress_callback:
+                        progress_callback(1, 1, "迁移完成（空文件夹）")
+                else:
+                    self._logger.info(f"开始复制 {total_items} 个项目")
+
+                    # 逐个复制每个项目
+                    for idx, item in enumerate(all_items, 1):
+                        try:
+                            target_item = target_content / item.name
+
+                            # 删除旧的目标（如果存在）
+                            if target_item.exists():
+                                if progress_callback:
+                                    progress_callback(idx - 1, total_items, f"删除旧文件: {item.name}")
+                                if target_item.is_dir():
+                                    shutil.rmtree(target_item)
+                                else:
+                                    target_item.unlink()
+
+                            # 复制文件或文件夹
+                            if progress_callback:
+                                progress_callback(idx - 1, total_items, f"复制: {item.name}")
+
+                            if item.is_dir():
+                                shutil.copytree(item, target_item)
+                            else:
+                                shutil.copy2(item, target_item)
+
+                            self._logger.debug(f"已复制: {item.name}")
+
+                        except Exception as e:
+                            self._logger.error(f"复制 {item.name} 失败: {e}")
+                            if error_callback:
+                                error_callback(f"复制 {item.name} 失败: {e}")
+                            return False
+
+                    if progress_callback:
+                        progress_callback(total_items, total_items, f"已复制 {total_items} 个项目")
+                    self._logger.info(f"成功复制 {total_items} 个项目")
             else:
-                if progress_callback:
-                    progress_callback(0, 1, f"正在复制: {asset.path.name}")
-                dest_file = target_content / asset.path.name
-                shutil.copy2(asset.path, dest_file)
-                if progress_callback:
-                    progress_callback(1, 1, "复制完成！")
+                # 旧的直接结构（不应该出现，但保留兼容性）
+                self._logger.warning(f"资产 {asset.name} 没有 Content 子文件夹，使用直接复制模式")
+                if asset.asset_type == AssetType.PACKAGE:
+                    dest_dir = target_content / asset.path.name
+
+                    if dest_dir.exists():
+                        if progress_callback:
+                            progress_callback(0, 1, "正在删除已有的同名文件夹...")
+                        shutil.rmtree(dest_dir)
+
+                    self._file_ops.safe_copytree(asset.path, dest_dir, progress_callback=progress_callback)
+                else:
+                    if progress_callback:
+                        progress_callback(0, 1, f"正在复制: {asset.path.name}")
+                    dest_file = target_content / asset.path.name
+                    shutil.copy2(asset.path, dest_file)
+                    if progress_callback:
+                        progress_callback(1, 1, "复制完成！")
             
             # 保存最后使用的目标工程路径
             try:

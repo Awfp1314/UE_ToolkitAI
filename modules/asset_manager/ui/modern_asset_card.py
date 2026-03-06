@@ -948,7 +948,11 @@ class ModernAssetCard(QFrame):
 
     def load_thumbnail(self):
         """加载缩略图（支持延迟加载）"""
+        logger.debug(f"[缩略图加载] 资产: {self.name}")
+        logger.debug(f"[缩略图加载] 缩略图路径: {self.thumbnail_path}")
+
         if self.thumbnail_path and Path(self.thumbnail_path).exists():
+            logger.debug(f"[缩略图加载] 缩略图文件存在，开始加载")
             pixmap = QPixmap(str(self.thumbnail_path))
             if not pixmap.isNull():
                 target_w, target_h = 212, 153
@@ -958,9 +962,15 @@ class ModernAssetCard(QFrame):
                     Qt.TransformationMode.SmoothTransformation
                 )
                 self.thumbnail_label.setPixmap(scaled_pixmap)
+                logger.debug(f"[缩略图加载] 成功加载缩略图: {self.name}")
             else:
+                logger.warning(f"[缩略图加载] QPixmap 加载失败（isNull）: {self.thumbnail_path}")
                 self._show_default_icon()
         else:
+            if self.thumbnail_path:
+                logger.warning(f"[缩略图加载] 缩略图文件不存在: {self.thumbnail_path}")
+            else:
+                logger.debug(f"[缩略图加载] 无缩略图路径")
             self._show_default_icon()
 
 
@@ -1394,7 +1404,11 @@ class CompactAssetCard(QFrame):
 
     def load_thumbnail(self):
         """加载缩略图（支持延迟加载）"""
+        logger.debug(f"[紧凑卡片-缩略图加载] 资产: {self.name}")
+        logger.debug(f"[紧凑卡片-缩略图加载] 缩略图路径: {self.thumbnail_path}")
+
         if self.thumbnail_path and Path(self.thumbnail_path).exists():
+            logger.debug(f"[紧凑卡片-缩略图加载] 缩略图文件存在，开始加载")
             pixmap = QPixmap(str(self.thumbnail_path))
             if not pixmap.isNull():
                 target_w, target_h = 172, 115
@@ -1404,7 +1418,13 @@ class CompactAssetCard(QFrame):
                     Qt.TransformationMode.SmoothTransformation
                 )
                 self.thumbnail_label.setPixmap(scaled_pixmap)
+                logger.debug(f"[紧凑卡片-缩略图加载] 成功加载缩略图: {self.name}")
             else:
+                logger.warning(f"[紧凑卡片-缩略图加载] QPixmap 加载失败（isNull）: {self.thumbnail_path}")
                 self._show_default_icon()
         else:
+            if self.thumbnail_path:
+                logger.warning(f"[紧凑卡片-缩略图加载] 缩略图文件不存在: {self.thumbnail_path}")
+            else:
+                logger.debug(f"[紧凑卡片-缩略图加载] 无缩略图路径")
             self._show_default_icon()

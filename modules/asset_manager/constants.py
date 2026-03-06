@@ -109,3 +109,27 @@ PREVIEW_WINDOW_HEIGHT = 600  # 预览窗口高度
 
 # 预览加载
 PREVIEW_LOAD_TIMEOUT_MS = 10000  # 预览加载超时（毫秒）
+
+# ============================================================================
+# 文件监控常量 (File Monitoring Constants)
+# ============================================================================
+
+# Content 文件夹名称（UE 迁移目标）
+CONTENT_FOLDER_NAME = "Content"
+
+# 监控配置
+FILE_MONITOR_DEBOUNCE_MS = 5000  # 防抖延迟（毫秒），等待文件复制开始
+FILE_MONITOR_STABLE_CHECK_MS = 3000  # 文件稳定性检查间隔（毫秒）
+FILE_MONITOR_MAX_STABLE_CHECKS = 30  # 最大稳定性检查次数（最多等待 90 秒）
+
+# 忽略的文件/目录名
+FILE_MONITOR_IGNORE_NAMES = [
+    '.asset_config', '.git', '__pycache__',
+    '.DS_Store', 'Thumbs.db', 'desktop.ini',
+    'Content',  # 忽略 Content 文件夹内的子文件夹，只检测 Content 文件夹本身
+]
+
+# 忽略的文件扩展名
+FILE_MONITOR_IGNORE_EXTENSIONS = [
+    '.tmp', '.temp', '.bak', '.log', '.swp',
+]

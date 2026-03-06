@@ -876,13 +876,46 @@ class ProjectSearchWindow(QWidget):
                             progress = (current / total) * 0.9  # 90%的进度范围
                             self.progress_update.emit(progress)
                     
-                    # 执行复制 - 使用源文件夹名而不是资产显示名
-                    source_folder_name = self.asset.path.name  # 如 AGhost
-                    success = self.logic._file_ops.safe_copytree(
-                        self.asset.path,
-                        target_project / "Content" / source_folder_name,
-                        progress_callback=copy_progress_wrapper
-                    )
+                    # 导入 Content 文件夹内的实际资产，而不是包装文件夹
+                    content_folder = self.asset.path / "Content"
+                    
+                    if content_folder.exists() and content_folder.is_dir():
+                        # 新结构：复制 Content 文件夹内的所有内容到目标工程的 Content 文件夹
+                        # 遍历 Content 文件夹内的所有项目并复制
+                        success = True
+                        content_items = list(content_folder.iterdir())
+                        total_items = len(content_items)
+                        
+                        for idx, item in enumerate(content_items):
+                            target_path = target_project / "Content" / item.name
+                            
+                            # 创建进度包装器
+                            def item_progress_wrapper(current, total, message):
+                                if total > 0:
+                                    # 计算总体进度：(已完成项目 + 当前项目进度) / 总项目数
+                                    overall_progress = ((idx + current / total) / total_items) * 0.9
+                                    self.progress_update.emit(overall_progress)
+                            
+                            if item.is_dir():
+                                item_success = self.logic._file_ops.safe_copytree(
+                                    item, target_path, progress_callback=item_progress_wrapper
+                                )
+                            else:
+                                item_success = self.logic._file_ops.safe_copy_file(
+                                    item, target_path, progress_callback=item_progress_wrapper
+                                )
+                            
+                            if not item_success:
+                                success = False
+                                break
+                    else:
+                        # 兼容旧结构：直接复制整个资产文件夹
+                        source_folder_name = self.asset.path.name
+                        success = self.logic._file_ops.safe_copytree(
+                            self.asset.path,
+                            target_project / "Content" / source_folder_name,
+                            progress_callback=copy_progress_wrapper
+                        )
                     
                     # 复制完成，更新到90%（剩余10%留给finish_import_animation）
                     if success:

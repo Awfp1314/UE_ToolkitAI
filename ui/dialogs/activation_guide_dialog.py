@@ -104,18 +104,18 @@ class ActivationGuideDialog(QDialog):
         if self._license_status == "expired":
             desc_text = "您的授权已过期，需要重新激活才能继续使用高级功能。"
         else:
-            desc_text = "AI 助手和配置工具是高级功能，需要激活后才能使用。\n基础功能（我的工程、资产管理、站点推荐）永久免费。"
+            desc_text = "AI 助手和配置工具是付费功能，需要激活后才能使用。\n基础功能（我的工程、资产管理、站点推荐）永久免费。"
         
         desc_label = QLabel(desc_text)
         desc_label.setObjectName("ActivationGuideDesc")
         desc_label.setWordWrap(True)
         content_layout.addWidget(desc_label)
 
-        # 价格说明
-        price_label = QLabel("本工具标价 ¥199，加入官方交流群可每日免费领取激活码。")
-        price_label.setObjectName("ActivationGuidePrice")
-        price_label.setWordWrap(True)
-        content_layout.addWidget(price_label)
+        # 获取方式说明
+        get_key_label = QLabel("加入官方交流群可每日免费领取激活码。")
+        get_key_label.setObjectName("ActivationGuideGetKey")
+        get_key_label.setWordWrap(True)
+        content_layout.addWidget(get_key_label)
 
         # QQ 群号（可复制）
         group_row = QHBoxLayout()
@@ -133,13 +133,14 @@ class ActivationGuideDialog(QDialog):
         group_row.addStretch()
         content_layout.addLayout(group_row)
 
-        # 购买链接
+        # 购买按钮（如果有购买链接）
         if self._purchase_link:
-            buy_label = QLabel('没有激活码？<a href="#" style="color: #4a9eff; text-decoration: none;">去购买 →</a>')
-            buy_label.setObjectName("ActivationGuideBuyLink")
-            buy_label.setCursor(Qt.CursorShape.PointingHandCursor)
-            buy_label.linkActivated.connect(self._on_buy_clicked)
-            content_layout.addWidget(buy_label)
+            buy_btn = QPushButton("💳 购买激活码")
+            buy_btn.setObjectName("ActivationGuideBuyBtn")
+            buy_btn.setFixedHeight(36)
+            buy_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+            buy_btn.clicked.connect(self._on_buy_clicked)
+            content_layout.addWidget(buy_btn)
 
         # 分隔
         sep = QLabel("— 已有激活码？在下方输入 —")
@@ -305,7 +306,7 @@ class ActivationGuideDialog(QDialog):
                 color: rgba(255,255,255,0.75); font-size: 13px; background: transparent;
                 line-height: 1.6;
             }
-            #ActivationGuidePrice {
+            #ActivationGuideGetKey {
                 color: rgba(255,255,255,0.65); font-size: 13px; background: transparent;
                 line-height: 1.6;
             }
@@ -317,8 +318,19 @@ class ActivationGuideDialog(QDialog):
                 color: #4a9eff; font-size: 12px;
             }
             #ActivationGuideCopyBtn:hover { background: rgba(74,158,255,0.25); }
-            #ActivationGuideBuyLink {
-                color: rgba(255,255,255,0.5); font-size: 12px; background: transparent;
+            #ActivationGuideBuyBtn {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                    stop:0 #4a9eff, stop:1 #6b5ce7);
+                border: none; border-radius: 6px;
+                color: #fff; font-size: 13px; font-weight: 600;
+            }
+            #ActivationGuideBuyBtn:hover {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                    stop:0 #5aa9ff, stop:1 #7b6cf7);
+            }
+            #ActivationGuideBuyBtn:pressed {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                    stop:0 #3a8eef, stop:1 #5b4cd7);
             }
             #ActivationGuideSep {
                 color: rgba(255,255,255,0.3); font-size: 12px; background: transparent;
@@ -380,7 +392,7 @@ class ActivationGuideDialog(QDialog):
                 color: rgba(0,0,0,0.65); font-size: 13px; background: transparent;
                 line-height: 1.6;
             }
-            #ActivationGuidePrice {
+            #ActivationGuideGetKey {
                 color: rgba(0,0,0,0.55); font-size: 13px; background: transparent;
                 line-height: 1.6;
             }
@@ -392,8 +404,19 @@ class ActivationGuideDialog(QDialog):
                 color: #2563eb; font-size: 12px;
             }
             #ActivationGuideCopyBtn:hover { background: rgba(37,99,235,0.18); }
-            #ActivationGuideBuyLink {
-                color: rgba(0,0,0,0.5); font-size: 12px; background: transparent;
+            #ActivationGuideBuyBtn {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                    stop:0 #2563eb, stop:1 #7c3aed);
+                border: none; border-radius: 6px;
+                color: #fff; font-size: 13px; font-weight: 600;
+            }
+            #ActivationGuideBuyBtn:hover {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                    stop:0 #3b82f6, stop:1 #8b5cf6);
+            }
+            #ActivationGuideBuyBtn:pressed {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                    stop:0 #1d4ed8, stop:1 #6d28d9);
             }
             #ActivationGuideSep {
                 color: rgba(0,0,0,0.3); font-size: 12px; background: transparent;

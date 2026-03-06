@@ -392,6 +392,48 @@ class AssetScanner:
         )
         return cached_assets_data
 
+    def _fix_library_path_in_cache(
+        self,
+        cached_assets_data: List[Dict[str, Any]],
+        old_library_path: str,
+        new_library_path: str
+    ) -> List[Dict[str, Any]]:
+        """修复缓存数据中的资产库路径（当资产库文件夹改名时）
+        
+        Args:
+            cached_assets_data: 缓存的资产数据
+            old_library_path: 旧的资产库路径
+            new_library_path: 新的资产库路径
+            
+        Returns:
+            修复后的资产数据
+        """
+        if not cached_assets_data or old_library_path == new_library_path:
+            return cached_assets_data
+
+        self.logger.info(
+            f"🔧 检测到资产库路径变更: {old_library_path} -> {new_library_path}，开始自动修复路径..."
+        )
+
+        fixed_count = 0
+        for asset_data in cached_assets_data:
+            if asset_data.get("path"):
+                old_path = asset_data["path"]
+                new_path = old_path.replace(old_library_path, new_library_path, 1)
+                asset_data["path"] = new_path
+                fixed_count += 1
+
+            if asset_data.get("thumbnail_path"):
+                old_thumb = asset_data["thumbnail_path"]
+                new_thumb = old_thumb.replace(old_library_path, new_library_path, 1)
+                asset_data["thumbnail_path"] = new_thumb
+
+        self.logger.info(
+            f"✅ 已自动修复 {fixed_count} 个资产的路径"
+            f"（资产库: {old_library_path} -> {new_library_path}）"
+        )
+        return cached_assets_data
+
     def _get_size(self, path: Path) -> int:
         """获取文件或文件夹的大小（字节）"""
         if path.is_file():
