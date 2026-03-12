@@ -14,5 +14,41 @@
   "performance": {
     "max_cache_size_mb": 512,
     "enable_hardware_acceleration": true
+  },
+  "app_settings": {},
+  "module_state": {
+    "current_module": "",
+    "last_active_modules": []
+  },
+  "ui_states": {
+    "asset_manager": {
+      "selected_category": "",
+      "view_mode": "detailed",
+      "sort_method": "",
+      "scroll_position": 0
+    },
+    "my_projects": {
+      "selected_category": "",
+      "selected_version": "",
+      "view_mode": "grid",
+      "sort_method": "",
+      "show_only_favorites": false,
+      "scroll_position": 0
+    },
+    "site_recommendations": {
+      "selected_category": "",
+      "view_mode": "grid"
+    }
+  },
+  "window_state": {
+    "position": {
+      "x": 0,
+      "y": 0
+    },
+    "size": {
+      "width": 1280,
+      "height": 800
+    },
+    "maximized": false
   }
 }

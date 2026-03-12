@@ -86,9 +86,12 @@ class ModuleManager:
         self.modules.clear()
         self.load_order.clear()
         
+        # 需要跳过的系统目录
+        SKIP_DIRS = {'__pycache__', '.git', '.svn', '.vscode', '.idea', 'node_modules'}
+        
         # 遍历模块目录
         for module_path in self.modules_dir.iterdir():
-            if module_path.is_dir():
+            if module_path.is_dir() and module_path.name not in SKIP_DIRS:
                 # 检查是否存在 manifest.json 文件
                 manifest_path = module_path / "manifest.json"
                 if manifest_path.exists():

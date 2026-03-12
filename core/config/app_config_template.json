@@ -1,0 +1,39 @@
+{
+  "_version": "1.0.0",
+  "app_settings": {
+    "theme": "dark",
+    "language": "zh_CN",
+    "auto_start": false,
+    "desktop_floating_window": false,
+    "check_updates_on_startup": true,
+    "first_launch": false
+  },
+  "window_state": {
+    "position": {"x": -1, "y": -1},
+    "size": {"width": 1280, "height": 800},
+    "maximized": false
+  },
+  "module_state": {
+    "current_module": "asset_manager",
+    "last_active_modules": ["asset_manager"]
+  },
+  "ui_states": {
+    "asset_manager": {
+      "selected_category": "全部分类",
+      "view_mode": "detailed",
+      "sort_method": "添加时间（最新）",
+      "scroll_position": 0
+    },
+    "my_projects": {
+      "selected_category": "全部",
+      "view_mode": "grid",
+      "sort_method": "最近打开",
+      "show_only_favorites": false,
+      "scroll_position": 0
+    },
+    "site_recommendations": {
+      "selected_category": "全部",
+      "view_mode": "grid"
+    }
+  }
+}

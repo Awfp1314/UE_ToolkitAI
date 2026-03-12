@@ -232,33 +232,68 @@ class AssetController:
         doc_path_md = library_path / '.asset_config' / 'documents' / f'{asset_id}.md'
         return doc_path_txt.exists() or doc_path_md.exists()
 
+    def load_ui_state(self, key: str, default=None):
+        """从 app_config.ui_states.asset_manager 读取指定字段"""
+        try:
+            from core.services import config_service
+            app_config = config_service.get_module_config("app") or {}
+            return app_config.get("ui_states", {}).get("asset_manager", {}).get(key, default)
+        except Exception as e:
+            logger.warning(f"读取 ui_state[{key}] 失败: {e}")
+            return default
+
+    def save_ui_state(self, key: str, value) -> None:
+        """保存指定字段到 app_config.ui_states.asset_manager"""
+        try:
+            from core.services import config_service
+            app_config = config_service.get_module_config("app") or {}
+            ui_states = app_config.setdefault("ui_states", {})
+            am_state = ui_states.setdefault("asset_manager", {})
+            am_state[key] = value
+            config_service.save_module_config("app", app_config)
+        except Exception as e:
+            logger.warning(f"保存 ui_state[{key}] 失败: {e}")
+
     def load_view_mode(self) -> str:
-        """从配置文件加载视图模式
+        """从 app_config.ui_states.asset_manager 加载视图模式
         
         Returns:
             视图模式 ("detailed" 或 "compact")
         """
         try:
-            if self.logic and self.logic.config_manager:
-                config = self.logic.config_manager.load_user_config()
-                view_mode = config.get("view_mode", "detailed")
-                logger.info(f"从配置加载视图模式: {view_mode}")
+            from core.services import config_service
+            app_config = config_service.get_module_config("app") or {}
+            view_mode = app_config.get("ui_states", {}).get("asset_manager", {}).get("view_mode", "")
+            if view_mode:
+                logger.info(f"从 app_config.ui_states 加载视图模式: {view_mode}")
                 return view_mode
         except Exception as e:
-            logger.warning(f"加载视图模式失败，使用默认值: {e}")
+            logger.warning(f"从 app_config 加载视图模式失败: {e}")
+        # 兼容旧配置（asset_manager_config.view_mode）
+        try:
+            if self.logic and self.logic.config_manager:
+                config = self.logic.config_manager.load_user_config()
+                view_mode = config.get("view_mode", "")
+                if view_mode:
+                    logger.info(f"从旧配置字段加载视图模式: {view_mode}")
+                    return view_mode
+        except Exception:
+            pass
         return "detailed"
 
     def save_view_mode(self, view_mode: str) -> None:
-        """保存视图模式到配置文件
+        """保存视图模式到 app_config.ui_states.asset_manager
         
         Args:
             view_mode: 视图模式 ("detailed" 或 "compact")
         """
         try:
-            if self.logic and self.logic.config_manager:
-                config = self.logic.config_manager.load_user_config()
-                config["view_mode"] = view_mode
-                self.logic.config_manager.save_user_config_fast(config)
-                logger.debug(f"已快速保存视图模式: {view_mode}")
+            from core.services import config_service
+            app_config = config_service.get_module_config("app") or {}
+            ui_states = app_config.setdefault("ui_states", {})
+            am_state = ui_states.setdefault("asset_manager", {})
+            am_state["view_mode"] = view_mode
+            config_service.save_module_config("app", app_config)
+            logger.debug(f"视图模式已保存到 app_config.ui_states: {view_mode}")
         except Exception as e:
             logger.warning(f"保存视图模式失败: {e}")

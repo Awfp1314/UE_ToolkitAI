@@ -48,6 +48,9 @@ class AssetManagerUI(BaseModuleWidget):
         self.current_view_mode = self.controller.load_view_mode()
 
         self.card_count = 0
+        self._scroll_save_timer = QTimer()
+        self._scroll_save_timer.setSingleShot(True)
+        self._scroll_save_timer.timeout.connect(self._save_scroll_position)
 
         # ⚡ 性能优化：使用新的ThumbnailCache替代旧的LRU缓存
         self._thumbnail_cache = ThumbnailCache(max_size=300)
@@ -224,8 +227,9 @@ class AssetManagerUI(BaseModuleWidget):
         scroll_area.viewport().installEventFilter(self)
         scroll_content.installEventFilter(self)
         
-        # 连接滚动条信号，实现懒加载
+        # 连接滚动条信号，实现懒加载 + 保存滚动位置
         scroll_area.verticalScrollBar().valueChanged.connect(self._on_scroll_changed)
+        scroll_area.verticalScrollBar().valueChanged.connect(self._on_scroll_position_changed)
 
     def eventFilter(self, obj, event):
         """事件过滤器：处理点击事件以清除搜索框焦点"""
@@ -257,6 +261,9 @@ class AssetManagerUI(BaseModuleWidget):
             # 保存当前选中的分类
             current_category = self.category_filter.currentText()
             
+            # 阻塞信号，避免在重新填充时触发保存
+            self.category_filter.blockSignals(True)
+            
             # 清空并重新填充（保留"全部分类"）
             self.category_filter.clear()
             self.category_filter.addItem("全部分类")
@@ -268,15 +275,23 @@ class AssetManagerUI(BaseModuleWidget):
             # 添加"+ 分类管理"选项
             self.category_filter.addItem("+ 分类管理")
             
-            # 恢复之前的选择（如果还存在）
-            if current_category and current_category != "+ 分类管理":
-                index = self.category_filter.findText(current_category)
+            # 优先恢复已保存的分类，否则恢复之前的选择
+            saved_category = self.controller.load_ui_state("selected_category", "")
+            restore_target = saved_category if saved_category else current_category
+            if restore_target and restore_target != "+ 分类管理":
+                index = self.category_filter.findText(restore_target)
                 if index >= 0:
                     self.category_filter.setCurrentIndex(index)
+                    # 同步到控制器
+                    self.controller.set_category(restore_target)
+            
+            # 恢复信号
+            self.category_filter.blockSignals(False)
             
             logger.info(f"已加载 {len(categories)} 个分类")
         except Exception as e:
             logger.error(f"加载分类失败: {e}", exc_info=True)
+            self.category_filter.blockSignals(False)
     
     def _on_category_changed(self, category: str):
         """分类选择改变事件"""
@@ -291,6 +306,7 @@ class AssetManagerUI(BaseModuleWidget):
         
         # 通过控制器更新分类过滤
         self.controller.set_category(category)
+        self.controller.save_ui_state("selected_category", category)
         self._apply_filter_to_ui()
     
     def _on_search_changed(self, search_text: str):
@@ -321,6 +337,7 @@ class AssetManagerUI(BaseModuleWidget):
     def _on_sort_changed(self, sort_method: str):
         """排序方式改变事件"""
         self.controller.set_sort_method(sort_method)
+        self.controller.save_ui_state("sort_method", sort_method)
         logger.info(f"排序方式改变: {sort_method}")
         
         # 重新应用筛选和排序
@@ -556,8 +573,8 @@ class AssetManagerUI(BaseModuleWidget):
             except:
                 pass
         
-        # 显示网格容器
-        self.grid_widget.show()
+        # 先隐藏网格容器，避免创建过程中卡片闪现
+        self.grid_widget.hide()
 
         # 通过 logic 层获取资产列表
         if not self.logic:
@@ -611,6 +628,10 @@ class AssetManagerUI(BaseModuleWidget):
 
         logger.info(f"创建资产卡片批次: {start_index}-{end_index-1}/{len(assets)}")
 
+        # 第一批时禁用网格更新，避免卡片在创建过程中闪现
+        if start_index == 0:
+            self.grid_widget.setUpdatesEnabled(False)
+
         # 创建当前批次的卡片
         for i in range(start_index, end_index):
             self._add_asset_card(assets[i], i)
@@ -625,8 +646,28 @@ class AssetManagerUI(BaseModuleWidget):
             logger.info("所有资产卡片创建完成")
             self._assets_loaded = True
             
-            # 加载分类列表
+            # 重新启用网格更新并显示
+            self.grid_widget.setUpdatesEnabled(True)
+            self.grid_widget.show()
+            
+            # 加载分类列表（内部会恢复已保存分类）
             self._load_categories()
+
+            # 恢复已保存的排序方式
+            saved_sort = self.controller.load_ui_state("sort_method", "")
+            if saved_sort:
+                idx = self.sort_combo.findText(saved_sort)
+                if idx >= 0:
+                    self.sort_combo.blockSignals(True)
+                    self.sort_combo.setCurrentIndex(idx)
+                    self.sort_combo.blockSignals(False)
+                    self.controller.set_sort_method(saved_sort)
+                    self._apply_filter_to_ui()
+
+            # 恢复滚动位置（延迟等待布局完成）
+            saved_scroll = self.controller.load_ui_state("scroll_position", 0)
+            if saved_scroll:
+                QTimer.singleShot(300, lambda: self.scroll_area.verticalScrollBar().setValue(saved_scroll))
             
             # 触发初始可见缩略图的加载
             from PyQt6.QtCore import QTimer
@@ -880,17 +921,18 @@ class AssetManagerUI(BaseModuleWidget):
         asset_id = asset_data.get('id', '')
         has_document = self.controller.check_asset_has_document(asset_id) if asset_id else False
 
-        # 根据当前视图模式创建卡片
+        # 根据当前视图模式创建卡片（指定parent避免卡片成为独立窗口）
         if self.current_view_mode == "detailed":
             card = ModernAssetCard(name, category, size, thumbnail_path, asset_type,
                                   created_time, has_document, theme=self.theme,
-                                  defer_thumbnail=defer_thumbnail, asset_path=asset_path)
+                                  defer_thumbnail=defer_thumbnail, asset_path=asset_path,
+                                  parent=self)
             row = index // 4
             col = index % 4
         else:
             card = CompactAssetCard(name, category, thumbnail_path, asset_type,
                                    theme=self.theme, defer_thumbnail=defer_thumbnail,
-                                   asset_path=asset_path)
+                                   asset_path=asset_path, parent=self)
             row = index // 5
             col = index % 5
 
@@ -992,6 +1034,16 @@ class AssetManagerUI(BaseModuleWidget):
         for widget in items_to_delete:
             QTimer.singleShot(0, widget.deleteLater)
     
+    def _on_scroll_position_changed(self, value: int):
+        """滚动位置变化时防抖保存"""
+        self._scroll_save_timer.stop()
+        self._scroll_save_timer.start(500)
+
+    def _save_scroll_position(self):
+        """保存当前滚动位置到配置"""
+        value = self.scroll_area.verticalScrollBar().value()
+        self.controller.save_ui_state("scroll_position", value)
+
     def _on_assets_loaded(self, assets):
         """资产加载完成"""
         logger.info(f"Logic加载了 {len(assets)} 个资产")
@@ -1039,7 +1091,8 @@ class AssetManagerUI(BaseModuleWidget):
         last_selected_name = None
         try:
             user_config = self.logic.config_manager.load_user_config()
-            last_selected_name = user_config.get("last_preview_project_name", "")
+            last_selected_name = (user_config.get("last_preview_project", "")
+                                    or user_config.get("last_preview_project_name", ""))
             if last_selected_name:
                 logger.info(f"读取到上次选择的预览工程: {last_selected_name}")
         except Exception as e:
@@ -1070,9 +1123,12 @@ class AssetManagerUI(BaseModuleWidget):
         # 保存本次选择到配置文件
         try:
             config = self.logic.config_manager.load_user_config()
-            config["last_preview_project_name"] = selected_name
-            self.logic.config_manager.save_user_config(config, backup_reason="update_preview_project")
-            logger.info(f"已保存预览工程选择: {selected_name}")
+            config["last_preview_project"] = selected_name
+            save_result = self.logic.config_manager.save_user_config(config, backup_reason="update_preview_project")
+            if save_result:
+                logger.info(f"已保存预览工程选择: {selected_name}")
+            else:
+                logger.warning(f"保存预览工程选择失败")
         except Exception as e:
             logger.warning(f"保存预览工程选择失败: {e}")
 
@@ -1189,9 +1245,9 @@ class AssetManagerUI(BaseModuleWidget):
                         self._load_categories()
                     else:
                         # 2. 只是改名，找到对应卡片更新显示即可
-                        for card in self.asset_cards:
-                            if card.asset_name == name:
-                                card.asset_name = new_name
+                        for card in self.asset_cards.values():
+                            if card.name == name:
+                                card.name = new_name
                                 card.name_label.setText(new_name)
                                 logger.info(f"已更新卡片显示: {name} -> {new_name}")
                                 break

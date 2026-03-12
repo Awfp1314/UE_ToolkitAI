@@ -22,6 +22,25 @@ datas = [
     (os.path.join(spec_dir, 'License.txt'), '.'),  # 打包许可协议文件
 ]
 
+# 显式添加所有 config_template.json 文件（确保打包后能找到）
+config_templates = [
+    'modules/ai_assistant/config_template.json',
+    'modules/asset_manager/config_template.json',
+    'modules/my_projects/config_template.json',
+    'modules/config_tool/config_template.json',
+    'modules/site_recommendations/config_template.json',
+    'core/config_templates/app_config_template.json',
+]
+
+for template in config_templates:
+    template_path = os.path.join(spec_root, template)
+    if os.path.exists(template_path):
+        # 保持原始目录结构
+        target_dir = os.path.dirname(template)
+        datas.append((template_path, target_dir))
+    else:
+        print(f"警告: 配置模板文件不存在: {template_path}")
+
 # ========== 优化说明 ==========
 # 已移除 AI 模型和库的数据文件收集，因为：
 # 1. EmbeddingService 功能当前未被使用
@@ -163,7 +182,7 @@ exe = EXE(
     strip=False,
     upx=True,        # 启用UPX压缩（如果安装了UPX）
     upx_exclude=[],
-    runtime_tmpdir=None,  # 使用系统临时目录解压运行时文件
+    runtime_tmpdir=None,  # 禁用固定临时目录，让 PyInstaller 使用默认机制但不自动清理
     console=False,   # 不显示控制台窗口
     disable_windowed_traceback=False,
     argv_emulation=False,

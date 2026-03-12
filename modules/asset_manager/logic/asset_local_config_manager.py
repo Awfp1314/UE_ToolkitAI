@@ -76,9 +76,11 @@ class AssetLocalConfigManager:
         if not config:
             config = {
                 "_version": "2.0.0",
-                "preview_project_path": "",
-                "last_target_project_path": "",
-                "asset_library_configs": {}
+                "asset_libraries": [],
+                "current_asset_library": "",
+                "preview_projects": [],
+                "last_preview_project": "",
+                "last_target_project": ""
             }
         return config
 
@@ -93,11 +95,16 @@ class AssetLocalConfigManager:
         """
         version = config.get("_version", "1.0.0")
 
-        if version == "2.0.0":
+        # 如果已包含新格式字段，无需迁移
+        if config.get("current_asset_library") is not None or config.get("asset_libraries") is not None:
+            self._logger.debug("配置已是新格式，跳过迁移")
+            return config
+
+        if version == "2.0.0" and not config.get("asset_library_path"):
             self._logger.debug("配置已是最新版本2.0.0")
             return config
 
-        self._logger.info(f"检测到旧配置版本 {version}，开始迁移...")
+        self._logger.info(f"检测到旧配置版本 {version}，开始迁移到新格式...")
 
         try:
             old_asset_library_path = config.get("asset_library_path", "")
@@ -106,34 +113,34 @@ class AssetLocalConfigManager:
 
             new_config = {
                 "_version": "2.0.0",
-                "preview_project_path": config.get("preview_project_path", ""),
-                "last_target_project_path": config.get("last_target_project_path", ""),
-                "asset_library_configs": {}
+                "current_asset_library": old_asset_library_path,
+                "asset_libraries": [],
+                "preview_projects": [],
+                "last_preview_project": config.get("last_preview_project_name", ""),
+                "last_target_project": config.get("last_target_project_path", ""),
             }
 
-            old_preview_project = config.get("preview_project_path", "")
-            if old_preview_project and Path(old_preview_project).exists():
-                if not config.get("additional_preview_projects_with_names"):
-                    new_config["additional_preview_projects_with_names"] = [
-                        {"path": old_preview_project, "name": "默认工程"}
-                    ]
-                    self._logger.info(f"已迁移旧的预览工程路径到新格式: {old_preview_project}")
-
             if old_asset_library_path:
-                new_config["asset_library_configs"][old_asset_library_path] = {
-                    "categories": old_categories,
-                    "assets": old_assets
-                }
-                self._logger.info(f"已迁移旧配置: {old_asset_library_path}")
+                new_config["asset_libraries"] = [
+                    {"path": old_asset_library_path, "name": "主资产库", "last_opened": ""}
+                ]
+                self._logger.info(f"已迁移资产库路径: {old_asset_library_path}")
 
-            self._config_manager.save_user_config(new_config)
-            self._logger.info("配置迁移完成")
+            # 迁移预览工程
+            old_projects = (config.get("additional_preview_projects_with_names")
+                            or config.get("preview_projects", []))
+            if not old_projects:
+                old_single = config.get("preview_project_path", "")
+                if old_single and Path(old_single).exists():
+                    old_projects = [{"path": old_single, "name": "默认工程"}]
+            new_config["preview_projects"] = old_projects or []
 
-            if old_asset_library_path:
-                new_config["asset_library_path"] = old_asset_library_path
-                new_config["categories"] = old_categories
-                new_config["assets"] = old_assets
+            save_result = self._config_manager.save_user_config(new_config, backup_reason="config_migration")
+            if not save_result:
+                self._logger.error("保存迁移后的配置失败")
+                return config
 
+            self._logger.info("配置迁移完成（旧格式→新格式）")
             return new_config
 
         except json.JSONDecodeError as e:

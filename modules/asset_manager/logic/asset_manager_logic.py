@@ -84,8 +84,12 @@ class AssetManagerLogic(QObject):
         module_dir = Path(__file__).parent.parent
         template_path = module_dir / "config_template.json"
 
+        # 导入配置 schema
+        from ..config_schema import get_asset_manager_schema
+        
         self.config_manager = ConfigManager("asset_manager",
-                                           template_path=template_path)
+                                           template_path=template_path,
+                                           config_schema=get_asset_manager_schema())
 
         # ─── 子模块初始化 ──────────────────────────────────
         self._file_ops = FileOperations(logger)
@@ -163,7 +167,16 @@ class AssetManagerLogic(QObject):
         config = self._local_config.load_global_config()
         config = self._local_config.migrate_global_config(config)
 
-        asset_library_path = config.get("asset_library_path", "")
+        # 优先读取新格式的 current_asset_library，兼容旧格式
+        asset_library_path = (config.get("current_asset_library", "")
+                               or config.get("asset_library_path", ""))
+        
+        # 兼容旧格式的 asset_library_configs，取第一个配置的资产库路径
+        if not asset_library_path:
+            asset_library_configs = config.get("asset_library_configs", {})
+            if asset_library_configs:
+                asset_library_path = list(asset_library_configs.keys())[0]
+        
         if not asset_library_path or not Path(asset_library_path).exists():
             logger.warning("资产库路径未设置或不存在，不加载任何资产")
             self.assets.clear()
@@ -857,7 +870,14 @@ class AssetManagerLogic(QObject):
     def get_asset_library_path(self) -> Optional[Path]:
         """获取资产库路径"""
         config = self.config_manager.load_user_config()
-        asset_library_path = config.get("asset_library_path", "")
+        asset_library_path = (config.get("current_asset_library", "")
+                               or config.get("asset_library_path", ""))
+        if not asset_library_path:
+            for lib in config.get("asset_libraries", []):
+                p = lib.get("path", "")
+                if p and Path(p).exists():
+                    asset_library_path = p
+                    break
         if not asset_library_path:
             for key in config.get("asset_library_configs", {}).keys():
                 if Path(key).exists():
@@ -872,26 +892,41 @@ class AssetManagerLogic(QObject):
         """设置资产库路径"""
         try:
             if not library_path.exists():
+                logger.info(f"资产库路径不存在，正在创建: {library_path}")
                 library_path.mkdir(parents=True, exist_ok=True)
 
             current_lib_path = self.get_asset_library_path()
             if current_lib_path:
+                logger.info(f"保存当前资产库配置: {current_lib_path}")
                 self._save_config()
 
+            logger.info(f"正在加载配置文件...")
             config = self.config_manager.load_user_config() or {}
             if "_version" not in config:
                 config["_version"] = "2.0.0"
 
-            config["asset_library_path"] = str(library_path)
-            self.config_manager.save_user_config(config)
+            config["current_asset_library"] = str(library_path)
+            libs = config.setdefault("asset_libraries", [])
+            if not any(l.get("path") == str(library_path) for l in libs):
+                libs.append({"path": str(library_path), "name": "主资产库", "last_opened": ""})
+            logger.info(f"正在保存资产库路径到配置: {library_path}")
+            
+            save_result = self.config_manager.save_user_config(config, backup_reason="set_library_path")
+            
+            if not save_result:
+                logger.error(f"❌ 保存资产库路径失败！配置未写入文件")
+                return False
 
+            logger.info(f"✅ 资产库路径已成功保存到配置文件")
+            
+            logger.info(f"正在重新加载配置...")
             self._load_config()
 
-            logger.info(f"资产库路径已切换至: {library_path}")
+            logger.info(f"✅ 资产库路径已切换至: {library_path}")
             return True
 
         except Exception as e:
-            logger.error(f"设置资产库路径失败: {e}", exc_info=True)
+            logger.error(f"❌ 设置资产库路径失败: {e}", exc_info=True)
             return False
 
     def _move_asset_to_category(self, asset: Asset, new_category: str) -> bool:

@@ -97,6 +97,9 @@ class UEMainWindow(QMainWindow):
         
         # 初始化悬浮窗（根据配置决定是否显示）
         self._init_floating_widget()
+        
+        # 启动授权状态预加载（异步，不阻塞UI）
+        self._start_license_preload()
 
     def init_ui(self):
         """初始化UI"""
@@ -257,35 +260,45 @@ class UEMainWindow(QMainWindow):
         logger = get_logger(__name__)
         
         self.logger.info("开始加载初始模块")
-        
-        # 加载第一个模块
-        self._ensure_module_loaded(0)
-        
-        # 如果是资产库模块，异步加载资产
-        if hasattr(self, "module_keys") and len(self.module_keys) > 0:
-            if self.module_keys[0] == "asset_manager" and self.module_provider:
-                self.logger.info("检测到资产库模块，开始加载资产")
-                asset_manager = self.module_provider.get_module("asset_manager")
-                if asset_manager:
-                    # 确保UI已创建
-                    asset_widget = asset_manager.get_widget()
-                    self.logger.info(f"获取资产库UI组件: {asset_widget}")
-                    if asset_widget and hasattr(asset_widget, "load_assets_async"):
-                        # 使用异步加载资产，避免阻塞UI
-                        self.logger.info("开始异步加载资产")
-                        asset_widget.load_assets_async(on_complete)
-                    elif on_complete:
-                        self.logger.warning("资产库UI组件不支持异步加载，直接调用回调")
-                        on_complete()
-                else:
-                    self.logger.error("无法获取资产库模块")
-                    if on_complete:
-                        on_complete()
-            elif on_complete:
-                self.logger.warning("不是资产库模块，直接调用回调")
-                on_complete()
+
+        # 恢复上次打开的模块
+        initial_index = 0
+        try:
+            from core.services import config_service
+            app_config = config_service.get_module_config("app") or {}
+            saved_key = app_config.get("module_state", {}).get("current_module", "")
+            if saved_key and hasattr(self, "module_keys") and saved_key in self.module_keys:
+                initial_index = self.module_keys.index(saved_key)
+        except Exception:
+            pass
+
+        # 加载初始模块并切换到正确位置
+        self._ensure_module_loaded(initial_index)
+        if self.content_stack is not None:
+            self.content_stack.setCurrentIndex(initial_index)
+        for i, btn in enumerate(self.nav_buttons):
+            btn.setChecked(i == initial_index)
+        if hasattr(self, "module_names") and 0 <= initial_index < len(self.module_names):
+            self.subtitle_label.setText(self.module_names[initial_index])
+
+        # 如果初始模块是资产库，触发异步加载资产
+        initial_key = self.module_keys[initial_index] if hasattr(self, "module_keys") else ""
+        if initial_key == "asset_manager" and self.module_provider:
+            self.logger.info("检测到资产库模块，开始加载资产")
+            asset_manager = self.module_provider.get_module("asset_manager")
+            if asset_manager:
+                asset_widget = asset_manager.get_widget()
+                self.logger.info(f"获取资产库UI组件: {asset_widget}")
+                if asset_widget and hasattr(asset_widget, "load_assets_async"):
+                    self.logger.info("开始异步加载资产")
+                    asset_widget.load_assets_async(on_complete)
+                elif on_complete:
+                    on_complete()
+            else:
+                self.logger.error("无法获取资产库模块")
+                if on_complete:
+                    on_complete()
         elif on_complete:
-            self.logger.warning("没有模块键，直接调用回调")
             on_complete()
 
     def create_title_bar(self, parent_layout):
@@ -760,6 +773,10 @@ class UEMainWindow(QMainWindow):
         """切换模块"""
         # 检查模块访问权限
         if not self._check_module_access(index):
+            # 授权检查失败，恢复之前选中的按钮状态
+            current_index = self.content_stack.currentIndex() if self.content_stack else 0
+            for i, btn in enumerate(self.nav_buttons):
+                btn.setChecked(i == current_index)
             return
         
         # 取消所有导航按钮的选中状态
@@ -792,11 +809,21 @@ class UEMainWindow(QMainWindow):
             else:
                 self.subtitle_label.setText(module_name)
 
+        # 保存当前模块到配置
+        if hasattr(self, "module_keys") and 0 <= index < len(self.module_keys):
+            try:
+                from core.services import config_service
+                app_config = config_service.get_module_config("app") or {}
+                app_config.setdefault("module_state", {})["current_module"] = self.module_keys[index]
+                config_service.save_module_config("app", app_config)
+            except Exception:
+                pass
+
         # 首次切换到该模块时，延迟到下一个事件循环再懒加载，避免阻塞 UI
         if index not in getattr(self, "_loaded_module_indices", set()):
             from PyQt6.QtCore import QTimer
             QTimer.singleShot(0, lambda idx=index: self._ensure_module_loaded(idx))
-    
+
     def _check_module_access(self, index: int) -> bool:
         """检查模块访问权限
         
@@ -834,10 +861,10 @@ class UEMainWindow(QMainWindow):
             license_status: 当前授权状态 ("none", "expired")
         """
         from ui.dialogs.activation_guide_dialog import ActivationGuideDialog
-        from core.security.license_manager import LicenseManager
+        from core.security.license_manager import LicenseManager, get_purchase_link_cached
         
-        lm = LicenseManager()
-        purchase_link = lm._get_purchase_link()
+        # 使用缓存的购买链接，避免每次都发HTTP请求
+        purchase_link = get_purchase_link_cached()
         
         while True:
             dialog = ActivationGuideDialog(
@@ -859,9 +886,12 @@ class UEMainWindow(QMainWindow):
             # 显示加载状态
             dialog.set_loading(True)
             
+            # 创建 LicenseManager 实例进行激活
+            lm = LicenseManager()
+            
             # 尝试激活
             if lm.activate(key):
-                # 激活成功
+                # 激活成功，缓存已在 LicenseManager.activate() 中自动刷新
                 dialog.set_status("激活成功！", is_error=False)
                 from PyQt6.QtCore import QTimer
                 QTimer.singleShot(1000, dialog.accept)
@@ -1059,7 +1089,7 @@ class UEMainWindow(QMainWindow):
             if hasattr(self.settings_widget, 'update_theme_selection'):
                 self.settings_widget.update_theme_selection(new_theme)
 
-        print(f"✓ 已切换到{'深色' if new_theme == 'modern_dark' else '浅色'}主题")
+        self.logger.info(f"已切换到{'深色' if new_theme == 'modern_dark' else '浅色'}主题")
 
     def _apply_theme(self, theme_name: str) -> None:
         """应用主题样式表
@@ -1225,18 +1255,16 @@ class UEMainWindow(QMainWindow):
             # 获取窗口几何信息
             geometry = self.geometry()
             
-            # 只保存窗口位置，不保存大小（窗口大小是固定的）
-            window_state = {
-                "x": geometry.x(),
-                "y": geometry.y()
+            app_config["window_state"] = {
+                "position": {"x": geometry.x(), "y": geometry.y()},
+                "size": {"width": geometry.width(), "height": geometry.height()},
+                "maximized": self.isMaximized()
             }
-            
-            app_config["window_state"] = window_state
             
             # 保存配置
             config_service.save_module_config("app", app_config)
             
-            self.logger.debug(f"窗口位置已保存: x={window_state['x']}, y={window_state['y']}")
+            self.logger.debug(f"窗口状态已保存: x={geometry.x()}, y={geometry.y()}")
             
         except Exception as e:
             self.logger.error(f"保存窗口位置失败: {e}", exc_info=True)
@@ -1263,9 +1291,10 @@ class UEMainWindow(QMainWindow):
                 self._center_window()
                 return
             
-            # 提取窗口位置（只恢复位置，不恢复大小）
-            x = window_state.get("x")
-            y = window_state.get("y")
+            # 支持新格式 {position:{x,y}} 和旧格式 {x,y}
+            pos = window_state.get("position", {})
+            x = pos.get("x") if pos else window_state.get("x")
+            y = pos.get("y") if pos else window_state.get("y")
             
             if x is None or y is None:
                 self.logger.info("窗口位置数据不完整，使用默认窗口位置")
@@ -1515,6 +1544,13 @@ class UEMainWindow(QMainWindow):
             self._is_closing = True
             self.logger.info("主窗口正在关闭，清理资源...")
             
+            # 清理授权缓存线程
+            try:
+                from core.security.license_manager import cleanup_license_cache
+                cleanup_license_cache()
+            except Exception as e:
+                self.logger.warning(f"清理授权缓存线程失败: {e}")
+            
             # 清理悬浮窗
             self._destroy_floating_widget()
             
@@ -1692,6 +1728,15 @@ class UEMainWindow(QMainWindow):
                 "检查更新失败",
                 f"无法检查更新，请稍后重试。\n\n错误: {str(e)}"
             )
+    
+    def _start_license_preload(self):
+        """启动授权状态预加载（异步，不阻塞UI）"""
+        try:
+            from core.security.license_manager import start_license_cache_preload
+            start_license_cache_preload()
+            self.logger.info("授权状态预加载已启动")
+        except Exception as e:
+            self.logger.warning(f"启动授权状态预加载失败: {e}")
     
     def _on_manual_update_available(self, version_info: dict, app):
         """手动检查发现新版本"""

@@ -1,6 +1,9 @@
     # -*- coding: utf-8 -*-
 
 import sys
+import os
+import atexit
+import shutil
 from pathlib import Path
 
 # 添加项目根目录到Python路径
@@ -9,6 +12,43 @@ sys.path.insert(0, str(project_root))
 
 # 导入 AppBootstrap
 from core.bootstrap import AppBootstrap
+
+
+def _cleanup_temp_dir():
+    """清理 PyInstaller 临时目录（静默失败，不弹窗）"""
+    # 不做任何操作，让 Windows 在下次重启时自动清理
+    # 避免退出时弹出删除失败的警告
+    pass
+
+
+def _cleanup_old_temp_dirs():
+    """清理旧的 PyInstaller 临时目录"""
+    if getattr(sys, 'frozen', False):
+        try:
+            import tempfile
+            temp_root = tempfile.gettempdir()
+            
+            # 查找所有 _UE_Toolkit 和 _MEI 开头的目录
+            for item in os.listdir(temp_root):
+                if item.startswith('_UE_Toolkit') or item.startswith('_MEI'):
+                    old_temp = os.path.join(temp_root, item)
+                    # 跳过当前运行的临时目录
+                    current_temp = getattr(sys, '_MEIPASS', None)
+                    if current_temp and os.path.exists(current_temp):
+                        try:
+                            if os.path.samefile(old_temp, current_temp):
+                                continue
+                        except (OSError, FileNotFoundError):
+                            pass
+                    
+                    # 尝试删除旧目录（静默失败）
+                    try:
+                        if os.path.isdir(old_temp):
+                            shutil.rmtree(old_temp, ignore_errors=True)
+                    except Exception:
+                        pass  # 静默失败，不影响启动
+        except Exception:
+            pass  # 静默失败
 
 
 def _reset_license():
@@ -85,7 +125,22 @@ def _reset_license():
 
 
 def main():
-    """主函数 - 使用 Bootstrap 系统启动应用"""
+    """主入口函数"""
+    # 设置控制台UTF-8编码，避免中文乱码
+    if sys.platform == 'win32':
+        try:
+            import io
+            sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
+            sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
+        except Exception:
+            pass
+    
+    # 注册退出时的清理函数
+    atexit.register(_cleanup_temp_dir)
+    
+    # 启动时清理旧的临时目录
+    _cleanup_old_temp_dirs()
+    
     # 处理 --reset-license 参数（清除本地授权数据，方便测试）
     if "--reset-license" in sys.argv:
         _reset_license()

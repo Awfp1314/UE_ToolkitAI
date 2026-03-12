@@ -66,10 +66,11 @@ class ConfigHandler:
                 # 返回默认配置
                 config = {
                     "_version": "2.0.0",
-                    "preview_project_path": "",
-                    "last_target_project_path": "",
-                    "asset_library_path": "",
-                    "asset_library_configs": {}
+                    "asset_libraries": [],
+                    "current_asset_library": "",
+                    "preview_projects": [],
+                    "last_preview_project": "",
+                    "last_target_project": ""
                 }
             
             # 缓存配置
@@ -96,15 +97,12 @@ class ConfigHandler:
             config = self.load_config()
             
             # 更新资产库路径的配置
-            asset_library_path = config.get("asset_library_path", "")
+            asset_library_path = config.get("current_asset_library", "") or config.get("asset_library_path", "")
             if asset_library_path:
-                if "asset_library_configs" not in config:
-                    config["asset_library_configs"] = {}
-                
-                config["asset_library_configs"][asset_library_path] = {
-                    "asset_count": len(assets),
-                    "categories": categories
-                }
+                libs = config.setdefault("asset_libraries", [])
+                existing = next((l for l in libs if l.get("path") == asset_library_path), None)
+                if not existing:
+                    libs.append({"path": asset_library_path, "name": "主资产库", "last_opened": ""})
             
             # 保存配置
             result = self._config_manager.save_user_config(config, backup_reason="manual_save")
@@ -228,20 +226,26 @@ class ConfigHandler:
             # 检查版本
             version = old_config.get("_version", "1.0.0")
 
-            if version == "2.0.0":
-                # 已经是最新版本
+            # 如果已包含新格式字段则跳过
+            if old_config.get("current_asset_library") is not None or old_config.get("asset_libraries") is not None:
                 return old_config
 
-            # 迁移到 2.0.0
+            if version == "2.0.0" and not old_config.get("asset_library_path"):
+                return old_config
+
+            # 迁移到新格式
+            old_lib = old_config.get("asset_library_path", "")
             new_config = {
                 "_version": "2.0.0",
-                "preview_project_path": old_config.get("preview_project_path", ""),
-                "last_target_project_path": old_config.get("last_target_project_path", ""),
-                "asset_library_path": old_config.get("asset_library_path", ""),
-                "asset_library_configs": old_config.get("asset_library_configs", {})
+                "current_asset_library": old_lib,
+                "asset_libraries": [{"path": old_lib, "name": "主资产库", "last_opened": ""}] if old_lib else [],
+                "preview_projects": (old_config.get("additional_preview_projects_with_names")
+                                     or old_config.get("preview_projects", [])),
+                "last_preview_project": old_config.get("last_preview_project_name", ""),
+                "last_target_project": old_config.get("last_target_project_path", ""),
             }
 
-            self._logger.info(f"Migrated config from {version} to 2.0.0")
+            self._logger.info(f"Migrated config from {version} to new format")
             return new_config
 
         except Exception as e:
@@ -256,7 +260,7 @@ class ConfigHandler:
         """
         try:
             config = self.load_config()
-            path_str = config.get("asset_library_path", "")
+            path_str = config.get("current_asset_library", "") or config.get("asset_library_path", "")
             if path_str:
                 return Path(path_str)
             return None
@@ -275,7 +279,10 @@ class ConfigHandler:
         """
         try:
             config = self.load_config()
-            config["asset_library_path"] = str(library_path)
+            config["current_asset_library"] = str(library_path)
+            libs = config.setdefault("asset_libraries", [])
+            if not any(l.get("path") == str(library_path) for l in libs):
+                libs.append({"path": str(library_path), "name": "主资产库", "last_opened": ""})
             result = self._config_manager.save_user_config(config, backup_reason="set_library_path")
             
             # 使缓存失效

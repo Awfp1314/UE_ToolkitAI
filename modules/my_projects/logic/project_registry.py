@@ -81,6 +81,19 @@ class ProjectRegistry:
 
     # ── 工程操作 ──
 
+    def clear_registry(self) -> bool:
+        """清理注册表缓存，强制重新扫描"""
+        try:
+            if self._registry_path.exists():
+                # 先备份再删除
+                self._create_backup()
+                self._registry_path.unlink()
+                logger.info("注册表缓存已清理，将强制重新扫描")
+                return True
+        except Exception as e:
+            logger.error(f"清理注册表缓存失败: {e}")
+        return False
+
     def get_projects(self) -> List[Dict[str, Any]]:
         """获取所有已注册工程"""
         return self.load_registry().get("projects", [])

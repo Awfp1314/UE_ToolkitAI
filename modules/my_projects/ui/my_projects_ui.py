@@ -431,15 +431,15 @@ class ProjectScanner(QThread):
         'marketplace', 'plugins'
     }
 
-    def __init__(self, known_paths=None, preview_paths=None):
+    def __init__(self, known_paths=None, excluded_paths=None):
         """
         Args:
             known_paths: 已知工程路径集合。为 None 时全量扫描，非空时增量扫描（跳过已知）。
-            preview_paths: 预览工程路径列表，扫描时会过滤掉这些路径。
+            excluded_paths: 需要排除的路径列表（预览工程、资产库等），扫描时会过滤掉这些路径。
         """
         super().__init__()
         self.known_paths = known_paths or set()
-        self.preview_paths = set(preview_paths or [])
+        self.excluded_paths = set(excluded_paths or [])
         self.projs = []
 
     def run(self):
@@ -485,21 +485,21 @@ class ProjectScanner(QThread):
                 if self.known_paths and (item / TOOLKIT_CONFIG_DIR).exists():
                     continue
 
-                # 过滤预览工程路径（包括子目录）
-                if self.preview_paths:
+                # 过滤排除路径（预览工程、资产库等，包括子目录）
+                if self.excluded_paths:
                     try:
                         item_resolved = item.resolve()
-                        is_preview = False
-                        for preview_path in self.preview_paths:
+                        is_excluded = False
+                        for excluded_path in self.excluded_paths:
                             try:
-                                preview_resolved = Path(preview_path).resolve()
-                                # 检查是否是预览路径本身或其子目录
-                                if item_resolved == preview_resolved or preview_resolved in item_resolved.parents:
-                                    is_preview = True
+                                excluded_resolved = Path(excluded_path).resolve()
+                                # 检查是否是排除路径本身或其子目录
+                                if item_resolved == excluded_resolved or excluded_resolved in item_resolved.parents:
+                                    is_excluded = True
                                     break
                             except Exception:
                                 continue
-                        if is_preview:
+                        if is_excluded:
                             continue
                     except Exception:
                         pass
@@ -609,35 +609,94 @@ class MyProjectsUI(BaseModuleWidget):
         super().showEvent(event)
         if not self._assets_loaded and self.scanner is None:
             QTimer.singleShot(10, self._load_projects)
+        
+        # 检查排除路径是否变更
+        QTimer.singleShot(50, self._check_excluded_paths_changed)
 
-    def _get_preview_project_paths(self):
-        """获取预览工程路径列表"""
+    def _get_excluded_paths(self):
+        """获取需要排除的路径列表（预览工程 + 资产库等）"""
+        excluded_paths = set()
+        
         try:
             from core.services import config_service
-            user_config = config_service.get_module_config("app") or {}
             
-            # 获取预览工程列表
-            preview_projects = user_config.get("additional_preview_projects_with_names", [])
-            if not preview_projects:
-                # 兼容旧格式
-                preview_projects = [
-                    {"path": p} for p in user_config.get("additional_preview_projects", [])
-                ]
-            
-            # 提取路径并规范化
-            paths = set()
+            # 1. 获取预览工程路径（从 asset_manager config 读取）
+            asset_config = config_service.get_module_config("asset_manager") or {}
+            preview_projects = (asset_config.get("preview_projects", [])
+                                 or asset_config.get("additional_preview_projects_with_names", []))
             for proj in preview_projects:
                 path = proj.get("path", "")
                 if path:
                     try:
-                        paths.add(str(Path(path).resolve()))
+                        excluded_paths.add(str(Path(path).resolve()))
                     except Exception:
-                        paths.add(path)
+                        excluded_paths.add(path)
             
-            return paths
+            # 2. 获取资产库路径
+            try:
+                asset_library_path = (asset_config.get("current_asset_library", "")
+                                       or asset_config.get("asset_library_path", ""))
+                if asset_library_path:
+                    try:
+                        excluded_paths.add(str(Path(asset_library_path).resolve()))
+                    except Exception:
+                        excluded_paths.add(asset_library_path)
+                
+                for lib in asset_config.get("asset_libraries", []):
+                    lp = lib.get("path", "")
+                    if lp:
+                        try:
+                            excluded_paths.add(str(Path(lp).resolve()))
+                        except Exception:
+                            excluded_paths.add(lp)
+                            
+            except Exception as e:
+                logger.debug(f"获取资产库路径失败: {e}")
+            
+            # 3. 可以在这里添加其他需要排除的路径
+            # 比如：临时目录、缓存目录等
+            
         except Exception as e:
-            logger.warning(f"获取预览工程路径失败: {e}")
-            return set()
+            logger.warning(f"获取排除路径失败: {e}")
+        
+        return excluded_paths
+
+    def clear_cache_and_rescan(self):
+        """清理缓存并重新扫描（用于路径变更后强制刷新）"""
+        try:
+            logger.info("清理我的工程缓存并重新扫描...")
+            
+            # 清理注册表缓存
+            self.registry.clear_registry()
+            
+            # 清空当前数据
+            self.all_projects = []
+            self._clear_cards()
+            
+            # 重新加载（会触发全量扫描）
+            self._load_projects()
+            
+        except Exception as e:
+            logger.error(f"清理缓存并重新扫描失败: {e}")
+
+    def _check_excluded_paths_changed(self):
+        """检查排除路径是否发生变化，如果变化则重新扫描"""
+        try:
+            current_excluded = self._get_excluded_paths()
+            
+            # 如果是首次检查，保存当前路径
+            if not hasattr(self, '_last_excluded_paths'):
+                self._last_excluded_paths = current_excluded
+                return
+            
+            # 检查是否有变化
+            if current_excluded != self._last_excluded_paths:
+                logger.info("检测到排除路径变更，重新扫描我的工程...")
+                self._last_excluded_paths = current_excluded
+                self.clear_cache_and_rescan()
+                
+        except Exception as e:
+            logger.warning(f"检查排除路径变更失败: {e}")
 
     def _setup_thumb_watcher(self):
         """为当前显示的卡片设置缩略图目录监听"""
@@ -749,16 +808,35 @@ class MyProjectsUI(BaseModuleWidget):
 
     def _load_projects(self):
         """加载工程：有注册表则秒加载 + 增量扫描，否则全量扫描"""
-        # 获取预览工程路径列表
-        preview_paths = self._get_preview_project_paths()
-        
         if self.registry.has_registry():
             # 从注册表加载（瞬间）
             projects = self.registry.get_projects()
-            # 过滤掉已不存在的工程和预览工程
-            valid = [p for p in projects if Path(p["path"]).exists() and p["path"] not in preview_paths]
+            # 过滤掉已不存在的工程和排除路径
+            excluded_paths = self._get_excluded_paths()
+            valid = []
+            for p in projects:
+                if not Path(p["path"]).exists():
+                    continue
+                # 检查是否在排除路径中
+                is_excluded = False
+                try:
+                    project_path = Path(p["path"]).resolve()
+                    for excluded_path in excluded_paths:
+                        try:
+                            excluded_resolved = Path(excluded_path).resolve()
+                            if project_path == excluded_resolved or excluded_resolved in project_path.parents:
+                                is_excluded = True
+                                break
+                        except Exception:
+                            continue
+                except Exception:
+                    pass
+                
+                if not is_excluded:
+                    valid.append(p)
+            
             if len(valid) != len(projects):
-                logger.info(f"清理 {len(projects) - len(valid)} 个已不存在或预览工程")
+                logger.info(f"清理 {len(projects) - len(valid)} 个已不存在或排除的工程")
 
             self.all_projects = valid
             self._load_categories()
@@ -769,15 +847,19 @@ class MyProjectsUI(BaseModuleWidget):
             # 后台增量扫描新工程
             self.status_label.setText(f"已加载 {len(valid)} 个项目，正在检查新项目...")
             known = {p["path"] for p in valid}
-            self._start_scan(known_paths=known, preview_paths=preview_paths)
+            self._start_scan(known_paths=known)
         else:
             # 首次运行，全量扫描
             self.status_label.setText("首次运行，正在扫描项目...")
-            self._start_scan(known_paths=None, preview_paths=preview_paths)
+            self._start_scan(known_paths=None)
 
-    def _start_scan(self, known_paths, preview_paths=None):
+    def _start_scan(self, known_paths, excluded_paths=None):
         """启动扫描线程"""
-        scanner = ProjectScanner(known_paths=known_paths, preview_paths=preview_paths)
+        # 获取需要排除的路径
+        if excluded_paths is None:
+            excluded_paths = self._get_excluded_paths()
+        
+        scanner = ProjectScanner(known_paths=known_paths, excluded_paths=excluded_paths)
         if known_paths:
             scanner.found.connect(self._on_incremental_scan_done)
         else:
@@ -931,7 +1013,11 @@ class MyProjectsUI(BaseModuleWidget):
         self.version_filter.addItem("所有版本")
         for v in versions:
             self.version_filter.addItem(v)
-        idx = self.version_filter.findText(current)
+        
+        # 优先恢复已保存的版本筛选
+        saved_version = self._load_ui_state("selected_version", "")
+        restore_target = saved_version if saved_version else current
+        idx = self.version_filter.findText(restore_target)
         self.version_filter.setCurrentIndex(idx if idx >= 0 else 0)
         self.version_filter.blockSignals(False)
 
@@ -948,11 +1034,46 @@ class MyProjectsUI(BaseModuleWidget):
             self.category_filter.addItem(cat)
         self.category_filter.addItem("+ 分类管理")
 
-        if current and current != "+ 分类管理":
-            idx = self.category_filter.findText(current)
+        # 优先恢复已保存的分类
+        saved_category = self._load_ui_state("selected_category", "")
+        restore_target = saved_category if saved_category else current
+        if restore_target and restore_target != "+ 分类管理":
+            idx = self.category_filter.findText(restore_target)
             if idx >= 0:
                 self.category_filter.setCurrentIndex(idx)
         self.category_filter.blockSignals(False)
+
+        # 恢复已保存的排序方式
+        saved_sort = self._load_ui_state("sort_method", "")
+        if saved_sort:
+            sort_idx = self.sort_combo.findText(saved_sort)
+            if sort_idx >= 0:
+                self.sort_combo.blockSignals(True)
+                self.sort_combo.setCurrentIndex(sort_idx)
+                self.sort_combo.blockSignals(False)
+
+    @staticmethod
+    def _load_ui_state(key: str, default=None):
+        """从 app_config.ui_states.my_projects 读取指定字段"""
+        try:
+            from core.services import config_service
+            app_config = config_service.get_module_config("app") or {}
+            return app_config.get("ui_states", {}).get("my_projects", {}).get(key, default)
+        except Exception:
+            return default
+
+    @staticmethod
+    def _save_ui_state(key: str, value) -> None:
+        """保存指定字段到 app_config.ui_states.my_projects"""
+        try:
+            from core.services import config_service
+            app_config = config_service.get_module_config("app") or {}
+            ui_states = app_config.setdefault("ui_states", {})
+            mp_state = ui_states.setdefault("my_projects", {})
+            mp_state[key] = value
+            config_service.save_module_config("app", app_config)
+        except Exception:
+            pass
 
     def _on_category_changed(self, category: str):
         """分类选择改变"""
@@ -960,6 +1081,7 @@ class MyProjectsUI(BaseModuleWidget):
             self._show_category_dialog()
             self.category_filter.setCurrentIndex(0)
             return
+        self._save_ui_state("selected_category", category)
         self._apply_filter()
 
     def _show_category_dialog(self):
@@ -975,9 +1097,12 @@ class MyProjectsUI(BaseModuleWidget):
         self._apply_filter()
 
     def _on_filter_changed(self, *args):
+        # 保存版本筛选状态
+        self._save_ui_state("selected_version", self.version_filter.currentText())
         self._apply_filter()
 
     def _on_sort_changed(self, *args):
+        self._save_ui_state("sort_method", self.sort_combo.currentText())
         self._apply_filter()
 
     def _apply_filter(self):
@@ -1256,6 +1381,10 @@ class MyProjectsUI(BaseModuleWidget):
         self._load_categories()
         self._update_version_filter()
         self._apply_filter()
+        
+        # 刷新UI显示新工程
+        self._refresh_cards()
+        
         logger.info(f"新工程已添加: {proj_dir.name}")
 
     def _delete_project(self, project_path):

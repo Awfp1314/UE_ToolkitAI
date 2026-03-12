@@ -54,6 +54,9 @@ class ConfigService:
                 "window_state",
                 "close_action_preference",
                 "debug_services",
+                "app_settings",
+                "module_state",
+                "ui_states",
             },
             field_types={"_version": str},
             allow_unknown_fields=True,
@@ -81,6 +84,12 @@ class ConfigService:
             default_app_template = Path(__file__).resolve().parent.parent / "config_templates" / "app_config_template.json"
             if default_app_template.exists():
                 resolved_template_path = default_app_template
+        
+        # asset_manager 配置模板有固定位置
+        if resolved_template_path is None and module_name == "asset_manager":
+            default_asset_template = Path(__file__).resolve().parent.parent.parent / "modules" / "asset_manager" / "config_template.json"
+            if default_asset_template.exists():
+                resolved_template_path = default_asset_template
 
         if module_name not in self._config_managers:
             self._logger.debug(f"创建新的 ConfigManager: {module_name}")

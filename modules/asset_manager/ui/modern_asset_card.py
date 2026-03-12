@@ -440,6 +440,8 @@ class ModernAssetCard(QFrame):
                  theme: str = "dark", defer_thumbnail: bool = False,
                  asset_path: Optional[str] = None, parent=None):
         super().__init__(parent)
+        # 立即隐藏，避免在初始化过程中显示为独立窗口
+        self.hide()
         self.name = name
         self.category = category
         self.asset_size = size
@@ -459,6 +461,10 @@ class ModernAssetCard(QFrame):
         # 确保能接收鼠标事件
         self.setAttribute(Qt.WidgetAttribute.WA_Hover, True)
         self.setFocusPolicy(Qt.FocusPolicy.ClickFocus)
+        
+        # 确保不作为独立窗口显示
+        if parent is None:
+            self.setWindowFlags(Qt.WindowType.Widget)
 
         self._init_ui()
 
@@ -990,6 +996,8 @@ class CompactAssetCard(QFrame):
                  theme: str = "dark", defer_thumbnail: bool = False,
                  asset_path: Optional[str] = None, parent=None):
         super().__init__(parent)
+        # 立即隐藏，避免在初始化过程中显示为独立窗口
+        self.hide()
         self.name = name
         self.category = category
         self.thumbnail_path = thumbnail_path
@@ -1006,6 +1014,10 @@ class CompactAssetCard(QFrame):
         # 确保能接收鼠标事件
         self.setAttribute(Qt.WidgetAttribute.WA_Hover, True)
         self.setFocusPolicy(Qt.FocusPolicy.ClickFocus)
+        
+        # 确保不作为独立窗口显示
+        if parent is None:
+            self.setWindowFlags(Qt.WindowType.Widget)
         
         self._init_ui()
 

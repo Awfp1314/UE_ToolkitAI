@@ -58,7 +58,7 @@ class AssetPreviewCoordinator:
     # ─── 预览工程配置 ───────────────────────────────────────
 
     def set_preview_project(self, project_path: Path) -> bool:
-        """设置预览工程路径
+        """设置预览工程路径（设为 preview_projects 第一个）
         
         Args:
             project_path: 预览工程路径
@@ -68,10 +68,22 @@ class AssetPreviewCoordinator:
         """
         try:
             config = self._config_manager.load_user_config() or {}
-            config["preview_project_path"] = str(project_path)
-            self._config_manager.save_user_config(config)
+            projects = config.get("preview_projects", []) or config.get("additional_preview_projects_with_names", [])
+            path_str = str(project_path)
+            name = project_path.name
+            if projects and projects[0].get("path") != path_str:
+                projects = [p for p in projects if p.get("path") != path_str]
+                projects.insert(0, {"path": path_str, "name": name})
+            elif not projects:
+                projects = [{"path": path_str, "name": name}]
+            config["preview_projects"] = projects
             
-            self._logger.info(f"预览工程路径已设置: {project_path}")
+            save_result = self._config_manager.save_user_config(config, backup_reason="set_preview_project")
+            if not save_result:
+                self._logger.error("保存预览工程路径失败")
+                return False
+            
+            self._logger.info(f"预览工程已设置为第一个: {project_path}")
             return True
             
         except Exception as e:
@@ -79,26 +91,21 @@ class AssetPreviewCoordinator:
             return False
 
     def get_preview_project(self) -> Optional[Path]:
-        """获取预览工程路径
-        
-        优先级：
-        1. 额外工程列表中的第一个工程
-        2. 配置中的旧单个预览工程
+        """获取预览工程路径（取 preview_projects 第一个）
         
         Returns:
             预览工程路径，不存在返回None
         """
         try:
-            # 优先从额外工程中获取第一个
-            additional_projects = self.get_additional_preview_projects_with_names()
-            if additional_projects:
-                first_project_path = additional_projects[0].get("path", "")
-                if first_project_path:
-                    path = Path(first_project_path)
+            projects = self.get_additional_preview_projects_with_names()
+            if projects:
+                first_path = projects[0].get("path", "")
+                if first_path:
+                    path = Path(first_path)
                     if path.exists():
                         return path
             
-            # 回退到旧的单个预览工程配置
+            # 兼容旧字段 preview_project_path
             config = self._config_manager.load_user_config()
             preview_path = config.get("preview_project_path", "")
             if preview_path:
@@ -133,7 +140,7 @@ class AssetPreviewCoordinator:
             return []
 
     def get_additional_preview_projects_with_names(self) -> List[Dict[str, str]]:
-        """获取额外的预览工程路径和名称列表
+        """获取预览工程列表（读取 preview_projects，兼容旧字段）
         
         Returns:
             包含path和name的字典列表，格式: [{"path": "...", "name": "..."}, ...]
@@ -141,21 +148,20 @@ class AssetPreviewCoordinator:
         try:
             config = self._config_manager.load_user_config() or {}
             
-            # 支持新旧格式的兼容性
-            additional_projects = config.get("additional_preview_projects_with_names", [])
-            if not additional_projects:
-                # 尝试从旧格式迁移
+            # 优先读新字段 preview_projects
+            projects = config.get("preview_projects", [])
+            if not projects:
+                # 兼容旧字段
+                projects = config.get("additional_preview_projects_with_names", [])
+            if not projects:
                 old_paths = config.get("additional_preview_projects", [])
-                additional_projects = [
-                    {"path": str(p), "name": f"工程 {i+1}"} 
-                    for i, p in enumerate(old_paths)
-                ]
+                projects = [{"path": str(p), "name": f"工程 {i+1}"} for i, p in enumerate(old_paths)]
             
-            self._logger.debug(f"已加载 {len(additional_projects)} 个额外预览工程")
-            return additional_projects
+            self._logger.debug(f"已加载 {len(projects)} 个预览工程")
+            return projects
             
         except Exception as e:
-            self._logger.error(f"获取额外预览工程路径失败: {e}", exc_info=True)
+            self._logger.error(f"获取预览工程路径失败: {e}", exc_info=True)
             return []
 
     def set_additional_preview_projects(self, project_paths: List[str]) -> bool:
@@ -178,7 +184,11 @@ class AssetPreviewCoordinator:
                     project_paths = [p for p in project_paths if p != path_str]
             
             config["additional_preview_projects"] = project_paths
-            self._config_manager.save_user_config(config)
+            
+            save_result = self._config_manager.save_user_config(config, backup_reason="set_additional_preview_projects")
+            if not save_result:
+                self._logger.error("保存额外预览工程路径失败")
+                return False
             
             self._logger.info(f"已保存 {len(project_paths)} 个额外预览工程路径")
             return True
@@ -188,7 +198,7 @@ class AssetPreviewCoordinator:
             return False
 
     def set_additional_preview_projects_with_names(self, projects: List[Dict[str, str]]) -> bool:
-        """设置额外的预览工程路径和名称列表
+        """设置预览工程列表（写入 preview_projects）
         
         Args:
             projects: 包含path和name的字典列表，格式: [{"path": "...", "name": "..."}, ...]
@@ -199,29 +209,30 @@ class AssetPreviewCoordinator:
         try:
             config = self._config_manager.load_user_config() or {}
             
-            # 验证所有路径都存在
             valid_projects = []
             for project in projects:
                 path_str = project.get("path", "")
                 name = project.get("name", "")
                 if not path_str or not name:
                     continue
-                
                 path = Path(path_str)
                 if not path.exists():
                     self._logger.warning(f"预览工程路径不存在，跳过: {path_str}")
                     continue
-                
                 valid_projects.append({"path": path_str, "name": name})
             
-            config["additional_preview_projects_with_names"] = valid_projects
-            self._config_manager.save_user_config(config)
+            config["preview_projects"] = valid_projects
             
-            self._logger.info(f"已保存 {len(valid_projects)} 个额外预览工程")
+            save_result = self._config_manager.save_user_config(config, backup_reason="set_preview_projects")
+            if not save_result:
+                self._logger.error("保存预览工程失败")
+                return False
+            
+            self._logger.info(f"已保存 {len(valid_projects)} 个预览工程")
             return True
             
         except Exception as e:
-            self._logger.error(f"保存额外预览工程路径失败: {e}", exc_info=True)
+            self._logger.error(f"保存预览工程失败: {e}", exc_info=True)
             return False
 
     # ─── 预览工程清理 ──────────────────────────────────────
@@ -291,6 +302,10 @@ class AssetPreviewCoordinator:
             thumbnails_dir: 缩略图目录
         """
         try:
+            # 检查UE版本兼容性
+            if not self._check_ue_version_compatibility(asset, preview_project, on_error):
+                return
+            
             # 清空预览工程的Content文件夹
             content_dir = preview_project / "Content"
             
@@ -771,6 +786,164 @@ class AssetPreviewCoordinator:
             self._logger.error(f"关闭预览工程时出错: {e}", exc_info=True)
             return False
 
+    def _check_ue_version_compatibility(self, asset: Asset, preview_project: Path, on_error: Optional[Callable[[str], None]] = None) -> bool:
+        """检查UE版本兼容性
+        
+        Args:
+            asset: 资产对象
+            preview_project: 预览工程路径
+            on_error: 错误回调
+            
+        Returns:
+            bool: 兼容返回True，不兼容返回False
+        """
+        try:
+            # 检测预览工程的UE版本
+            project_version = self._detect_project_ue_version(preview_project)
+            
+            # 检测资产的UE版本（如果有）
+            asset_version = self._detect_asset_ue_version(asset)
+            
+            if asset_version and project_version:
+                # 检查版本兼容性
+                if not self._is_version_compatible(asset_version, project_version):
+                    error_msg = (
+                        f"⚠️ UE版本兼容性警告\n\n"
+                        f"资产版本：UE {asset_version}\n"
+                        f"预览工程版本：UE {project_version}\n\n"
+                        f"继续预览可能导致：\n"
+                        f"• 资产被升级到新版本\n"
+                        f"• 旧版本UE无法再打开该资产\n"
+                        f"• 蓝图、材质等功能丢失\n\n"
+                        f"建议：使用相同版本的预览工程"
+                    )
+                    
+                    self._logger.warning(f"UE版本不兼容：资产{asset_version} vs 预览工程{project_version}")
+                    
+                    if on_error:
+                        on_error(error_msg)
+                    return False
+            
+            return True
+            
+        except Exception as e:
+            self._logger.warning(f"检查UE版本兼容性时出错: {e}")
+            # 出错时允许继续，但记录警告
+            return True
+    
+    def _detect_project_ue_version(self, project_path: Path) -> Optional[str]:
+        """检测UE工程的版本
+        
+        Args:
+            project_path: 工程路径
+            
+        Returns:
+            版本字符串，如 "5.0" 或 "4.27"
+        """
+        try:
+            # 查找 .uproject 文件
+            uproject_files = list(project_path.glob("*.uproject"))
+            if not uproject_files:
+                return None
+            
+            uproject_file = uproject_files[0]
+            
+            # 读取 .uproject 文件
+            import json
+            with open(uproject_file, 'r', encoding='utf-8') as f:
+                project_data = json.load(f)
+            
+            # 获取引擎版本
+            engine_version = project_data.get("EngineAssociation", "")
+            if engine_version.startswith("{"):
+                # 是GUID，需要从注册表或安装目录查找
+                return self._find_version_from_guid(engine_version)
+            elif engine_version:
+                # 直接是版本号
+                return engine_version.replace("UE", "")
+            
+            return None
+            
+        except Exception as e:
+            self._logger.warning(f"检测工程UE版本失败: {e}")
+            return None
+    
+    def _detect_asset_ue_version(self, asset: Asset) -> Optional[str]:
+        """检测资产的UE版本
+        
+        Args:
+            asset: 资产对象
+            
+        Returns:
+            版本字符串，如 "5.0" 或 "4.27"
+        """
+        try:
+            # 检查资产目录中的 .uasset 文件
+            uasset_files = list(asset.path.rglob("*.uasset"))
+            if not uasset_files:
+                return None
+            
+            # 读取第一个 .uasset 文件头来检测版本
+            import struct
+            with open(uasset_files[0], 'rb') as f:
+                # UE资源文件头格式检查
+                # 跳过前4字节的magic
+                f.seek(4)
+                # 读取版本号
+                version_bytes = f.read(4)
+                if len(version_bytes) == 4:
+                    version = struct.unpack('<I', version_bytes)[0]
+                    # 将版本号转换为字符串
+                    if version >= 500:
+                        major = version // 100
+                        minor = (version % 100) // 10
+                    else:
+                        major = version // 100
+                        minor = version % 100
+                    
+                    return f"{major}.{minor}"
+            
+            return None
+            
+        except Exception as e:
+            self._logger.debug(f"检测资产UE版本失败: {e}")
+            return None
+    
+    def _is_version_compatible(self, asset_version: str, project_version: str) -> bool:
+        """判断版本是否兼容
+        
+        Args:
+            asset_version: 资产版本
+            project_version: 预览工程版本
+            
+        Returns:
+            bool: 兼容返回True
+        """
+        try:
+            # 解析版本号
+            asset_major = int(asset_version.split('.')[0])
+            project_major = int(project_version.split('.')[0])
+            
+            # 主版本相同则兼容
+            if asset_major == project_major:
+                return True
+            
+            # UE4和UE5之间不兼容
+            if asset_major != project_major:
+                return False
+            
+            return True
+            
+        except Exception:
+            # 解析失败时保守处理，允许继续
+            return True
+    
+    def _find_version_from_guid(self, guid: str) -> Optional[str]:
+        """从GUID查找UE版本（简化实现）"""
+        # 这里可以扩展为查询注册表或安装目录
+        # 暂时返回None，让用户手动确认
+        return None
+    
     # ─── 截图处理 ──────────────────────────────────────────
 
     def process_screenshot(
@@ -956,8 +1129,10 @@ class AssetPreviewCoordinator:
             # 保存最后使用的目标工程路径
             try:
                 config = self._config_manager.load_user_config()
-                config["last_target_project_path"] = str(target_project)
-                self._config_manager.save_user_config(config)
+                config["last_target_project"] = str(target_project)
+                save_result = self._config_manager.save_user_config(config, backup_reason="migrate_asset")
+                if not save_result:
+                    self._logger.warning("保存目标工程路径失败")
             except Exception as e:
                 self._logger.warning(f"保存目标工程路径失败: {e}")
             
