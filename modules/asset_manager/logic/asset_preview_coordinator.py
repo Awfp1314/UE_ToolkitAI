@@ -482,16 +482,12 @@ class AssetPreviewCoordinator:
                         progress_callback(total_items, total_items, f"已{operation_text} {total_items} 个项目")
                     self._logger.info(f"成功{operation_text} {total_items} 个项目")
             elif (asset.path / "Others").exists() and (asset.path / "Others").is_dir():
-                # OTHERS 类型：从 Others 文件夹递归复制所有内容到预览工程的 Content/资产名/ 下
-                # 结构：Others/原始文件名/Models|Textures/ → Content/资产名/原始文件名/Models|Textures/
+                # OTHERS 类型：从 Others 文件夹递归复制所有内容直接到预览工程的 Content/ 下
+                # 结构：Others/原始文件名/Models|Textures/ → Content/原始文件名/Models|Textures/
                 others_folder = asset.path / "Others"
-                target_asset_dir = content_dir / asset.name
                 self._logger.info(
-                    f"检测到 Others 结构，从 {others_folder} {operation_text}内容到 {target_asset_dir}"
+                    f"检测到 Others 结构，从 {others_folder} {operation_text}内容到 {content_dir}"
                 )
-
-                # 确保目标目录存在
-                target_asset_dir.mkdir(parents=True, exist_ok=True)
 
                 # 获取 Others 下的所有项目
                 items = list(others_folder.iterdir())
@@ -502,7 +498,7 @@ class AssetPreviewCoordinator:
                         progress_callback(1, 1, "资产预览准备完成（空文件夹）")
                 else:
                     total_items = len(items)
-                    self._logger.info(f"开始{operation_text} {total_items} 个项目到 {target_asset_dir}")
+                    self._logger.info(f"开始{operation_text} {total_items} 个项目到 {content_dir}")
 
                     if use_symlink_preview:
                         import os
@@ -510,7 +506,7 @@ class AssetPreviewCoordinator:
                     success = True
                     for idx, item in enumerate(items, 1):
                         try:
-                            target_item = target_asset_dir / item.name
+                            target_item = content_dir / item.name
 
                             # 删除旧的目标（如果存在）
                             if target_item.exists():

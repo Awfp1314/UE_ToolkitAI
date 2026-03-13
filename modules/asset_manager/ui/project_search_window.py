@@ -1290,12 +1290,11 @@ class ProjectSearchWindow(QWidget):
                             success = False
                             
                     elif is_others:
-                        # 其他资源导入逻辑：从 Others 文件夹递归复制所有内容到目标工程的 Content/资产名/ 下
-                        # 结构：Others/原始文件名/Models|Textures/ → Content/资产名/原始文件名/Models|Textures/
+                        # 其他资源导入逻辑：从 Others 文件夹递归复制所有内容直接到目标工程的 Content/ 下
+                        # 结构：Others/原始文件名/Models|Textures/ → Content/原始文件名/Models|Textures/
                         others_folder = self.asset_path / "Others"
                         if others_folder.exists() and others_folder.is_dir():
-                            asset_name = self.asset_path.name
-                            target_base = target_project / "Content" / asset_name
+                            target_base = target_project / "Content"
                             
                             logger.info(f"其他资源导入: 从 {others_folder} 复制所有内容到 {target_base}")
                             
