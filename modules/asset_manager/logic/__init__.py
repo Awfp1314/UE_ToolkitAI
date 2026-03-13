@@ -4,7 +4,7 @@
 资产管理逻辑层模块
 """
 
-from .asset_model import Asset, AssetType
+from .asset_model import Asset, AssetType, PackageType
 from .asset_core import AssetCore
 from .asset_scanner import AssetScanner
 from .thumbnail_manager import ThumbnailManager

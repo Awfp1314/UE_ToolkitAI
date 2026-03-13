@@ -179,7 +179,7 @@ class ProgressButton(QPushButton):
         # 如果有进度，绘制进度条背景
         if self._progress > 0:
             # 获取圆角半径（从 ObjectName 判断）
-            radius = 10.0 if self.objectName() == "PreviewButton" else 8.0
+            radius = 0.0 if self.objectName() == "PreviewButton" else 8.0
             
             # 计算进度条宽度
             progress_width = rect.width() * self._progress
@@ -438,7 +438,9 @@ class ModernAssetCard(QFrame):
                  thumbnail_path: Optional[str] = None, asset_type: str = "资源包",
                  created_time: str = "", has_document: bool = False,
                  theme: str = "dark", defer_thumbnail: bool = False,
-                 asset_path: Optional[str] = None, parent=None):
+                 asset_path: Optional[str] = None, engine_min_version: str = "",
+                 package_type = None,
+                 parent=None):
         super().__init__(parent)
         # 立即隐藏，避免在初始化过程中显示为独立窗口
         self.hide()
@@ -452,6 +454,8 @@ class ModernAssetCard(QFrame):
         self.theme = theme
         self.defer_thumbnail = defer_thumbnail  # 是否延迟加载缩略图
         self.asset_path = asset_path  # 资产路径
+        self.engine_min_version = engine_min_version  # 引擎最低版本
+        self.package_type = package_type  # 包装类型（用于版本徽标格式化和类型显示）
         self._is_hovered = False
 
         self.setObjectName("AssetCard")
@@ -724,15 +728,69 @@ class ModernAssetCard(QFrame):
         # 定位到左下角，距离左边10px，距离底部10px
         self.category_label.move(10, 153 - 10 - self.category_label.height())
 
-        # 资产类型图标
-        asset_type_icon = "📦" if self.asset_type == "资源包" else "📄"
-        self.type_label = QLabel(asset_type_icon, thumbnail_container)
+        # 引擎版本徽标 - 右上角
+        from ..utils.ue_version_detector import UEVersionDetector
+        version_detector = UEVersionDetector()
+        # 传入 package_type 以正确格式化版本（插件不显示+号）
+        pkg_type = getattr(self, 'package_type', None)
+        version_badge = version_detector.format_version_badge(self.engine_min_version, pkg_type)
+        
+        self.version_label = QLabel(version_badge, thumbnail_container)
+        self.version_label.setObjectName("VersionLabel")
+        self.version_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.version_label.setTextInteractionFlags(Qt.TextInteractionFlag.NoTextInteraction)
+        self.version_label.setCursor(Qt.CursorShape.ArrowCursor)
+        
+        # 样式：蓝色版本徽标
+        self.version_label.setStyleSheet("""
+            QLabel {
+                color: #ffffff;
+                font-size: 11px;
+                font-weight: bold;
+                background-color: rgba(0, 122, 204, 0.85);
+                border-radius: 3px;
+                padding: 3px 6px;
+            }
+        """)
+        
+        self.version_label.setFixedSize(self.version_label.sizeHint())
+        # 定位到右上角
+        self.version_label.move(212 - 10 - self.version_label.width(), 10)
+        
+        # 资产类型徽标 - 右下角
+        from ..logic.asset_model import PackageType
+        type_text = "资源包"  # 默认值
+        if pkg_type:
+            if hasattr(pkg_type, 'display_name'):
+                type_text = pkg_type.display_name
+            elif isinstance(pkg_type, str):
+                # 如果是字符串，尝试转换为枚举
+                try:
+                    type_text = PackageType(pkg_type).display_name
+                except (ValueError, AttributeError):
+                    type_text = pkg_type
+        
+        self.type_label = QLabel(type_text, thumbnail_container)
         self.type_label.setObjectName("TypeLabel")
         self.type_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.type_label.setTextInteractionFlags(Qt.TextInteractionFlag.NoTextInteraction)
         self.type_label.setCursor(Qt.CursorShape.ArrowCursor)
-        self.type_label.setFixedSize(24, 24)
-        self.type_label.move(212 - 10 - 24, 153 - 10 - 24)
+        
+        # 样式：橙色类型徽标
+        self.type_label.setStyleSheet("""
+            QLabel {
+                color: #ffffff;
+                font-size: 11px;
+                font-weight: bold;
+                background-color: rgba(255, 152, 0, 0.85);
+                border-radius: 3px;
+                padding: 3px 6px;
+            }
+        """)
+        
+        self.type_label.setFixedSize(self.type_label.sizeHint())
+        # 定位到右下角
+        self.type_label.move(212 - 10 - self.type_label.width(), 153 - 10 - self.type_label.height())
 
         layout.addWidget(thumbnail_container)
 
@@ -762,16 +820,10 @@ class ModernAssetCard(QFrame):
 
         content_layout.addSpacing(6)
 
-        # 大小行
+        # 大小信息 - 居中显示
         size_layout = QHBoxLayout()
-        size_layout.setSpacing(6)
-        size_title = QLabel("💾 大小：")
-        size_title.setObjectName("InfoTitleLabel")
-        size_title.setTextInteractionFlags(Qt.TextInteractionFlag.NoTextInteraction)
-        size_title.setCursor(Qt.CursorShape.ArrowCursor)
-        size_layout.addWidget(size_title)
-
-        self.size_label = QLabel(self.asset_size)
+        size_layout.addStretch()
+        self.size_label = QLabel(f"💾 {self.asset_size}")
         self.size_label.setObjectName("InfoValueLabel")
         self.size_label.setTextInteractionFlags(Qt.TextInteractionFlag.NoTextInteraction)
         self.size_label.setCursor(Qt.CursorShape.ArrowCursor)
@@ -779,43 +831,7 @@ class ModernAssetCard(QFrame):
         size_layout.addStretch()
         content_layout.addLayout(size_layout)
 
-        # 添加时间行
-        if self.created_time:
-            time_layout = QHBoxLayout()
-            time_layout.setSpacing(6)
-            time_title = QLabel("📅 添加时间：")
-            time_title.setObjectName("InfoTitleLabel")
-            time_title.setTextInteractionFlags(Qt.TextInteractionFlag.NoTextInteraction)
-            time_title.setCursor(Qt.CursorShape.ArrowCursor)
-            time_layout.addWidget(time_title)
-
-            self.time_label = QLabel(self.created_time)
-            self.time_label.setObjectName("InfoValueLabel")
-            self.time_label.setTextInteractionFlags(Qt.TextInteractionFlag.NoTextInteraction)
-            self.time_label.setCursor(Qt.CursorShape.ArrowCursor)
-            time_layout.addWidget(self.time_label)
-            time_layout.addStretch()
-            content_layout.addLayout(time_layout)
-
-        # 文档行
-        doc_layout = QHBoxLayout()
-        doc_layout.setSpacing(6)
-        doc_title = QLabel("📝 文档：")
-        doc_title.setObjectName("InfoTitleLabel")
-        doc_title.setTextInteractionFlags(Qt.TextInteractionFlag.NoTextInteraction)
-        doc_title.setCursor(Qt.CursorShape.ArrowCursor)
-        doc_layout.addWidget(doc_title)
-
-        doc_text = "有" if self.has_document else "无"
-        self.doc_label = QLabel(doc_text)
-        self.doc_label.setObjectName("InfoValueLabel")
-        self.doc_label.setTextInteractionFlags(Qt.TextInteractionFlag.NoTextInteraction)
-        self.doc_label.setCursor(Qt.CursorShape.ArrowCursor)
-        doc_layout.addWidget(self.doc_label)
-        doc_layout.addStretch()
-        content_layout.addLayout(doc_layout)
-
-        content_layout.addSpacing(4)
+        content_layout.addSpacing(8)
 
         # 底部按钮行
         button_layout = QHBoxLayout()
@@ -924,6 +940,12 @@ class ModernAssetCard(QFrame):
         # 分割线
         menu.addSeparator()
 
+        # 检查是否有文档，如果有则添加"删除文档"选项
+        if self._has_document():
+            delete_doc_action = QAction("📄 删除文档", self)
+            delete_doc_action.triggered.connect(self._on_delete_document)
+            menu.addAction(delete_doc_action)
+
         # 删除资产
         delete_action = QAction("🗑️ 删除资产", self)
         delete_action.triggered.connect(lambda: self.delete_requested.emit(self.name))
@@ -934,6 +956,75 @@ class ModernAssetCard(QFrame):
 
         # 在鼠标位置显示菜单
         menu.exec(self.mapToGlobal(position))
+    
+    def _has_document(self) -> bool:
+        """检查资产是否有文档"""
+        try:
+            # 需要从父组件获取 logic 引用
+            parent_widget = self.parent()
+            while parent_widget:
+                if hasattr(parent_widget, 'logic') and parent_widget.logic:
+                    logic = parent_widget.logic
+                    if hasattr(logic, 'documents_dir') and logic.documents_dir:
+                        # 检查 .docx 文档是否存在
+                        if hasattr(self, 'asset_id') and self.asset_id:
+                            doc_path = logic.documents_dir / f"{self.asset_id}.docx"
+                            return doc_path.exists()
+                    break
+                parent_widget = parent_widget.parent()
+        except Exception as e:
+            logger.error(f"检查文档存在性失败: {e}")
+        return False
+    
+    def _on_delete_document(self):
+        """删除文档"""
+        try:
+            # 获取 logic 引用
+            parent_widget = self.parent()
+            logic = None
+            while parent_widget:
+                if hasattr(parent_widget, 'logic') and parent_widget.logic:
+                    logic = parent_widget.logic
+                    break
+                parent_widget = parent_widget.parent()
+            
+            if not logic or not hasattr(logic, 'documents_dir') or not logic.documents_dir:
+                logger.error("无法获取文档目录")
+                return
+            
+            if not hasattr(self, 'asset_id') or not self.asset_id:
+                logger.error("资产ID未设置")
+                return
+            
+            # 导入确认对话框
+            from PyQt6.QtWidgets import QMessageBox
+            
+            # 显示确认对话框
+            reply = QMessageBox.question(
+                self,
+                "确认删除",
+                f"确定要删除资产 \"{self.name}\" 的文档吗？\n\n此操作不可恢复！",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No
+            )
+            
+            if reply != QMessageBox.StandardButton.Yes:
+                return
+            
+            # 删除文档文件
+            doc_path = logic.documents_dir / f"{self.asset_id}.docx"
+            
+            if doc_path.exists():
+                doc_path.unlink()
+                logger.info(f"已删除文档: {doc_path}")
+                QMessageBox.information(self, "删除成功", "文档已删除")
+            else:
+                QMessageBox.warning(self, "删除失败", "未找到文档文件")
+                
+        except Exception as e:
+            logger.error(f"删除文档失败: {e}", exc_info=True)
+            from PyQt6.QtWidgets import QMessageBox
+            QMessageBox.warning(self, "错误", f"删除文档失败：{e}")
 
     def update_theme(self, theme: str):
         """更新主题
@@ -994,7 +1085,9 @@ class CompactAssetCard(QFrame):
     def __init__(self, name: str, category: str = "",
                  thumbnail_path: Optional[str] = None, asset_type: str = "资源包",
                  theme: str = "dark", defer_thumbnail: bool = False,
-                 asset_path: Optional[str] = None, parent=None):
+                 asset_path: Optional[str] = None, engine_min_version: str = "",
+                 package_type = None, asset_size: str = "",
+                 parent=None):
         super().__init__(parent)
         # 立即隐藏，避免在初始化过程中显示为独立窗口
         self.hide()
@@ -1005,6 +1098,9 @@ class CompactAssetCard(QFrame):
         self.theme = theme
         self.defer_thumbnail = defer_thumbnail  # 是否延迟加载缩略图
         self.asset_path = asset_path  # 资产路径
+        self.engine_min_version = engine_min_version  # 引擎最低版本
+        self.package_type = package_type  # 包装类型（用于版本徽标格式化和类型显示）
+        self.asset_size = asset_size  # 资产大小
         self._is_hovered = False
 
         self.setObjectName("CompactAssetCard")
@@ -1267,15 +1363,29 @@ class CompactAssetCard(QFrame):
         # 定位到左下角，距离左边8px，距离底部8px
         self.category_label.move(8, 115 - 8 - self.category_label.height())
 
-        # 资产类型图标
-        asset_type_icon = "📦" if self.asset_type == "资源包" else "📄"
-        self.type_label = QLabel(asset_type_icon, thumbnail_container)
-        self.type_label.setObjectName("TypeLabel")
-        self.type_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.type_label.setTextInteractionFlags(Qt.TextInteractionFlag.NoTextInteraction)
-        self.type_label.setCursor(Qt.CursorShape.ArrowCursor)
-        self.type_label.setFixedSize(20, 20)
-        self.type_label.move(172 - 8 - 20, 115 - 8 - 20)
+        # 大小信息 - 放在缩略图右下角（替换原来的版本徽标位置）
+        if self.asset_size:
+            self.size_label = QLabel(self.asset_size, thumbnail_container)
+            self.size_label.setObjectName("SizeLabel")
+            self.size_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            self.size_label.setTextInteractionFlags(Qt.TextInteractionFlag.NoTextInteraction)
+            self.size_label.setCursor(Qt.CursorShape.ArrowCursor)
+            
+            # 样式：半透明黑色背景
+            self.size_label.setStyleSheet("""
+                QLabel {
+                    color: #ffffff;
+                    font-size: 10px;
+                    font-weight: bold;
+                    background-color: rgba(0, 0, 0, 0.7);
+                    border-radius: 3px;
+                    padding: 2px 5px;
+                }
+            """)
+            
+            self.size_label.setFixedSize(self.size_label.sizeHint())
+            # 定位到右下角
+            self.size_label.move(172 - 8 - self.size_label.width(), 115 - 8 - self.size_label.height())
 
         layout.addWidget(thumbnail_container)
 
@@ -1283,8 +1393,8 @@ class CompactAssetCard(QFrame):
         content_widget = QWidget()
         content_widget.setObjectName("ContentWidget")
         content_layout = QVBoxLayout(content_widget)
-        content_layout.setContentsMargins(10, 6, 10, 8)  # 减少上下边距
-        content_layout.setSpacing(6)  # 减少间距
+        content_layout.setContentsMargins(10, 10, 10, 8)  # 增加上边距，防止名称溢出到缩略图
+        content_layout.setSpacing(4)  # 减少间距
 
         # 名称
         self.name_label = QLabel(self.name)
@@ -1293,10 +1403,73 @@ class CompactAssetCard(QFrame):
         self.name_label.setWordWrap(True)
         self.name_label.setTextInteractionFlags(Qt.TextInteractionFlag.NoTextInteraction)
         self.name_label.setCursor(Qt.CursorShape.ArrowCursor)
-        self.name_label.setMaximumHeight(40)  # 限制名称标签最大高度
+        self.name_label.setMaximumHeight(32)  # 限制名称标签最大高度
         content_layout.addWidget(self.name_label)
 
-        # 移除 addStretch()，减少空白
+        # 徽标行 - 版本和类型水平排列（左对齐）
+        from ..utils.ue_version_detector import UEVersionDetector
+        from ..logic.asset_model import PackageType
+        
+        badge_layout = QHBoxLayout()
+        badge_layout.setSpacing(6)
+        # 移除居中的 addStretch()，改为左对齐
+        
+        # 版本徽标
+        version_detector = UEVersionDetector()
+        pkg_type = getattr(self, 'package_type', None)
+        version_badge = version_detector.format_version_badge(self.engine_min_version, pkg_type)
+        
+        self.version_label = QLabel(version_badge)
+        self.version_label.setObjectName("VersionBadge")
+        self.version_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.version_label.setTextInteractionFlags(Qt.TextInteractionFlag.NoTextInteraction)
+        self.version_label.setCursor(Qt.CursorShape.ArrowCursor)
+        
+        # 样式：蓝色版本徽标
+        self.version_label.setStyleSheet("""
+            QLabel {
+                color: #ffffff;
+                font-size: 10px;
+                font-weight: bold;
+                background-color: rgba(0, 122, 204, 0.85);
+                border-radius: 3px;
+                padding: 2px 5px;
+            }
+        """)
+        badge_layout.addWidget(self.version_label)
+        
+        # 类型徽标
+        type_text = "资源包"  # 默认值
+        if pkg_type:
+            if hasattr(pkg_type, 'display_name'):
+                type_text = pkg_type.display_name
+            elif isinstance(pkg_type, str):
+                try:
+                    type_text = PackageType(pkg_type).display_name
+                except (ValueError, AttributeError):
+                    type_text = pkg_type
+        
+        self.type_label = QLabel(type_text)
+        self.type_label.setObjectName("TypeBadge")
+        self.type_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.type_label.setTextInteractionFlags(Qt.TextInteractionFlag.NoTextInteraction)
+        self.type_label.setCursor(Qt.CursorShape.ArrowCursor)
+        
+        # 样式：橙色类型徽标
+        self.type_label.setStyleSheet("""
+            QLabel {
+                color: #ffffff;
+                font-size: 10px;
+                font-weight: bold;
+                background-color: rgba(255, 152, 0, 0.85);
+                border-radius: 3px;
+                padding: 2px 5px;
+            }
+        """)
+        badge_layout.addWidget(self.type_label)
+        badge_layout.addStretch()  # 右侧留白
+        
+        content_layout.addLayout(badge_layout)
 
         # 底部按钮行
         button_layout = QHBoxLayout()
@@ -1390,12 +1563,87 @@ class CompactAssetCard(QFrame):
 
         menu.addSeparator()
 
+        # 检查是否有文档，如果有则添加"删除文档"选项
+        if self._has_document():
+            delete_doc_action = QAction("📄 删除文档", self)
+            delete_doc_action.triggered.connect(self._on_delete_document)
+            menu.addAction(delete_doc_action)
+
         delete_action = QAction("🗑️ 删除资产", self)
         delete_action.triggered.connect(lambda: self.delete_requested.emit(self.name))
         menu.addAction(delete_action)
 
         event_filter = MenuEventFilter(menu, self)
         menu.exec(self.mapToGlobal(position))
+    
+    def _has_document(self) -> bool:
+        """检查资产是否有文档"""
+        try:
+            # 需要从父组件获取 logic 引用
+            parent_widget = self.parent()
+            while parent_widget:
+                if hasattr(parent_widget, 'logic') and parent_widget.logic:
+                    logic = parent_widget.logic
+                    if hasattr(logic, 'documents_dir') and logic.documents_dir:
+                        # 检查 .docx 文档是否存在
+                        if hasattr(self, 'asset_id') and self.asset_id:
+                            doc_path = logic.documents_dir / f"{self.asset_id}.docx"
+                            return doc_path.exists()
+                    break
+                parent_widget = parent_widget.parent()
+        except Exception as e:
+            logger.error(f"检查文档存在性失败: {e}")
+        return False
+    
+    def _on_delete_document(self):
+        """删除文档"""
+        try:
+            # 获取 logic 引用
+            parent_widget = self.parent()
+            logic = None
+            while parent_widget:
+                if hasattr(parent_widget, 'logic') and parent_widget.logic:
+                    logic = parent_widget.logic
+                    break
+                parent_widget = parent_widget.parent()
+            
+            if not logic or not hasattr(logic, 'documents_dir') or not logic.documents_dir:
+                logger.error("无法获取文档目录")
+                return
+            
+            if not hasattr(self, 'asset_id') or not self.asset_id:
+                logger.error("资产ID未设置")
+                return
+            
+            # 导入确认对话框
+            from PyQt6.QtWidgets import QMessageBox
+            
+            # 显示确认对话框
+            reply = QMessageBox.question(
+                self,
+                "确认删除",
+                f"确定要删除资产 \"{self.name}\" 的文档吗？\n\n此操作不可恢复！",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No
+            )
+            
+            if reply != QMessageBox.StandardButton.Yes:
+                return
+            
+            # 删除文档文件
+            doc_path = logic.documents_dir / f"{self.asset_id}.docx"
+            
+            if doc_path.exists():
+                doc_path.unlink()
+                logger.info(f"已删除文档: {doc_path}")
+                QMessageBox.information(self, "删除成功", "文档已删除")
+            else:
+                QMessageBox.warning(self, "删除失败", "未找到文档文件")
+                
+        except Exception as e:
+            logger.error(f"删除文档失败: {e}", exc_info=True)
+            from PyQt6.QtWidgets import QMessageBox
+            QMessageBox.warning(self, "错误", f"删除文档失败：{e}")
 
     def update_theme(self, theme: str):
         """更新主题

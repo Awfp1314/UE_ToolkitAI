@@ -57,7 +57,7 @@ class EditAssetDialog(QDialog):
     def _init_ui(self):
         """初始化UI"""
         self.setModal(True)
-        self.setFixedSize(450, 480)
+        self.setFixedSize(450, 350)
         
         # 无边框 + 透明背景
         self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Dialog)
@@ -92,10 +92,6 @@ class EditAssetDialog(QDialog):
         # 分类选择区域
         category_section = self._create_category_section()
         content_layout.addLayout(category_section)
-        
-        # 文档管理区域
-        doc_section = self._create_documentation_section()
-        content_layout.addLayout(doc_section)
         
         # 错误提示标签
         self.error_label = QLabel("")
@@ -205,200 +201,7 @@ class EditAssetDialog(QDialog):
         
         return layout
     
-    def _create_documentation_section(self):
-        """创建文档管理区域"""
-        layout = QVBoxLayout()
-        layout.setSpacing(12)
-        
-        # 标签
-        label = QLabel("资产文档")
-        label.setObjectName("SectionLabel")
-        layout.addWidget(label)
-        
-        # 按钮布局
-        button_layout = QHBoxLayout()
-        button_layout.setSpacing(10)
-        
-        if self.has_documentation:
-            # 如果有文档，显示编辑和删除按钮
-            edit_doc_btn = QPushButton("编辑文档")
-            edit_doc_btn.setObjectName("EditDocButton")
-            edit_doc_btn.setFixedSize(100, 34)
-            edit_doc_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-            edit_doc_btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
-            edit_doc_btn.clicked.connect(self._on_edit_doc_clicked)
-            button_layout.addWidget(edit_doc_btn)
-            
-            delete_doc_btn = QPushButton("删除文档")
-            delete_doc_btn.setObjectName("DeleteDocButton")
-            delete_doc_btn.setFixedSize(100, 34)
-            delete_doc_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-            delete_doc_btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
-            delete_doc_btn.clicked.connect(self._on_delete_doc_clicked)
-            button_layout.addWidget(delete_doc_btn)
-        else:
-            # 如果没有文档，显示创建按钮
-            create_doc_btn = QPushButton("创建文档")
-            create_doc_btn.setObjectName("CreateDocButton")
-            create_doc_btn.setFixedSize(210, 34)
-            create_doc_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-            create_doc_btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
-            create_doc_btn.clicked.connect(self._on_create_doc_clicked)
-            button_layout.addWidget(create_doc_btn)
-        
-        button_layout.addStretch()
-        layout.addLayout(button_layout)
-        
-        return layout
-    
-    def _on_edit_doc_clicked(self):
-        """编辑文档按钮点击事件"""
-        logger.info("编辑文档")
-        if not self.current_asset:
-            logger.warning("未找到当前资产")
-            return
-        
-        try:
-            # 获取文档路径
-            if not self.logic.documents_dir:
-                logger.error("文档目录未设置")
-                return
-            
-            doc_path = self.logic.documents_dir / f"{self.current_asset.id}.txt"
-            
-            if not doc_path.exists():
-                logger.warning(f"文档不存在: {doc_path}")
-                return
-            
-            # 用记事本打开文档
-            if sys.platform == "win32":
-                subprocess.Popen(['notepad', str(doc_path)])
-                logger.info(f"已用记事本打开文档: {doc_path}")
-            elif sys.platform == "darwin":
-                subprocess.Popen(['open', '-a', 'TextEdit', str(doc_path)])
-                logger.info(f"已用TextEdit打开文档: {doc_path}")
-            else:
-                subprocess.Popen(['gedit', str(doc_path)])
-                logger.info(f"已用gedit打开文档: {doc_path}")
-                
-        except Exception as e:
-            logger.error(f"打开文档失败: {e}", exc_info=True)
-    
-    def _on_delete_doc_clicked(self):
-        """删除文档按钮点击事件"""
-        logger.info("删除文档")
-        if not self.current_asset:
-            logger.warning("未找到当前资产")
-            return
-        
-        try:
-            # 导入确认对话框
-            from .confirm_dialog import ConfirmDialog
-            
-            # 显示确认对话框
-            dialog = ConfirmDialog(
-                "确认删除",
-                f"确定要删除资产 \"{self.current_asset.name}\" 的文档吗？",
-                "此操作不可恢复！",
-                self
-            )
-            
-            if dialog.exec() != ConfirmDialog.DialogCode.Accepted:
-                return
-            
-            # 获取文档路径
-            if not self.logic.documents_dir:
-                logger.error("文档目录未设置")
-                return
-            
-            doc_path = self.logic.documents_dir / f"{self.current_asset.id}.txt"
-            
-            if doc_path.exists():
-                doc_path.unlink()
-                logger.info(f"已删除文档: {doc_path}")
-                
-                # 更新状态
-                self.has_documentation = False
-                
-                # 关闭当前对话框（因为按钮状态已改变）
-                self.reject()
-            else:
-                logger.warning(f"文档不存在: {doc_path}")
-                
-        except Exception as e:
-            logger.error(f"删除文档失败: {e}", exc_info=True)
-    
-    def _on_create_doc_clicked(self):
-        """创建文档按钮点击事件"""
-        logger.info("创建文档")
-        if not self.current_asset:
-            logger.warning("未找到当前资产")
-            return
-        
-        try:
-            # 使用logic的方法创建文档
-            if not self.logic.documents_dir:
-                logger.error("文档目录未设置")
-                return
-            
-            documents_dir = self.logic.documents_dir
-            documents_dir.mkdir(parents=True, exist_ok=True)
-            
-            # 文档文件名为 {asset_id}.txt
-            doc_path = documents_dir / f"{self.current_asset.id}.txt"
-            
-            # 创建文本内容
-            text_content = f"""资产信息表
-{'='*50}
 
-资产名称: {self.current_asset.name}
-资产ID: {self.current_asset.id}
-资产类型: {self.current_asset.asset_type.value}
-分类: {self.current_asset.category}
-文件路径: {self.current_asset.path}
-文件大小: {self.current_asset._format_size()}
-创建时间: {self.current_asset.created_time.strftime('%Y-%m-%d %H:%M:%S')}
-
-描述:
-{self.current_asset.description or '暂无'}
-
-{'='*50}
-
-使用说明:
-请在下方添加关于如何使用该资产的详细说明...
-
-
-备注:
-请在下方添加其他备注信息...
-
-"""
-            
-            # 写入文档
-            with open(doc_path, 'w', encoding='utf-8') as f:
-                f.write(text_content)
-            
-            logger.info(f"已创建文档: {doc_path}")
-            
-            # 用记事本打开
-            if sys.platform == "win32":
-                subprocess.Popen(['notepad', str(doc_path)])
-                logger.info(f"已用记事本打开文档: {doc_path}")
-            elif sys.platform == "darwin":
-                subprocess.Popen(['open', '-a', 'TextEdit', str(doc_path)])
-                logger.info(f"已用TextEdit打开文档: {doc_path}")
-            else:
-                subprocess.Popen(['gedit', str(doc_path)])
-                logger.info(f"已用gedit打开文档: {doc_path}")
-            
-            # 更新状态
-            self.has_documentation = True
-            
-            # 关闭当前对话框（因为按钮状态已改变）
-            self.reject()
-            
-        except Exception as e:
-            logger.error(f"创建文档失败: {e}", exc_info=True)
-    
     def _create_button_layout(self):
         """创建底部按钮布局"""
         layout = QHBoxLayout()

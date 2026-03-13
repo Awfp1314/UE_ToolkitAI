@@ -122,6 +122,141 @@ class ThumbnailManager:
             self.logger.debug(f"从资产包恢复缩略图失败: {e}")
             return None
 
+    # Others 类型资产的文件扩展名分类
+    IMAGE_EXTENSIONS = {
+        '.png', '.jpg', '.jpeg', '.bmp', '.gif', '.tga', '.tif', '.tiff',
+        '.webp', '.svg', '.ico', '.exr', '.hdr',
+    }
+    VIDEO_EXTENSIONS = {
+        '.mp4', '.avi', '.mov', '.mkv', '.wmv', '.flv', '.webm',
+    }
+    AUDIO_EXTENSIONS = {
+        '.mp3', '.wav', '.ogg', '.flac', '.aac', '.wma',
+    }
+
+    def generate_others_thumbnail(
+        self,
+        asset_path: Path,
+        asset_id: Optional[str],
+        thumbnails_dir: Optional[Path]
+    ) -> Optional[Path]:
+        """为 Others 类型资产生成缩略图
+        
+        规则：
+        - 图片/纹理：使用自身作为缩略图
+        - 视频：生成带 ▶ 的默认图标
+        - 音频：生成带 🔊 的默认图标
+        - 其他：不生成
+        
+        Args:
+            asset_path: 资产根目录（包装文件夹）
+            asset_id: 资产 ID
+            thumbnails_dir: 缩略图目录
+            
+        Returns:
+            生成的缩略图路径，或 None
+        """
+        if not asset_id or not thumbnails_dir:
+            return None
+        
+        try:
+            # Others 子目录
+            others_dir = asset_path / "Others"
+            scan_dir = others_dir if others_dir.exists() else asset_path
+            
+            first_image = None
+            first_video = None
+            first_audio = None
+            
+            for f in scan_dir.rglob("*"):
+                if not f.is_file():
+                    continue
+                ext = f.suffix.lower()
+                if ext in self.IMAGE_EXTENSIONS and not first_image:
+                    first_image = f
+                elif ext in self.VIDEO_EXTENSIONS and not first_video:
+                    first_video = f
+                elif ext in self.AUDIO_EXTENSIONS and not first_audio:
+                    first_audio = f
+                # 一旦找到图片就停止，优先用图片做缩略图
+                if first_image:
+                    break
+            
+            thumbnails_dir.mkdir(parents=True, exist_ok=True)
+            output_path = thumbnails_dir / f"{asset_id}.png"
+            
+            if first_image:
+                # 图片/纹理：用自身生成缩略图
+                return self._generate_image_thumbnail(first_image, output_path)
+            elif first_video:
+                # 视频：生成带 ▶ 的默认图标
+                return self._generate_icon_thumbnail(output_path, "▶ VIDEO", (60, 60, 80))
+            elif first_audio:
+                # 音频：生成带喇叭文字的默认图标
+                return self._generate_icon_thumbnail(output_path, "♪ AUDIO", (60, 80, 60))
+            
+            return None
+        except Exception as e:
+            self.logger.warning(f"Others 缩略图生成失败: {e}")
+            return None
+    
+    def _generate_image_thumbnail(self, image_path: Path, output_path: Path) -> Optional[Path]:
+        """从图片文件生成缩略图"""
+        try:
+            from PIL import Image
+            THUMB_SIZE = (200, 200)
+            
+            with Image.open(image_path) as img:
+                if img.mode in ('RGBA', 'LA', 'P'):
+                    background = Image.new('RGB', img.size, (255, 255, 255))
+                    if img.mode == 'P':
+                        img = img.convert('RGBA')
+                    background.paste(img, mask=img.split()[-1] if img.mode in ('RGBA', 'LA') else None)
+                    img = background
+                elif img.mode != 'RGB':
+                    img = img.convert('RGB')
+                
+                img.thumbnail(THUMB_SIZE, Image.Resampling.LANCZOS)
+                thumb = Image.new('RGB', THUMB_SIZE, (45, 45, 45))
+                offset = ((THUMB_SIZE[0] - img.size[0]) // 2,
+                         (THUMB_SIZE[1] - img.size[1]) // 2)
+                thumb.paste(img, offset)
+                thumb.save(output_path, 'PNG', quality=85)
+                self.logger.info(f"Others 图片缩略图: {image_path.name}")
+                return output_path
+        except Exception as e:
+            self.logger.warning(f"图片缩略图生成失败: {e}")
+            return None
+    
+    def _generate_icon_thumbnail(self, output_path: Path, text: str,
+                                  bg_color: tuple = (60, 60, 60)) -> Optional[Path]:
+        """生成带文字的默认图标缩略图"""
+        try:
+            from PIL import Image, ImageDraw, ImageFont
+            THUMB_SIZE = (200, 200)
+            
+            img = Image.new('RGB', THUMB_SIZE, bg_color)
+            draw = ImageDraw.Draw(img)
+            draw.rectangle([10, 10, 190, 190], outline=(100, 100, 100), width=2)
+            
+            try:
+                font = ImageFont.truetype("arial.ttf", 28)
+            except Exception:
+                font = ImageFont.load_default()
+            
+            bbox = draw.textbbox((0, 0), text, font=font)
+            text_width = bbox[2] - bbox[0]
+            text_height = bbox[3] - bbox[1]
+            position = ((200 - text_width) // 2, (200 - text_height) // 2)
+            draw.text(position, text, fill=(180, 180, 180), font=font)
+            
+            img.save(output_path, 'PNG')
+            self.logger.info(f"Others 图标缩略图: {text}")
+            return output_path
+        except Exception as e:
+            self.logger.warning(f"图标缩略图生成失败: {e}")
+            return None
+
     def migrate_thumbnails_and_docs(self) -> None:
         """迁移缩略图和文档到本地目录
 

@@ -23,6 +23,7 @@ def get_asset_manager_schema() -> ConfigSchema:
             "asset_libraries",              # 资产库列表 [{path, name, last_opened}]
             "current_asset_library",        # 当前激活的资产库路径
             "preview_projects",             # 预览工程列表 [{path, name}]
+            "use_symlink_preview",          # 预览时是否使用符号链接（实验性）
             "last_preview_project",         # 最后使用的预览工程名称
             "last_target_project",          # 最后使用的目标工程路径
 
@@ -42,6 +43,7 @@ def get_asset_manager_schema() -> ConfigSchema:
             "asset_libraries": list,
             "current_asset_library": str,
             "preview_projects": list,
+            "use_symlink_preview": bool,
             "last_preview_project": str,
             "last_target_project": str,
             "asset_library_path": str,

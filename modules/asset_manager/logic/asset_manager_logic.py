@@ -11,6 +11,7 @@
 Task 10 重构：将 AssetManagerLogic 转换为门面模式。
 """
 
+import sys
 import uuid
 import shutil
 import subprocess
@@ -31,7 +32,7 @@ from core.logger import get_logger
 from core.config.config_manager import ConfigManager
 from core.exceptions import AssetError, ConfigError
 from core.utils.config_utils import ConfigUtils
-from .asset_model import Asset, AssetType
+from .asset_model import Asset, AssetType, PackageType
 from .asset_core import AssetCore
 from .asset_scanner import AssetScanner
 from .thumbnail_manager import ThumbnailManager
@@ -205,12 +206,23 @@ class AssetManagerLogic(QObject):
 
         # 优先从缓存加载资产（快速启动）
         cached_assets_data = lib_config.get("assets", config.get("assets", []))
+        
+        # 调试：检查初始缓存数据
+        if cached_assets_data and len(cached_assets_data) > 1:
+            print(f"[DEBUG] 初始cached_assets_data[0]: {cached_assets_data[0].get('name')}, engine_min_version='{cached_assets_data[0].get('engine_min_version', 'KEY_NOT_FOUND')}'")
+            print(f"[DEBUG] 初始cached_assets_data[1]: {cached_assets_data[1].get('name')}, engine_min_version='{cached_assets_data[1].get('engine_min_version', 'KEY_NOT_FOUND')}'")
+        
         if cached_assets_data:
             # 修复盘符（如果资产库从 F: 移到 E: 等情况）
             current_drive = str(Path(asset_library_path).drive)
             cached_assets_data = self._asset_scanner._fix_drive_letter_in_cache(
                 cached_assets_data, current_drive
             )
+            
+            # 调试：检查修复盘符后
+            if len(cached_assets_data) > 1:
+                print(f"[DEBUG] 修复盘符后[0]: {cached_assets_data[0].get('name')}, engine_min_version='{cached_assets_data[0].get('engine_min_version', 'KEY_NOT_FOUND')}'")
+                print(f"[DEBUG] 修复盘符后[1]: {cached_assets_data[1].get('name')}, engine_min_version='{cached_assets_data[1].get('engine_min_version', 'KEY_NOT_FOUND')}')")
             
             # 修复资产库路径变更（如果资产库文件夹改名）
             if cached_assets_data and cached_assets_data[0].get("path"):
@@ -290,6 +302,7 @@ class AssetManagerLogic(QObject):
                 "size": a.size,
                 "created_time": a.created_time.isoformat() if a.created_time else None,
                 "description": a.description,
+                "engine_min_version": getattr(a, 'engine_min_version', ''),
             })
 
         def scan_task(cancel_token):
@@ -412,28 +425,47 @@ class AssetManagerLogic(QObject):
 
     def add_asset(self, asset_path: Path, asset_type: AssetType, name: str = "",
                   category: str = "默认分类", description: str = "",
-                  create_markdown: bool = False) -> Optional[Asset]:
+                  create_markdown: bool = False, engine_version: str = "",
+                  package_type: PackageType = PackageType.CONTENT) -> Optional[Asset]:
         """添加资产（将资产移动到资产库）"""
         return self._add_asset_impl(
             asset_path, asset_type, name, category, description,
-            create_markdown, progress_callback=None
+            create_markdown, engine_version, package_type=package_type,
+            progress_callback=None
         )
 
     def add_asset_async(self, asset_path: Path, asset_type: AssetType, name: str = "",
                         category: str = "默认分类", description: str = "",
-                        create_markdown: bool = False,
+                        create_markdown: bool = False, engine_version: str = "",
+                        package_type: PackageType = PackageType.CONTENT,
+                        plugin_folder_name: str = "",
                         progress_callback: Optional[Callable[[int, int, str], None]] = None
                         ) -> Optional[Asset]:
         """异步添加资产（支持进度回调）"""
         return self._add_asset_impl(
             asset_path, asset_type, name, category, description,
-            create_markdown, progress_callback=progress_callback
+            create_markdown, engine_version, package_type=package_type,
+            plugin_folder_name=plugin_folder_name,
+            progress_callback=progress_callback
         )
 
     def _add_asset_impl(self, asset_path: Path, asset_type: AssetType, name: str,
                          category: str, description: str, create_markdown: bool,
+                         engine_version: str,
+                         package_type: PackageType = PackageType.CONTENT,
+                         plugin_folder_name: str = "",
                          progress_callback: Optional[Callable] = None) -> Optional[Asset]:
-        """添加资产的统一实现"""
+        """添加资产的统一实现
+        
+        根据 package_type 创建不同的包装结构：
+        - CONTENT:  名称/Content/...
+        - PROJECT:  名称/Project/...
+        - PLUGIN:   名称/Plugins/插件原名/...
+        - OTHERS:   名称/Others/...
+        
+        Args:
+            plugin_folder_name: 插件类型时，插件的原始文件夹名称
+        """
         # 暂时禁用自动检测器，避免在添加资产期间触发重复检测
         auto_detector_was_enabled = False
         if hasattr(self, '_auto_detector') and self._auto_detector:
@@ -477,19 +509,14 @@ class AssetManagerLogic(QObject):
                     counter += 1
                 asset_wrapper_name = wrapper_path.name
 
-            # 创建包装结构：用户命名/Content/
+            # 创建包装结构：用户命名/<wrapper_folder>/
             wrapper_path.mkdir(parents=True, exist_ok=True)
-            content_folder = wrapper_path / "Content"
-            content_folder.mkdir(parents=True, exist_ok=True)
-            
-            # 目标路径是 Content 文件夹内
-            target_path = content_folder / asset_path.name
+            wrapper_folder_name = package_type.wrapper_folder  # Content / Project / Plugins / Others
+            inner_folder = wrapper_path / wrapper_folder_name
+            inner_folder.mkdir(parents=True, exist_ok=True)
 
             if progress_callback:
                 progress_callback(10, 100, "移动资产文件...")
-
-            # 移动资产到资产库的 Content 文件夹内
-            logger.info(f"开始移动资产: {asset_path} -> {target_path}")
 
             def move_progress(current, total, message):
                 if progress_callback and total > 0:
@@ -498,47 +525,94 @@ class AssetManagerLogic(QObject):
                 else:
                     self.progress_updated.emit(current, total, message)
 
-            if asset_type == AssetType.PACKAGE:
-                success = self._file_ops.safe_move_tree(
+            project_file_rel = ""  # 仅 PROJECT 类型使用
+
+            if package_type == PackageType.CONTENT:
+                # Content 类型：处理源路径本身就是 Content 文件夹的情况（避免嵌套）
+                is_source_content = (
+                    asset_path.is_dir() 
+                    and asset_path.name.lower() == "content"
+                )
+                success = self._move_contents_to_folder(
+                    asset_path, inner_folder, is_flatten=is_source_content,
+                    progress_callback=progress_callback
+                )
+            elif package_type == PackageType.PROJECT:
+                # Project 类型：复制整个项目到 Project/ 下
+                target_path = inner_folder / asset_path.name
+                logger.info(f"导入 UE 项目: {asset_path} -> {target_path}")
+                success = self._file_ops.safe_copytree(
+                    asset_path, target_path, progress_callback=move_progress
+                )
+                # 查找 .uproject 文件并记录相对路径
+                if success is not False:
+                    for uproject in target_path.rglob("*.uproject"):
+                        try:
+                            project_file_rel = str(uproject.relative_to(wrapper_path))
+                            logger.info(f"找到 .uproject: {project_file_rel}")
+                        except ValueError:
+                            project_file_rel = str(uproject)
+                        break
+            elif package_type == PackageType.PLUGIN:
+                # Plugin 类型：复制整个插件到 Plugins/<插件原名>/ 下
+                # 使用插件原始文件夹名，如果未提供则使用源路径的文件夹名
+                actual_plugin_name = plugin_folder_name if plugin_folder_name else asset_path.name
+                target_path = inner_folder / actual_plugin_name
+                logger.info(f"导入 UE 插件: {asset_path} -> {target_path} (插件名: {actual_plugin_name})")
+                success = self._file_ops.safe_copytree(
                     asset_path, target_path, progress_callback=move_progress
                 )
             else:
-                success = self._file_ops.safe_move_file(
-                    asset_path, target_path, progress_callback=move_progress
-                )
+                # Others 类型：直接复制到 Others/ 下
+                target_path = inner_folder / asset_path.name
+                logger.info(f"导入其他资源: {asset_path} -> {target_path}")
+                if asset_path.is_dir():
+                    success = self._file_ops.safe_copytree(
+                        asset_path, target_path, progress_callback=move_progress
+                    )
+                else:
+                    success = self._file_ops.safe_copy_file(
+                        asset_path, target_path, progress_callback=move_progress
+                    )
 
             if success is False:
-                error_msg = f"移动资产失败: {asset_path} -> {target_path}"
+                error_msg = f"复制资产失败: {asset_path}"
                 logger.error(error_msg)
                 self.error_occurred.emit(error_msg)
                 return None
 
-            logger.info(f"资产已移动: {asset_path} -> {target_path}")
+            # 记录复制位置
+            logger.info(f"资产已复制到: {inner_folder} (类型: {package_type.display_name})")
 
             if progress_callback:
                 progress_callback(80, 100, "创建资产记录...")
 
-            # 创建资产对象（指向包装文件夹，而不是 Content 内的实际内容）
+            # 创建资产对象（指向包装文件夹，而不是内部子文件夹）
             asset_id = str(uuid.uuid4())
-            asset_name = asset_wrapper_name  # 使用包装文件夹名称
-            size = self._file_ops.calculate_size(wrapper_path)  # 计算整个包装文件夹的大小
-            file_extension = ""  # 包装文件夹没有扩展名
+            asset_name = asset_wrapper_name
+            size = self._file_ops.calculate_size(wrapper_path)
 
             asset = Asset(
                 id=asset_id,
                 name=asset_name,
-                asset_type=AssetType.PACKAGE,  # 始终是 PACKAGE 类型
-                path=wrapper_path,  # 指向包装文件夹
+                asset_type=AssetType.PACKAGE,
+                path=wrapper_path,
                 category=category,
-                file_extension=file_extension,
+                package_type=package_type,
                 size=size,
-                description=description
+                description=description,
+                engine_min_version=engine_version,
+                project_file=project_file_rel
             )
 
             self.assets.append(asset)
 
             # 更新搜索引擎的拼音缓存
             self._search_engine.build_pinyin_cache([asset])
+            
+            # 如果是插件类型，设置默认缩略图（在保存配置之前）
+            if package_type == PackageType.PLUGIN:
+                self._set_plugin_default_thumbnail(asset)
 
             if progress_callback:
                 progress_callback(90, 100, "保存配置...")
@@ -546,7 +620,7 @@ class AssetManagerLogic(QObject):
                 self.progress_updated.emit(0, 1, "正在保存配置...")
 
             self._save_config()
-            logger.info(f"添加资产成功: {asset_name} ({asset_type.value})")
+            logger.info(f"添加资产成功: {asset_name} ({asset_type.value}), 插件类型: {package_type == PackageType.PLUGIN}")
 
             self.asset_added.emit(asset)
 
@@ -573,8 +647,68 @@ class AssetManagerLogic(QObject):
             return None
 
 
+    def _move_contents_to_folder(self, source_path: Path, target_folder: Path,
+                                   is_flatten: bool = False,
+                                   progress_callback: Optional[Callable] = None) -> bool:
+        """将源路径内容移动到目标文件夹
+        
+        Args:
+            source_path: 源路径
+            target_folder: 目标文件夹
+            is_flatten: 如果为 True，将源路径的子项直接移到目标文件夹（避免嵌套）
+            progress_callback: 进度回调
+            
+        Returns:
+            bool: 成功返回 True
+        """
+        if is_flatten:
+            # 源路径就是 Content 文件夹，逐个复制其子项到目标 Content
+            items = list(source_path.iterdir())
+            total_items = len(items)
+            logger.info(f"源路径为 Content 文件夹，复制 {total_items} 个子项到: {target_folder}")
+            
+            for idx, item in enumerate(items, 1):
+                target_item = target_folder / item.name
+                if item.is_dir():
+                    item_success = self._file_ops.safe_copytree(
+                        item, target_item, progress_callback=None
+                    )
+                else:
+                    item_success = self._file_ops.safe_copy_file(
+                        item, target_item, progress_callback=None
+                    )
+                
+                if item_success is False:
+                    logger.error(f"复制子项失败: {item} -> {target_item}")
+                    return False
+                
+                if progress_callback and total_items > 0:
+                    pct = (idx / total_items) * 70
+                    progress_callback(10 + int(pct), 100, f"复制: {item.name}")
+            return True
+        else:
+            # 标准流程：复制整个路径到目标文件夹内
+            target_path = target_folder / source_path.name
+            logger.info(f"开始复制资产: {source_path} -> {target_path}")
+
+            def copy_progress(current, total, message):
+                if progress_callback and total > 0:
+                    copy_pct = (current / total) * 70
+                    progress_callback(10 + int(copy_pct), 100, f"复制文件: {message}")
+                else:
+                    self.progress_updated.emit(current, total, message)
+
+            if source_path.is_dir():
+                return self._file_ops.safe_copytree(
+                    source_path, target_path, progress_callback=copy_progress
+                )
+            else:
+                return self._file_ops.safe_copy_file(
+                    source_path, target_path, progress_callback=copy_progress
+                )
+
     def _create_asset_markdown(self, asset: Asset) -> None:
-        """创建资产的文本文档并用记事本打开"""
+        """创建资产的 Word 文档并打开"""
         try:
             if not self.documents_dir:
                 logger.error("本地文档目录未设置")
@@ -583,51 +717,148 @@ class AssetManagerLogic(QObject):
             documents_dir = self.documents_dir
             documents_dir.mkdir(parents=True, exist_ok=True)
 
-            doc_path = documents_dir / f"{asset.id}.txt"
+            doc_path = documents_dir / f"{asset.id}.docx"
 
-            text_content = f"""资产信息表
-{'='*50}
+            # 使用 python-docx 创建 Word 文档
+            from docx import Document
+            from docx.shared import Pt, RGBColor
+            from docx.enum.text import WD_PARAGRAPH_ALIGNMENT
 
-资产名称: {asset.name}
-资产ID: {asset.id}
-资产类型: {asset.asset_type.value}
-分类: {asset.category}
-文件路径: {asset.path}
-文件大小: {self._file_ops.format_size(asset.size)}
-创建时间: {asset.created_time.strftime('%Y-%m-%d %H:%M:%S')}
+            doc = Document()
 
-描述:
-{asset.description or '暂无'}
+            # 标题：资产信息表（12pt）
+            title = doc.add_heading('资产信息表', level=1)
+            title.alignment = WD_PARAGRAPH_ALIGNMENT.CENTER
+            title_run = title.runs[0]
+            title_run.font.size = Pt(12)
 
-{'='*50}
+            # 添加分隔线（8pt）
+            sep_para = doc.add_paragraph('=' * 50)
+            sep_para.runs[0].font.size = Pt(8)
 
-使用说明:
-请在下方添加关于如何使用该资产的详细说明...
+            # 基本信息区（8pt）
+            doc.add_paragraph()
+            info_lines = [
+                f"资产名称: {asset.name}",
+                f"资产ID: {asset.id}",
+                f"资产类型: {asset.package_type.display_name if hasattr(asset, 'package_type') else asset.asset_type.value}",
+                f"分类: {asset.category}",
+                f"文件路径: {asset.path}",
+                f"文件大小: {self._file_ops.format_size(asset.size)}",
+                f"创建时间: {asset.created_time.strftime('%Y-%m-%d %H:%M:%S') if asset.created_time else '未知'}",
+            ]
+            
+            # 如果有引擎版本信息，添加到列表
+            if hasattr(asset, 'engine_min_version') and asset.engine_min_version:
+                info_lines.append(f"引擎版本: {asset.engine_min_version}")
+            
+            for line in info_lines:
+                p = doc.add_paragraph(line)
+                p.style = 'Normal'
+                for run in p.runs:
+                    run.font.size = Pt(8)
 
+            # 分隔线（8pt）
+            doc.add_paragraph()
+            sep_para2 = doc.add_paragraph('=' * 50)
+            sep_para2.runs[0].font.size = Pt(8)
+            doc.add_paragraph()
 
-备注:
-请在下方添加其他备注信息...
+            # 描述区（10pt 标题，8pt 内容）
+            desc_heading = doc.add_heading('资产描述', level=2)
+            desc_heading.runs[0].font.size = Pt(10)
+            desc_content = doc.add_paragraph(asset.description or '暂无描述')
+            for run in desc_content.runs:
+                run.font.size = Pt(8)
+            doc.add_paragraph()
 
-"""
-            with open(doc_path, 'w', encoding='utf-8') as f:
-                f.write(text_content)
+            # 分隔线（8pt）
+            sep_para3 = doc.add_paragraph('─' * 50)
+            sep_para3.runs[0].font.size = Pt(8)
+            doc.add_paragraph()
 
-            logger.info(f"已创建文本文档: {doc_path}")
+            # 使用说明区（10pt 标题，8pt 内容）
+            usage_heading = doc.add_heading('使用说明', level=2)
+            usage_heading.runs[0].font.size = Pt(10)
+            usage_content = doc.add_paragraph('（在此添加使用说明）')
+            for run in usage_content.runs:
+                run.font.size = Pt(8)
+            doc.add_paragraph()
 
+            # 分隔线（8pt）
+            sep_para4 = doc.add_paragraph('─' * 50)
+            sep_para4.runs[0].font.size = Pt(8)
+            doc.add_paragraph()
+
+            # 注意事项区（10pt 标题，8pt 内容）
+            notes_heading = doc.add_heading('注意事项', level=2)
+            notes_heading.runs[0].font.size = Pt(10)
+            notes_content = doc.add_paragraph('（在此添加注意事项）')
+            for run in notes_content.runs:
+                run.font.size = Pt(8)
+
+            # 保存文档
+            doc.save(str(doc_path))
+            logger.info(f"已创建 Word 文档: {doc_path}")
+
+            # 打开文档
             import sys
             if sys.platform == "win32":
-                subprocess.Popen(['notepad', str(doc_path)])
+                import os
+                os.startfile(str(doc_path))
             elif sys.platform == "darwin":
-                subprocess.Popen(['open', '-a', 'TextEdit', str(doc_path)])
+                subprocess.Popen(['open', str(doc_path)])
             else:
-                subprocess.Popen(['gedit', str(doc_path)])
+                subprocess.Popen(['xdg-open', str(doc_path)])
 
         except Exception as e:
-            logger.warning(f"创建文本文档失败: {e}", exc_info=True)
+            logger.warning(f"创建 Word 文档失败: {e}", exc_info=True)
 
     def _format_size(self, size: int) -> str:
         """格式化文件大小 - 委托给 FileOperations"""
         return self._file_ops.format_size(size)
+    
+    def _set_plugin_default_thumbnail(self, asset: Asset) -> None:
+        """为插件类型资产设置默认缩略图
+        
+        Args:
+            asset: 资产对象
+        """
+        try:
+            # 获取默认插件图标路径
+            if getattr(sys, 'frozen', False):
+                # 打包后的路径
+                base_path = Path(sys._MEIPASS)
+            else:
+                # 开发环境路径
+                base_path = Path(__file__).parent.parent.parent.parent
+            
+            default_icon_path = base_path / "resources" / "icons" / "plugin_default.png"
+            
+            if not default_icon_path.exists():
+                logger.warning(f"默认插件图标不存在: {default_icon_path}")
+                return
+            
+            # 确保缩略图目录存在
+            thumbnails_dir = self.thumbnails_dir
+            if not thumbnails_dir.exists():
+                thumbnails_dir.mkdir(parents=True, exist_ok=True)
+            
+            # 生成缩略图文件名
+            thumbnail_filename = f"{asset.id}.png"
+            thumbnail_path = thumbnails_dir / thumbnail_filename
+            
+            # 复制默认图标作为缩略图
+            import shutil
+            shutil.copy2(default_icon_path, thumbnail_path)
+            
+            # 更新资产的缩略图路径
+            asset.thumbnail_path = thumbnail_path
+            
+            logger.info(f"已为插件资产设置默认缩略图: {asset.name}")
+            
+        except Exception as e:
+            logger.warning(f"设置插件默认缩略图失败: {e}", exc_info=True)
 
     def remove_asset(self, asset_id: str, delete_physical: bool = False) -> bool:
         """删除资产"""
@@ -998,6 +1229,14 @@ class AssetManagerLogic(QObject):
         """设置额外的预览工程路径和名称列表"""
         return self._preview_coordinator.set_additional_preview_projects_with_names(projects)
 
+    def get_use_symlink_preview(self) -> bool:
+        """获取是否使用符号链接进行预览（默认 False）。"""
+        return self._preview_coordinator.get_use_symlink_preview()
+
+    def set_use_symlink_preview(self, enabled: bool) -> bool:
+        """设置是否使用符号链接进行预览。"""
+        return self._preview_coordinator.set_use_symlink_preview(enabled)
+
     def clean_preview_project(self) -> bool:
         """清理预览工程的Content文件夹"""
         return self._preview_coordinator.clean_preview_project(
@@ -1207,18 +1446,28 @@ class AssetManagerLogic(QObject):
                 else:
                     created_time = datetime.now()
 
+                # 解析 package_type（向后兼容：旧数据无此字段默认为 content）
+                pkg_type_str = asset_data.get("package_type", "content")
+                try:
+                    package_type = PackageType(pkg_type_str)
+                except (ValueError, KeyError):
+                    package_type = PackageType.CONTENT
+
                 asset = Asset(
                     id=asset_data["id"],
                     name=asset_data["name"],
                     asset_type=AssetType(asset_data["asset_type"]),
                     path=Path(asset_data["path"]),
                     category=asset_data.get("category", "默认分类"),
+                    package_type=package_type,
                     file_extension=asset_data.get("file_extension", ""),
                     thumbnail_path=Path(asset_data["thumbnail_path"]) if asset_data.get("thumbnail_path") else None,
                     thumbnail_source=asset_data.get("thumbnail_source"),
                     size=asset_data.get("size", 0),
                     created_time=created_time,
-                    description=asset_data.get("description", "")
+                    description=asset_data.get("description", ""),
+                    engine_min_version=asset_data.get("engine_min_version", ""),
+                    project_file=asset_data.get("project_file", "")
                 )
 
                 if asset.path.exists():

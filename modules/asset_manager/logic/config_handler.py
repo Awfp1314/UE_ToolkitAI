@@ -203,14 +203,23 @@ class ConfigHandler:
         Returns:
             Dict[str, Any]: 资产字典
         """
+        pkg_type = getattr(asset, 'package_type', None)
+        pkg_type_val = pkg_type.value if hasattr(pkg_type, 'value') else 'content'
         return {
             "id": getattr(asset, 'id', ''),
             "name": getattr(asset, 'name', ''),
+            "asset_type": getattr(asset, 'asset_type', '').value if hasattr(getattr(asset, 'asset_type', ''), 'value') else '',
             "path": str(getattr(asset, 'path', '')),
             "category": getattr(asset, 'category', ''),
+            "package_type": pkg_type_val,
+            "file_extension": getattr(asset, 'file_extension', ''),
             "description": getattr(asset, 'description', ''),
-            "added_time": getattr(asset, 'added_time', ''),
-            "thumbnail_path": str(getattr(asset, 'thumbnail_path', ''))
+            "thumbnail_path": str(getattr(asset, 'thumbnail_path', '')) if getattr(asset, 'thumbnail_path', None) else '',
+            "thumbnail_source": getattr(asset, 'thumbnail_source', ''),
+            "size": getattr(asset, 'size', 0),
+            "created_time": getattr(asset, 'created_time', '').isoformat() if hasattr(getattr(asset, 'created_time', ''), 'isoformat') else str(getattr(asset, 'created_time', '')),
+            "engine_min_version": getattr(asset, 'engine_min_version', ''),
+            "project_file": getattr(asset, 'project_file', '')
         }
 
     def migrate_config(self, old_config: Dict[str, Any]) -> Dict[str, Any]:

@@ -449,6 +449,66 @@ class FileOperations:
             self._logger.error(f"Unexpected error: {e}")
             return False
     
+    def safe_copy_file(
+        self,
+        src: Path,
+        dst: Path,
+        progress_callback: Optional[Callable[[int, int, str], None]] = None
+    ) -> bool:
+        """安全地复制文件（支持进度报告）
+
+        如果目标已存在，先删除再复制（覆盖模式）。
+
+        Args:
+            src: 源文件路径
+            dst: 目标文件路径
+            progress_callback: 进度回调函数 (current, total, message)
+
+        Returns:
+            bool: 成功返回 True，失败返回 False
+        """
+        # Mock 模式：模拟成功
+        if self._mock_mode:
+            self._logger.info(f"[Mock] Copying file: {src} -> {dst}")
+            if progress_callback:
+                progress_callback(1, 1, "Mock copy completed")
+            return True
+
+        # 检查源路径
+        if not src.exists():
+            self._logger.error(f"Source file does not exist: {src}")
+            return False
+
+        # 删除目标文件（如果存在）
+        if not self._remove_if_exists(dst):
+            return False
+
+        # 执行复制
+        try:
+            self._logger.info(f"Copying file: {src} -> {dst}")
+            
+            if progress_callback:
+                progress_callback(0, 1, f"正在复制: {src.name}")
+            
+            # 复制文件（保留元数据）
+            shutil.copy2(str(src), str(dst))
+            
+            if progress_callback:
+                progress_callback(1, 1, f"已复制: {src.name}")
+            
+            self._logger.info(f"Successfully copied file: {src} -> {dst}")
+            return True
+            
+        except Exception as e:
+            self._logger.error(f"Failed to copy file: {e}")
+            # 清理可能的部分复制
+            if dst.exists():
+                try:
+                    dst.unlink()
+                except Exception as cleanup_error:
+                    self._logger.error(f"Failed to cleanup target: {cleanup_error}")
+            return False
+    
     def safe_move_file(
         self,
         src: Path,

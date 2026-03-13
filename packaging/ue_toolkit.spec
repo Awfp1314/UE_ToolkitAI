@@ -78,6 +78,12 @@ hiddenimports = [
     'watchdog',         # 配置热重载
     'yaml',             # YAML 配置
     
+    # Word 文档生成
+    'docx',             # python-docx
+    'docx.shared',
+    'docx.enum.text',
+    'lxml',             # python-docx 依赖
+    
     # HTTP 客户端（AI 聊天）
     'requests',         # API Key 客户端
     'httpx',            # Ollama 客户端

@@ -44,8 +44,8 @@ class AssetManagerUI(BaseModuleWidget):
         # 创建资产控制器，委托业务逻辑
         self.controller = AssetController(logic)
 
-        # 从配置文件读取视图模式（通过控制器）
-        self.current_view_mode = self.controller.load_view_mode()
+        # 强制使用紧凑视图
+        self.current_view_mode = "compact"
 
         self.card_count = 0
         self._scroll_save_timer = QTimer()
@@ -131,6 +131,32 @@ class AssetManagerUI(BaseModuleWidget):
         self.category_filter.setItemDelegate(CenterAlignDelegate(self.category_filter))
         filter_layout.addWidget(self.category_filter)
         
+        # 类型筛选框
+        self.type_filter = QComboBox()
+        self.type_filter.setObjectName("AssetTypeFilter")
+        self.type_filter.setFixedHeight(36)
+        self.type_filter.setMinimumWidth(100)
+        self.type_filter.setMaximumWidth(140)
+        self.type_filter.setFocusPolicy(Qt.FocusPolicy.ClickFocus)
+        self.type_filter.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.type_filter.addItems(["全部类型", "Content 资产包", "UE 项目", "UE 插件", "其他资源"])
+        self.type_filter.currentTextChanged.connect(self._on_type_filter_changed)
+        self.type_filter.setItemDelegate(CenterAlignDelegate(self.type_filter))
+        filter_layout.addWidget(self.type_filter)
+        
+        # 版本筛选框
+        self.version_filter = QComboBox()
+        self.version_filter.setObjectName("AssetVersionFilter")
+        self.version_filter.setFixedHeight(36)
+        self.version_filter.setMinimumWidth(100)
+        self.version_filter.setMaximumWidth(140)
+        self.version_filter.setFocusPolicy(Qt.FocusPolicy.ClickFocus)
+        self.version_filter.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.version_filter.addItem("全部版本")
+        self.version_filter.currentTextChanged.connect(self._on_version_filter_changed)
+        self.version_filter.setItemDelegate(CenterAlignDelegate(self.version_filter))
+        filter_layout.addWidget(self.version_filter)
+        
         # 排序选择框
         self.sort_combo = QComboBox()
         self.sort_combo.setObjectName("AssetSortCombo")
@@ -162,21 +188,28 @@ class AssetManagerUI(BaseModuleWidget):
         self.add_asset_btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.add_asset_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.add_asset_btn.setToolTip("添加资产到资产库")
+        # 设置蓝色样式
+        self.add_asset_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #2196F3;
+                color: white;
+                border: none;
+                border-radius: 4px;
+                padding: 8px 16px;
+                font-weight: bold;
+                font-size: 13px;
+            }
+            QPushButton:hover {
+                background-color: #1976D2;
+            }
+            QPushButton:pressed {
+                background-color: #1565C0;
+            }
+        """)
         self.add_asset_btn.clicked.connect(self._show_add_asset_dialog)
         filter_layout.addWidget(self.add_asset_btn)
 
-        # 视图切换按钮（根据配置初始化）
-        self.view_toggle_btn = QPushButton()
-        self.view_toggle_btn.setObjectName("ViewToggleIconButton")
-        self.view_toggle_btn.setFixedSize(40, 40)
-        self.view_toggle_btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
-        self.view_toggle_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.view_toggle_btn.clicked.connect(self._toggle_view_mode)
-
-        # 根据当前视图模式设置按钮状态
-        self._update_view_toggle_button()
-
-        filter_layout.addWidget(self.view_toggle_btn)
+        # 移除视图切换按钮 - 统一使用紧凑视图
 
         main_layout.addWidget(filter_area)
 
@@ -205,8 +238,8 @@ class AssetManagerUI(BaseModuleWidget):
         self.grid_widget.setObjectName("AssetGridWidget")
         self.grid_layout = QGridLayout(self.grid_widget)
         self.grid_layout.setContentsMargins(0, 0, 0, 0)
-        # 根据当前视图模式设置间距
-        initial_spacing = 30 if self.current_view_mode == "detailed" else 20
+        # 设置网格间距（紧凑视图）
+        initial_spacing = 20
         self.grid_layout.setSpacing(initial_spacing)
         self.grid_layout.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
 
@@ -293,6 +326,33 @@ class AssetManagerUI(BaseModuleWidget):
             logger.error(f"加载分类失败: {e}", exc_info=True)
             self.category_filter.blockSignals(False)
     
+    def _load_version_filter(self):
+        """从已有资产中收集引擎版本号并填充版本筛选下拉框"""
+        try:
+            versions = self.controller.get_all_engine_versions()
+            
+            current_version = self.version_filter.currentText()
+            self.version_filter.blockSignals(True)
+            self.version_filter.clear()
+            self.version_filter.addItem("全部版本")
+            for v in versions:
+                self.version_filter.addItem(v)
+            
+            # 恢复上次选择
+            saved_version = self.controller.load_ui_state("selected_version", "")
+            restore_target = saved_version if saved_version else current_version
+            if restore_target:
+                index = self.version_filter.findText(restore_target)
+                if index >= 0:
+                    self.version_filter.setCurrentIndex(index)
+                    self.controller.set_version_filter(restore_target)
+            
+            self.version_filter.blockSignals(False)
+            logger.info(f"已加载 {len(versions)} 个引擎版本选项")
+        except Exception as e:
+            logger.error(f"加载版本筛选失败: {e}", exc_info=True)
+            self.version_filter.blockSignals(False)
+    
     def _on_category_changed(self, category: str):
         """分类选择改变事件"""
         logger.info(f"分类选择改变: '{category}'")
@@ -334,6 +394,30 @@ class AssetManagerUI(BaseModuleWidget):
         logger.info(f"执行搜索: '{self.controller.search_text}'")
         self._apply_filter_to_ui()
     
+    def _on_type_filter_changed(self, type_name: str):
+        """类型筛选改变事件"""
+        # 中文到英文类型映射
+        type_map = {
+            "全部类型": "全部类型",
+            "Content 资产包": "Content",
+            "UE 项目": "Project",
+            "UE 插件": "Plugin",
+            "其他资源": "Others"
+        }
+        # 转换为英文类型名
+        english_type = type_map.get(type_name, type_name)
+        self.controller.set_type_filter(english_type)
+        self.controller.save_ui_state("selected_type", type_name)
+        logger.info(f"类型筛选改变: {type_name} -> {english_type}")
+        self._apply_filter_to_ui()
+    
+    def _on_version_filter_changed(self, version: str):
+        """版本筛选改变事件"""
+        self.controller.set_version_filter(version)
+        self.controller.save_ui_state("selected_version", version)
+        logger.info(f"版本筛选改变: {version}")
+        self._apply_filter_to_ui()
+
     def _on_sort_changed(self, sort_method: str):
         """排序方式改变事件"""
         self.controller.set_sort_method(sort_method)
@@ -363,13 +447,9 @@ class AssetManagerUI(BaseModuleWidget):
                 if card:
                     # 只有前N个才立即显示和重新布局
                     if visible_count < max_initial_visible:
-                        # 计算新的网格位置
-                        if self.current_view_mode == "detailed":
-                            row = visible_count // 4
-                            col = visible_count % 4
-                        else:
-                            row = visible_count // 5
-                            col = visible_count % 5
+                        # 计算新的网格位置（紧凑视图：5列）
+                        row = visible_count // 5
+                        col = visible_count % 5
                         
                         # 移除旧位置
                         self.grid_layout.removeWidget(card)
@@ -652,6 +732,16 @@ class AssetManagerUI(BaseModuleWidget):
             
             # 加载分类列表（内部会恢复已保存分类）
             self._load_categories()
+            
+            # 加载版本筛选列表
+            self._load_version_filter()
+            
+            # 恢复已保存的类型筛选
+            saved_type = self.controller.load_ui_state("selected_type", "")
+            if saved_type:
+                idx = self.type_filter.findText(saved_type)
+                if idx >= 0:
+                    self.type_filter.setCurrentIndex(idx)
 
             # 恢复已保存的排序方式
             saved_sort = self.controller.load_ui_state("sort_method", "")
@@ -665,18 +755,18 @@ class AssetManagerUI(BaseModuleWidget):
                     self._apply_filter_to_ui()
 
             # 恢复滚动位置（延迟等待布局完成）
+            from PyQt6.QtCore import QTimer as QtTimer
             saved_scroll = self.controller.load_ui_state("scroll_position", 0)
             if saved_scroll:
-                QTimer.singleShot(300, lambda: self.scroll_area.verticalScrollBar().setValue(saved_scroll))
+                QtTimer.singleShot(300, lambda: self.scroll_area.verticalScrollBar().setValue(saved_scroll))
             
             # 触发初始可见缩略图的加载
-            from PyQt6.QtCore import QTimer
-            QTimer.singleShot(100, self._load_visible_thumbnails)
+            QtTimer.singleShot(100, self._load_visible_thumbnails)
 
             # 触发后台增量扫描，检测缓存外的变化
             if self.logic and hasattr(self.logic, 'rescan_in_background'):
                 if not getattr(self, '_background_rescanning', False):
-                    QTimer.singleShot(500, self._trigger_background_rescan)
+                    QtTimer.singleShot(500, self._trigger_background_rescan)
             
             if on_complete:
                 on_complete()
@@ -916,29 +1006,37 @@ class AssetManagerUI(BaseModuleWidget):
         asset_type = "资源包" if asset_data.get('asset_type') == 'package' else "文件"
         created_time = format_time(asset_data.get('created_time', ''))
         asset_path = asset_data.get('path', '')  # 获取资产路径
+        engine_min_version = asset_data.get('engine_min_version', '')  # 获取引擎版本
+        package_type = asset_data.get('package_type', 'content')  # 获取包装类型
 
         # 检查是否有文档（通过控制器）
         asset_id = asset_data.get('id', '')
         has_document = self.controller.check_asset_has_document(asset_id) if asset_id else False
 
-        # 根据当前视图模式创建卡片（指定parent避免卡片成为独立窗口）
-        if self.current_view_mode == "detailed":
-            card = ModernAssetCard(name, category, size, thumbnail_path, asset_type,
-                                  created_time, has_document, theme=self.theme,
-                                  defer_thumbnail=defer_thumbnail, asset_path=asset_path,
-                                  parent=self)
-            row = index // 4
-            col = index % 4
-        else:
-            card = CompactAssetCard(name, category, thumbnail_path, asset_type,
-                                   theme=self.theme, defer_thumbnail=defer_thumbnail,
-                                   asset_path=asset_path, parent=self)
-            row = index // 5
-            col = index % 5
+        # 根据当前视图模式创建卡片（强制使用紧凑视图）
+        card = CompactAssetCard(name, category, thumbnail_path, asset_type,
+                               theme=self.theme, defer_thumbnail=defer_thumbnail,
+                               asset_path=asset_path, engine_min_version=engine_min_version,
+                               package_type=package_type, asset_size=size,
+                               parent=self)
+        row = index // 5
+        col = index % 5
 
-        # 设置卡片的asset_id
+        # 设置卡片的asset_id和package_type
         if asset_id:
             card.asset_id = asset_id
+        
+        # 存储 package_type 用于预览行为分化
+        card.package_type = asset_data.get('package_type', 'content')
+        
+        # 根据 package_type 调整预览按钮
+        if hasattr(card, 'preview_btn'):
+            if card.package_type == 'plugin':
+                card.preview_btn.update_button_text("不可预览")
+                card.preview_btn.setEnabled(False)
+                card.preview_btn.setCursor(Qt.CursorShape.ForbiddenCursor)
+            elif card.package_type == 'project':
+                card.preview_btn.update_button_text("▶  打开项目")
         
         # 连接信号（使用Qt.ConnectionType.QueuedConnection确保信号正确传递）
         card.preview_clicked.connect(lambda: self._on_preview_asset(name))
@@ -1066,6 +1164,26 @@ class AssetManagerUI(BaseModuleWidget):
             logger.error(f"未找到资产: {name}")
             return
 
+        # 根据 package_type 分化预览行为
+        pkg_type = getattr(preview_card, 'package_type', 'content')
+        
+        if pkg_type == 'plugin':
+            # 插件不可预览
+            logger.info(f"插件资产不可预览: {name}")
+            return
+        
+        if pkg_type == 'project':
+            # UE 项目：直接打开 .uproject
+            self._preview_project_asset(asset_id, name)
+            return
+        
+        if pkg_type == 'others':
+            # 其他资源：检测内容类型，分别处理
+            self._preview_others_asset(asset_id, name, preview_card)
+            return
+
+        # CONTENT 类型：走标准的复制预览流程（下方原有逻辑）
+
         # 获取可用的预览工程列表
         preview_projects = self.logic.get_additional_preview_projects_with_names()
 
@@ -1142,16 +1260,58 @@ class AssetManagerUI(BaseModuleWidget):
             preview_btn.reset_progress()
             preview_btn.update_button_text("▶  预览资产")
 
-        # 简化的进度回调：只显示启动引擎的消息
+        use_symlink_preview = False
+        if self.logic and hasattr(self.logic, 'get_use_symlink_preview'):
+            try:
+                use_symlink_preview = self.logic.get_use_symlink_preview()
+            except Exception as e:
+                logger.warning(f"读取预览模式失败，默认按复制模式处理: {e}")
+
+        if not use_symlink_preview:
+            # 复制模式与导入按钮保持一致：启动时显示 0%
+            preview_btn.set_progress(0.0)
+            preview_btn.update_button_text("0%")
+
+        launch_reset_scheduled = False
+
+        def schedule_button_reset():
+            """在进入启动阶段后只触发一次按钮重置。"""
+            nonlocal launch_reset_scheduled
+            if launch_reset_scheduled:
+                return
+            launch_reset_scheduled = True
+            self._reset_button_signal.emit(name)
+
+        # 根据预览模式展示不同进度：
+        # - 符号链接模式：仅显示启动状态
+        # - 复制模式：显示复制进度和百分比
         def update_progress(current, total, message):
-            """简化的进度回调（符号链接很快，不需要显示进度）"""
-            # 只在启动引擎时显示消息
+            if use_symlink_preview:
+                # 符号链接模式很快，只显示启动引擎相关状态
+                if "启动" in message or "引擎" in message:
+                    preview_btn.update_button_text("启动中...")
+                    schedule_button_reset()
+                elif current >= total and total > 0:
+                    logger.info(f"资产预览准备完成: {name}")
+                    schedule_button_reset()
+                return
+
+            # 复制模式：显示进度提示
+            if total > 0:
+                progress = max(0.0, min(1.0, current / total))
+                preview_btn.set_progress(progress)
+
             if "启动" in message or "引擎" in message:
+                preview_btn.set_progress(1.0)
                 preview_btn.update_button_text("启动中...")
+                schedule_button_reset()
+            elif total > 0 and current < total:
+                percent = int((current / total) * 100)
+                preview_btn.update_button_text(f"{percent}%")
             elif current >= total and total > 0:
-                # 链接完成，直接重置（不显示成功提示）
-                logger.info(f"资产链接完成: {name}")
-                self._reset_button_signal.emit(name)
+                logger.info(f"资产复制完成，准备启动引擎: {name}")
+                preview_btn.update_button_text("启动中...")
+                schedule_button_reset()
 
         # 直接调用logic层的预览功能（不显示初始进度）
         if self.logic:
@@ -1187,6 +1347,185 @@ class AssetManagerUI(BaseModuleWidget):
                 logger.info(f"已设置定时器重置按钮: {asset_name}")
                 break
     
+    def _preview_project_asset(self, asset_id: str, name: str):
+        """预览 PROJECT 类型资产：直接打开 .uproject 文件"""
+        import subprocess
+        
+        asset = self.logic.get_asset(asset_id)
+        if not asset:
+            logger.error(f"未找到资产: {asset_id}")
+            return
+        
+        # 获取 .uproject 文件路径
+        project_file_rel = getattr(asset, 'project_file', '')
+        if project_file_rel:
+            uproject_path = asset.path / project_file_rel
+        else:
+            # 尝试从 Project 子目录查找
+            project_dir = asset.path / "Project"
+            uproject_path = None
+            if project_dir.exists():
+                for f in project_dir.rglob("*.uproject"):
+                    uproject_path = f
+                    break
+        
+        if not uproject_path or not uproject_path.exists():
+            from PyQt6.QtWidgets import QMessageBox
+            QMessageBox.warning(self, "无法打开项目", f"未找到 .uproject 文件：{name}")
+            logger.error(f"未找到 .uproject: {asset.path}")
+            return
+        
+        logger.info(f"打开 UE 项目: {uproject_path}")
+        try:
+            import os
+            os.startfile(str(uproject_path))
+        except Exception as e:
+            logger.error(f"打开项目失败: {e}", exc_info=True)
+            from PyQt6.QtWidgets import QMessageBox
+            QMessageBox.warning(self, "打开失败", f"无法打开项目文件：{e}")
+    
+    def _preview_others_asset(self, asset_id: str, name: str, preview_card):
+        """预览 OTHERS 类型资产：模型复制到预览工程，图片/视频/音效用 Windows 打开"""
+        asset = self.logic.get_asset(asset_id)
+        if not asset:
+            logger.error(f"未找到资产: {asset_id}")
+            return
+        
+        others_dir = asset.path / "Others"
+        if not others_dir.exists():
+            others_dir = asset.path  # 兼容旧结构
+        
+        # 检测内容类型
+        MEDIA_EXTENSIONS = {
+            '.png', '.jpg', '.jpeg', '.bmp', '.gif', '.tga', '.tif', '.tiff',
+            '.webp', '.svg', '.ico', '.exr', '.hdr',  # 图片/纹理
+            '.mp4', '.avi', '.mov', '.mkv', '.wmv', '.flv', '.webm',  # 视频
+            '.mp3', '.wav', '.ogg', '.flac', '.aac', '.wma',  # 音频
+        }
+        MODEL_EXTENSIONS = {
+            '.fbx', '.obj', '.gltf', '.glb', '.abc', '.usd', '.usda', '.usdc',
+        }
+        UE_EXTENSIONS = {'.uasset', '.umap'}
+        
+        has_ue_or_model = False
+        has_media_only = True
+        first_media_file = None
+        
+        try:
+            for f in others_dir.rglob("*"):
+                if not f.is_file():
+                    continue
+                ext = f.suffix.lower()
+                if ext in UE_EXTENSIONS or ext in MODEL_EXTENSIONS:
+                    has_ue_or_model = True
+                    has_media_only = False
+                    break
+                if ext in MEDIA_EXTENSIONS and not first_media_file:
+                    first_media_file = f
+                elif ext not in MEDIA_EXTENSIONS:
+                    has_media_only = False
+        except Exception as e:
+            logger.warning(f"扫描 Others 目录失败: {e}")
+        
+        if has_ue_or_model:
+            # 包含模型或 UE 资产 → 走标准复制预览流程
+            logger.info(f"Others 资产包含模型/UE资产，使用复制预览: {name}")
+            self._on_preview_asset_content_flow(asset_id, name, preview_card)
+        elif first_media_file:
+            # 纯媒体文件 → 用 Windows 默认程序打开
+            logger.info(f"Others 资产为媒体文件，用 Windows 打开: {first_media_file}")
+            try:
+                import os
+                os.startfile(str(first_media_file))
+            except Exception as e:
+                logger.error(f"打开媒体文件失败: {e}", exc_info=True)
+                from PyQt6.QtWidgets import QMessageBox
+                QMessageBox.warning(self, "打开失败", f"无法打开文件：{e}")
+        else:
+            # 无法识别内容 → 打开资产文件夹
+            logger.info(f"Others 资产无法识别内容，打开文件夹: {others_dir}")
+            try:
+                import os
+                os.startfile(str(others_dir))
+            except Exception as e:
+                logger.error(f"打开文件夹失败: {e}")
+    
+    def _on_preview_asset_content_flow(self, asset_id: str, name: str, preview_card):
+        """执行 CONTENT 风格的复制预览流程（供 CONTENT 和 OTHERS 中含模型的资产使用）"""
+        # 获取可用的预览工程列表
+        preview_projects = self.logic.get_additional_preview_projects_with_names()
+
+        if not preview_projects:
+            logger.warning("没有可用的预览工程，请先在设置中配置预览工程")
+            from .message_dialog import MessageDialog
+            dialog = MessageDialog(
+                "预览工程未设置",
+                "请先在设置界面中添加预览工程，然后再进行资产预览。",
+                "info",
+                show_settings_button=True,
+                parent=self
+            )
+            if dialog.exec() == MessageDialog.DialogCode.Accepted and dialog.goto_settings:
+                self._navigate_to_settings()
+            return
+
+        # 读取上次选择的预览工程名称
+        last_selected_name = None
+        try:
+            user_config = self.logic.config_manager.load_user_config()
+            last_selected_name = (user_config.get("last_preview_project", "")
+                                    or user_config.get("last_preview_project_name", ""))
+        except Exception as e:
+            logger.warning(f"读取上次选择失败: {e}")
+
+        dialog = ProjectSelectorDialog(
+            preview_projects,
+            theme=self.theme,
+            last_selected_name=last_selected_name,
+            parent=self
+        )
+        if dialog.exec() != ProjectSelectorDialog.DialogCode.Accepted:
+            return
+
+        selected_project = dialog.get_selected_project()
+        if not selected_project:
+            return
+
+        selected_name = selected_project.get("name", "")
+        preview_project_path = Path(selected_project.get("path", ""))
+
+        try:
+            config = self.logic.config_manager.load_user_config()
+            config["last_preview_project"] = selected_name
+            self.logic.config_manager.save_user_config(config, backup_reason="update_preview_project")
+        except Exception as e:
+            logger.warning(f"保存预览工程选择失败: {e}")
+
+        preview_btn = preview_card.preview_btn
+        preview_btn.set_progress(0.0)
+        preview_btn.update_button_text("0%")
+
+        def reset_button():
+            preview_btn.reset_progress()
+            preview_btn.update_button_text("▶  预览资产")
+
+        def update_progress(current, total, message):
+            if total > 0:
+                pct = current / total
+                preview_btn.set_progress(pct)
+                preview_btn.update_button_text(f"{int(pct * 100)}%")
+            if "启动" in message or "引擎" in message:
+                preview_btn.update_button_text("启动中...")
+                self._reset_button_signal.emit(name)
+
+        result = self.logic.preview_asset(
+            asset_id,
+            progress_callback=update_progress,
+            preview_project_path=preview_project_path
+        )
+        if not result:
+            reset_button()
+
     def _on_edit_asset_info(self, name):
         """编辑资产信息"""
         logger.info(f"编辑资产信息: {name}")
@@ -1258,8 +1597,8 @@ class AssetManagerUI(BaseModuleWidget):
             logger.error(f"编辑资产信息时出错: {e}", exc_info=True)
     
     def _on_detail_requested(self, name):
-        """显示资产详情"""
-        logger.info(f"[详情请求] 收到请求: {name}")
+        """打开资产文档"""
+        logger.info(f"[打开文档] 收到请求: {name}")
         
         try:
             # 通过控制器查找资产
@@ -1269,52 +1608,178 @@ class AssetManagerUI(BaseModuleWidget):
                 logger.warning(f"未找到资产: {name}")
                 return
             
-            logger.info(f"[详情请求] 找到资产: {asset.id}")
+            logger.info(f"[打开文档] 找到资产: {asset.id}")
             
-            # 构建资产数据字典
-            asset_data = {
-                'id': asset.id,
-                'name': asset.name,
-                'type': asset.asset_type.value if hasattr(asset.asset_type, 'value') else str(asset.asset_type),
-                'category': asset.category,
-                'path': asset.path,
-                'size': asset.size,
-                'created_time': asset.created_time,
-                'thumbnail_path': str(asset.thumbnail_path) if asset.thumbnail_path else None,
-            }
+            # 检查文档目录是否存在
+            if not self.logic.documents_dir:
+                logger.error("文档目录未设置")
+                from PyQt6.QtWidgets import QMessageBox
+                QMessageBox.warning(self, "错误", "文档目录未设置")
+                return
             
-            logger.info(f"[详情请求] 开始创建对话框")
+            # 构建文档路径（.docx 格式）
+            doc_path = self.logic.documents_dir / f"{asset.id}.docx"
             
-            # 获取资产库路径
-            library_path = self.logic.get_asset_library_path()
-            
-            # 创建并显示详情对话框
-            dialog = AssetDetailDialog(asset_data, library_path=library_path, parent=self)
-            
-            logger.info(f"[详情请求] 对话框创建成功")
-            
-            # 连接信号 - 使用 QueuedConnection 确保对话框关闭后再触发
-            dialog.preview_requested.connect(
-                lambda asset_id: self._on_preview_from_dialog(asset_id),
-                Qt.ConnectionType.QueuedConnection
-            )
-            dialog.import_requested.connect(
-                lambda asset_id: self._on_import_from_dialog(asset_id),
-                Qt.ConnectionType.QueuedConnection
-            )
-            
-            # 居中显示
-            if hasattr(dialog, 'center_on_parent'):
-                dialog.center_on_parent()
-                logger.info(f"[详情请求] 对话框已居中")
-            
-            # 显示对话框
-            logger.info(f"[详情请求] 开始显示对话框")
-            result = dialog.exec()
-            logger.info(f"[详情请求] 对话框关闭，结果: {result}")
+            if doc_path.exists():
+                # 文档存在，打开文档
+                logger.info(f"[打开文档] 文档存在: {doc_path}")
+                import os
+                import sys
+                
+                if sys.platform == "win32":
+                    os.startfile(str(doc_path))
+                elif sys.platform == "darwin":
+                    import subprocess
+                    subprocess.Popen(["open", str(doc_path)])
+                else:
+                    import subprocess
+                    subprocess.Popen(["xdg-open", str(doc_path)])
+                
+                logger.info(f"[打开文档] 已打开: {doc_path}")
+            else:
+                # 文档不存在，询问是否创建
+                logger.info(f"[打开文档] 文档不存在，询问创建")
+                from PyQt6.QtWidgets import QMessageBox
+                
+                reply = QMessageBox.question(
+                    self,
+                    "创建文档",
+                    f"资产 \"{asset.name}\" 目前没有文档。\n\n是否创建文档？",
+                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                    QMessageBox.StandardButton.Yes
+                )
+                
+                if reply == QMessageBox.StandardButton.Yes:
+                    # 创建文档
+                    self._create_asset_document(asset)
             
         except Exception as e:
-            logger.error(f"显示资产详情时出错: {e}", exc_info=True)
+            logger.error(f"打开资产文档时出错: {e}", exc_info=True)
+            from PyQt6.QtWidgets import QMessageBox
+            QMessageBox.warning(self, "错误", f"无法打开文档：{e}")
+    
+    def _create_asset_document(self, asset):
+        """创建资产文档"""
+        try:
+            # 确保文档目录存在
+            self.logic.documents_dir.mkdir(parents=True, exist_ok=True)
+            
+            # 创建文档文件（使用 .docx 格式）
+            doc_path = self.logic.documents_dir / f"{asset.id}.docx"
+            
+            # 使用 python-docx 创建 Word 文档
+            from docx import Document
+            from docx.shared import Pt, RGBColor
+            from docx.enum.text import WD_PARAGRAPH_ALIGNMENT
+
+            doc = Document()
+
+            # 标题：资产信息表（12pt）
+            title = doc.add_heading('资产信息表', level=1)
+            title.alignment = WD_PARAGRAPH_ALIGNMENT.CENTER
+            title_run = title.runs[0]
+            title_run.font.size = Pt(12)
+
+            # 添加分隔线（8pt）
+            sep_para = doc.add_paragraph('=' * 50)
+            sep_para.runs[0].font.size = Pt(8)
+
+            # 基本信息区（8pt）
+            doc.add_paragraph()
+            info_lines = [
+                f"资产名称: {asset.name}",
+                f"资产ID: {asset.id}",
+                f"资产类型: {asset.package_type.display_name if hasattr(asset, 'package_type') else asset.asset_type.value}",
+                f"分类: {asset.category}",
+                f"文件路径: {asset.path}",
+                f"文件大小: {self._format_size(asset.size)}",
+                f"创建时间: {asset.created_time.strftime('%Y-%m-%d %H:%M:%S') if asset.created_time else '未知'}",
+            ]
+            
+            # 如果有引擎版本信息，添加到列表
+            if hasattr(asset, 'engine_min_version') and asset.engine_min_version:
+                info_lines.append(f"引擎版本: {asset.engine_min_version}")
+            
+            for line in info_lines:
+                p = doc.add_paragraph(line)
+                p.style = 'Normal'
+                for run in p.runs:
+                    run.font.size = Pt(8)
+
+            # 分隔线（8pt）
+            doc.add_paragraph()
+            sep_para2 = doc.add_paragraph('=' * 50)
+            sep_para2.runs[0].font.size = Pt(8)
+            doc.add_paragraph()
+
+            # 描述区（10pt 标题，8pt 内容）
+            desc_heading = doc.add_heading('资产描述', level=2)
+            desc_heading.runs[0].font.size = Pt(10)
+            desc_content = doc.add_paragraph(asset.description or '暂无描述')
+            for run in desc_content.runs:
+                run.font.size = Pt(8)
+            doc.add_paragraph()
+
+            # 分隔线（8pt）
+            sep_para3 = doc.add_paragraph('─' * 50)
+            sep_para3.runs[0].font.size = Pt(8)
+            doc.add_paragraph()
+
+            # 使用说明区（10pt 标题，8pt 内容）
+            usage_heading = doc.add_heading('使用说明', level=2)
+            usage_heading.runs[0].font.size = Pt(10)
+            usage_content = doc.add_paragraph('（在此添加使用说明）')
+            for run in usage_content.runs:
+                run.font.size = Pt(8)
+            doc.add_paragraph()
+
+            # 分隔线（8pt）
+            sep_para4 = doc.add_paragraph('─' * 50)
+            sep_para4.runs[0].font.size = Pt(8)
+            doc.add_paragraph()
+
+            # 注意事项区（10pt 标题，8pt 内容）
+            notes_heading = doc.add_heading('注意事项', level=2)
+            notes_heading.runs[0].font.size = Pt(10)
+            notes_content = doc.add_paragraph('（在此添加注意事项）')
+            for run in notes_content.runs:
+                run.font.size = Pt(8)
+
+            # 保存文档
+            doc.save(str(doc_path))
+            
+            logger.info(f"[创建文档] 文档已创建: {doc_path}")
+            
+            # 打开文档
+            import os
+            import sys
+            
+            if sys.platform == "win32":
+                os.startfile(str(doc_path))
+            elif sys.platform == "darwin":
+                import subprocess
+                subprocess.Popen(["open", str(doc_path)])
+            else:
+                import subprocess
+                subprocess.Popen(["xdg-open", str(doc_path)])
+            
+            logger.info(f"[创建文档] 已打开: {doc_path}")
+            
+        except Exception as e:
+            logger.error(f"创建文档失败: {e}", exc_info=True)
+            from PyQt6.QtWidgets import QMessageBox
+            QMessageBox.warning(self, "错误", f"创建文档失败：{e}")
+    
+    def _format_size(self, size: int) -> str:
+        """格式化文件大小"""
+        if size < 1024:
+            return f"{size} B"
+        elif size < 1024 * 1024:
+            return f"{size / 1024:.1f} KB"
+        elif size < 1024 * 1024 * 1024:
+            return f"{size / (1024 * 1024):.1f} MB"
+        else:
+            return f"{size / (1024 * 1024 * 1024):.2f} GB"
     
     def _on_preview_from_dialog(self, asset_id: str):
         """从详情对话框触发的预览事件"""
@@ -1449,21 +1914,12 @@ class AssetManagerUI(BaseModuleWidget):
                     try:
                         pixmap = QPixmap(str(thumbnail_path))
                         if not pixmap.isNull():
-                            # 根据视图模式缩放
-                            if self.current_view_mode == "detailed":
-                                # 详细视图：212x153
-                                scaled_pixmap = pixmap.scaled(
-                                    212, 153,
-                                    Qt.AspectRatioMode.KeepAspectRatioByExpanding,
-                                    Qt.TransformationMode.SmoothTransformation
-                                )
-                            else:
-                                # 紧凑视图：172x115
-                                scaled_pixmap = pixmap.scaled(
-                                    172, 115,
-                                    Qt.AspectRatioMode.KeepAspectRatioByExpanding,
-                                    Qt.TransformationMode.SmoothTransformation
-                                )
+                            # 紧凑视图：172x115
+                            scaled_pixmap = pixmap.scaled(
+                                172, 115,
+                                Qt.AspectRatioMode.KeepAspectRatioByExpanding,
+                                Qt.TransformationMode.SmoothTransformation
+                            )
                             
                             # 更新缓存
                             self._thumbnail_cache[asset_id] = scaled_pixmap
@@ -1509,12 +1965,13 @@ class AssetManagerUI(BaseModuleWidget):
             logger.error(f"显示添加资产对话框时出错: {e}", exc_info=True)
     
     def _add_asset_async(self, asset_info):
-        """异步添加资产（带进度显示）"""
+        """异步添加资产（带进度显示，支持压缩包预分析路径）"""
         from PyQt6.QtCore import QThread, pyqtSignal
         
         class AddAssetThread(QThread):
             progress_update = pyqtSignal(int, int, str)  # current, total, message
             finished = pyqtSignal(bool, object)  # success, asset
+            error_message = pyqtSignal(str)  # 具体错误信息
             
             def __init__(self, logic, asset_info):
                 super().__init__()
@@ -1523,26 +1980,48 @@ class AssetManagerUI(BaseModuleWidget):
             
             def run(self):
                 try:
-                    # 调用异步版本的 add_asset
+                    # 确定实际添加路径
+                    # 如果压缩包已预分析，使用预解压的内容路径
+                    archive_content_path = self.asset_info.get('archive_content_path')
+                    
+                    if archive_content_path and Path(archive_content_path).exists():
+                        add_path = Path(archive_content_path)
+                        logger.info(f"使用预分析的压缩包内容路径: {add_path}")
+                    else:
+                        add_path = self.asset_info['path']
+                    
+                    # 导入 PackageType 用于默认值
+                    from ..logic.asset_model import PackageType
+                    
                     result = self.logic.add_asset_async(
-                        asset_path=self.asset_info['path'],
+                        asset_path=add_path,
                         asset_type=self.asset_info['type'],
                         name=self.asset_info['name'],
                         category=self.asset_info['category'],
                         description="",
                         create_markdown=self.asset_info.get('create_doc', False),
+                        engine_version=self.asset_info.get('engine_version', ''),
+                        package_type=self.asset_info.get('package_type', PackageType.CONTENT),
+                        plugin_folder_name=self.asset_info.get('plugin_folder_name', ''),
                         progress_callback=self._progress_callback
                     )
                     
                     self.finished.emit(result is not None, result)
                 except Exception as e:
                     logger.error(f"添加资产线程出错: {e}", exc_info=True)
+                    self.error_message.emit(str(e))
                     self.finished.emit(False, None)
             
             def _progress_callback(self, current, total, message):
                 self.progress_update.emit(current, total, message)
         
-        # 创建进度对话框，传入资产名称
+        # 保存源路径和临时目录信息，用于完成后的清理和删除确认
+        self._pending_source_path = asset_info.get('original_source_path')
+        self._pending_archive_extractor = asset_info.get('archive_extractor')
+        self._pending_archive_temp_dir = asset_info.get('archive_temp_dir')
+        self._last_add_error = ""
+        
+        # 创建进度对话框
         from .add_asset_progress_dialog import AddAssetProgressDialog
         progress_dialog = AddAssetProgressDialog(asset_info['name'], self)
         progress_dialog.setModal(True)
@@ -1550,8 +2029,12 @@ class AssetManagerUI(BaseModuleWidget):
         # 创建并启动线程
         self.add_asset_thread = AddAssetThread(self.logic, asset_info)
         
+        def _on_error_message(msg):
+            self._last_add_error = msg
+        
         # 连接信号
         self.add_asset_thread.progress_update.connect(progress_dialog.update_progress)
+        self.add_asset_thread.error_message.connect(_on_error_message)
         self.add_asset_thread.finished.connect(self._on_add_asset_finished)
         self.add_asset_thread.finished.connect(progress_dialog.close)
         
@@ -1561,6 +2044,17 @@ class AssetManagerUI(BaseModuleWidget):
     
     def _on_add_asset_finished(self, success, asset):
         """添加资产完成回调"""
+        # 清理压缩包临时目录
+        archive_extractor = getattr(self, '_pending_archive_extractor', None)
+        archive_temp_dir = getattr(self, '_pending_archive_temp_dir', None)
+        if archive_extractor and archive_temp_dir:
+            try:
+                archive_extractor.cleanup(Path(archive_temp_dir))
+            except Exception as e:
+                logger.warning(f"清理临时目录失败: {e}")
+        self._pending_archive_extractor = None
+        self._pending_archive_temp_dir = None
+        
         if success and asset:
             logger.info(f"资产添加成功: {asset.name}")
             # 刷新UI
@@ -1568,11 +2062,55 @@ class AssetManagerUI(BaseModuleWidget):
             self.load_assets_async(force_reload=True)
             # 更新分类列表
             self._load_categories()
+            
+            # 根据设置自动删除源文件（不再弹窗）
+            source_path = getattr(self, '_pending_source_path', None)
+            if source_path and Path(source_path).exists():
+                self._ask_delete_source(source_path)
         else:
             logger.error("资产添加失败")
-            # 显示错误消息
             from PyQt6.QtWidgets import QMessageBox
-            QMessageBox.warning(self, "添加失败", "资产添加失败，请检查文件权限和磁盘空间。")
+            error_detail = getattr(self, '_last_add_error', '') or "请检查文件权限和磁盘空间。"
+            QMessageBox.warning(self, "添加失败", f"资产添加失败：{error_detail}")
+        
+        self._last_add_error = ""
+        self._pending_source_path = None
+    
+    def _ask_delete_source(self, source_path):
+        """根据设置决定是否删除源文件/文件夹
+        
+        - delete_source_after_import=True → 自动删除
+        - delete_source_after_import=False（默认）→ 保留源文件，不提示
+        """
+        from PyQt6.QtWidgets import QMessageBox
+        
+        source = Path(source_path)
+        if source.is_file():
+            type_text = "压缩包"
+        else:
+            type_text = "文件夹"
+        
+        # 读取配置
+        auto_delete = False
+        try:
+            user_config = self.logic.config_manager.load_user_config()
+            auto_delete = user_config.get("delete_source_after_import", False)
+        except Exception:
+            pass
+        
+        # 仅当设置为自动删除时执行
+        if auto_delete:
+            try:
+                if source.is_file():
+                    source.unlink()
+                    logger.info(f"已删除源文件: {source}")
+                elif source.is_dir():
+                    import shutil
+                    shutil.rmtree(str(source))
+                    logger.info(f"已删除源文件夹: {source}")
+            except Exception as e:
+                logger.error(f"删除源文件失败: {e}", exc_info=True)
+                QMessageBox.warning(self, "删除失败", f"无法删除源文件：{e}")
     
     def _show_add_category_dialog(self):
         """显示分类管理对话框"""
@@ -1632,12 +2170,25 @@ class AssetManagerUI(BaseModuleWidget):
             
             # 识别资产类型
             from ..logic.asset_model import AssetType
+            from ..utils.archive_extractor import ARCHIVE_EXTENSIONS
+            
+            is_archive = False
             if file_path.is_dir():
                 asset_type = AssetType.PACKAGE
                 logger.info("识别为资源包类型")
+            elif file_path.suffix.lower() in ARCHIVE_EXTENSIONS:
+                asset_type = AssetType.PACKAGE  # 压缩包最终作为资源包处理
+                is_archive = True
+                logger.info(f"识别为压缩包类型: {file_path.suffix}")
             else:
-                asset_type = AssetType.FILE
-                logger.info("识别为文件类型")
+                # 不再支持单文件导入，提示用户
+                from PyQt6.QtWidgets import QMessageBox
+                QMessageBox.information(
+                    self, "不支持的文件类型",
+                    "不支持单文件导入，请拖入文件夹或压缩包（.zip/.rar/.7z）。"
+                )
+                logger.info(f"拒绝单文件拖放: {file_path}")
+                return
             
             # 获取当前选中的分类
             current_category = self.category_filter.currentText()
@@ -1645,20 +2196,24 @@ class AssetManagerUI(BaseModuleWidget):
                 current_category = "默认分类"
             
             # 显示添加资产对话框，预填充路径和分类
-            self._show_add_asset_dialog_with_prefill(file_path, asset_type, current_category)
+            self._show_add_asset_dialog_with_prefill(
+                file_path, asset_type, current_category, is_archive=is_archive
+            )
             
             event.acceptProposedAction()
             
         except Exception as e:
             logger.error(f"处理拖放操作时出错: {e}", exc_info=True)
     
-    def _show_add_asset_dialog_with_prefill(self, file_path: Path, asset_type, default_category: str):
+    def _show_add_asset_dialog_with_prefill(self, file_path: Path, asset_type, 
+                                              default_category: str, is_archive: bool = False):
         """显示添加资产对话框（预填充路径和分类）
         
         Args:
             file_path: 文件/文件夹路径
             asset_type: 资产类型
             default_category: 默认分类
+            is_archive: 是否为压缩包文件
         """
         try:
             # 通过控制器获取已有的资产名称和分类列表
@@ -1672,7 +2227,8 @@ class AssetManagerUI(BaseModuleWidget):
                 parent=self,
                 prefill_path=str(file_path),
                 prefill_type=asset_type,
-                prefill_category=default_category
+                prefill_category=default_category,
+                is_archive=is_archive  # 直接通过构造函数传入
             )
             
             # 居中显示
@@ -1695,13 +2251,31 @@ class AssetManagerUI(BaseModuleWidget):
         try:
             from modules.asset_manager.ui.project_search_window import ProjectSearchWindow
             
+            # 获取资产信息 - 通过遍历所有资产查找匹配的名称
+            asset = None
+            for a in self.logic.get_all_assets():
+                if a.name == name:
+                    asset = a
+                    break
+            
+            if not asset:
+                logger.error(f"未找到资产: {name}")
+                return
+            
             # 如果窗口已存在，先关闭
             if self.project_search_window:
                 self.project_search_window.close()
                 self.project_search_window = None
             
-            # 创建工程搜索窗口，传递资产名称和逻辑层引用
-            self.project_search_window = ProjectSearchWindow(None, asset_name=name, logic=self.logic)
+            # 创建工程搜索窗口，传递资产完整信息
+            self.project_search_window = ProjectSearchWindow(
+                None, 
+                asset_name=name, 
+                logic=self.logic,
+                package_type=asset.package_type,
+                engine_version=asset.engine_min_version,
+                asset_path=asset.path
+            )
             
             # 应用当前主题
             from core.utils.style_system import style_system

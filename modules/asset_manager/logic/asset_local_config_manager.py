@@ -157,18 +157,26 @@ class AssetLocalConfigManager:
         """从本地配置文件加载资产库配置
 
         Returns:
-            配置字典或None
+            Optional[Dict[str, Any]]: 配置字典，失败返回 None
         """
-        if not self.local_config_path:
-            self._logger.debug("本地配置路径未设置")
+        if not self.local_config_path or not self.local_config_path.exists():
+            self._logger.info(f"本地配置文件不存在: {self.local_config_path}")
             return None
 
         try:
-            config = ConfigUtils.read_json(self.local_config_path, default=None)
-
-            if config is None:
-                self._logger.debug(f"本地配置文件不存在: {self.local_config_path}")
-                return None
+            with open(self.local_config_path, 'r', encoding='utf-8') as f:
+                config = json.load(f)
+            
+            # 调试：检查配置中的资产数据
+            assets = config.get('assets', [])
+            if assets:
+                first_asset = assets[0]
+                print(f"[DEBUG load_local_config] 配置文件: {self.local_config_path}")
+                print(f"[DEBUG load_local_config] 第一个资产: {first_asset.get('name')}")
+                print(f"[DEBUG load_local_config] engine_min_version: '{first_asset.get('engine_min_version', 'KEY_NOT_FOUND')}'")
+                if len(assets) > 1:
+                    second_asset = assets[1]
+                    print(f"[DEBUG load_local_config] 第二个资产: {second_asset.get('name')}, engine_min_version: '{second_asset.get('engine_min_version', 'KEY_NOT_FOUND')}')")
 
             version = config.get("_version", "1.0.0")
             if version != "2.0.0":
@@ -385,12 +393,15 @@ class AssetLocalConfigManager:
                 "asset_type": asset.asset_type.value,
                 "path": str(asset.path),
                 "category": asset.category,
+                "package_type": asset.package_type.value if hasattr(asset.package_type, 'value') else "content",
                 "file_extension": asset.file_extension,
                 "thumbnail_path": str(asset.thumbnail_path) if asset.thumbnail_path else None,
                 "thumbnail_source": asset.thumbnail_source,
                 "size": asset.size,
                 "created_time": asset.created_time.isoformat(),
-                "description": asset.description
+                "description": asset.description,
+                "engine_min_version": getattr(asset, 'engine_min_version', ''),
+                "project_file": getattr(asset, 'project_file', '')
             })
 
         lib_config["assets"] = assets_data

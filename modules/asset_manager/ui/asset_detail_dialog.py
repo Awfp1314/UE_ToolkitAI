@@ -216,13 +216,30 @@ class AssetDetailDialog(QDialog):
         layout.addLayout(self._create_info_row("名称", self.asset_data.get('name', '未知')))
         layout.addLayout(self._create_info_row("分类", self.asset_data.get('category', '未分类')))
         
+        # 资产类型
+        from ..logic.asset_model import PackageType
+        package_type = self.asset_data.get('package_type', 'content')
+        type_text = "资源包"
+        if package_type:
+            try:
+                if hasattr(package_type, 'display_name'):
+                    type_text = package_type.display_name
+                elif isinstance(package_type, str):
+                    type_text = PackageType(package_type).display_name
+            except (ValueError, AttributeError):
+                type_text = str(package_type)
+        layout.addLayout(self._create_info_row("资产类型", type_text))
+        
+        # 引擎版本
+        from ..utils.ue_version_detector import UEVersionDetector
+        version_detector = UEVersionDetector()
+        engine_version = self.asset_data.get('engine_min_version', '')
+        version_badge = version_detector.format_version_badge(engine_version, package_type) if engine_version else "未知"
+        layout.addLayout(self._create_info_row("引擎版本", version_badge))
+        
+        # 大小
         size = self.asset_data.get('size', 0)
         layout.addLayout(self._create_info_row("大小", self._format_size(size)))
-        
-        # 添加路径信息
-        path = self.asset_data.get('path', '')
-        path_str = str(path) if path else '未知'
-        layout.addLayout(self._create_info_row("路径", path_str))
         
         return section
     

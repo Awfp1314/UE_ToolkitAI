@@ -16,7 +16,8 @@ from typing import List, Optional, Dict, Any, Callable, Tuple, TYPE_CHECKING
 from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-from .asset_model import Asset, AssetType
+from .asset_model import Asset, AssetType, PackageType
+from ..utils.ue_version_detector import UEVersionDetector
 
 if TYPE_CHECKING:
     from .thumbnail_manager import ThumbnailManager
@@ -37,6 +38,7 @@ class AssetScanner:
     def __init__(self, logger: logging.Logger, thumbnail_manager: Optional['ThumbnailManager'] = None):
         self.logger = logger
         self._thumbnail_manager = thumbnail_manager
+        self._version_detector = UEVersionDetector(logger)
 
     def scan_asset_library(
         self,
@@ -272,12 +274,25 @@ class AssetScanner:
                 if thumbnail_path:
                     self.logger.info(f"从资产包恢复了缩略图: {cached_data['name']}")
 
+        # 调试：检查缓存数据
+        engine_ver_from_cache = cached_data.get("engine_min_version", "NOT_IN_CACHE")
+        if cached_data["name"] in ['女性基础动作包', 'BasicUI']:
+            print(f"[DEBUG _restore_from_cache] {cached_data['name']}: cached engine_min_version='{engine_ver_from_cache}'")
+        
+        # 解析 package_type（向后兼容：旧缓存无此字段默认为 content）
+        pkg_type_str = cached_data.get("package_type", "content")
+        try:
+            package_type = PackageType(pkg_type_str)
+        except (ValueError, KeyError):
+            package_type = PackageType.CONTENT
+
         return Asset(
             id=cached_data["id"],
             name=cached_data["name"],
             asset_type=AssetType(cached_data["asset_type"]),
             path=item,
             category=category,
+            package_type=package_type,
             file_extension=cached_data.get("file_extension", file_extension),
             thumbnail_path=thumbnail_path,
             thumbnail_source=cached_data.get("thumbnail_source"),
@@ -285,7 +300,9 @@ class AssetScanner:
             created_time=datetime.fromisoformat(
                 cached_data.get("created_time", datetime.now().isoformat())
             ),
-            description=cached_data.get("description", "")
+            description=cached_data.get("description", ""),
+            engine_min_version=cached_data.get("engine_min_version", ""),
+            project_file=cached_data.get("project_file", "")
         )
 
     def _create_new_asset(
@@ -328,19 +345,73 @@ class AssetScanner:
                 item, asset_id, thumbnails_dir
             )
 
+        # 检测引擎版本（仅影响新添加资产）
+        try:
+            engine_version = self._version_detector.detect_asset_min_version(item)
+        except Exception as e:
+            self.logger.warning(f"检测资产引擎版本失败: {asset_name} - {e}")
+            engine_version = ""
+
+        # 推断 package_type：检查包装文件夹内的子目录
+        package_type = self._infer_package_type(item)
+
+        # Others 类型且无缩略图时，尝试自动生成
+        if package_type == PackageType.OTHERS and not thumbnail_path:
+            thumbnail_path = self._delegate_generate_others_thumbnail(
+                item, asset_id, thumbnails_dir
+            )
+
         return Asset(
             id=asset_id,
             name=asset_name,
             asset_type=asset_type,
             path=item,
             category=category,
+            package_type=package_type,
             file_extension=file_extension,
             thumbnail_path=thumbnail_path,
             thumbnail_source="screenshots" if thumbnail_path else None,
             size=self._get_size(item),
             created_time=datetime.now(),
-            description=""
+            description="",
+            engine_min_version=engine_version
         )
+
+    def _infer_package_type(self, wrapper_path: Path) -> PackageType:
+        """从包装文件夹的子目录推断 package_type
+        
+        检查优先级：
+        1. 有 Project/ 子目录 → PROJECT
+        2. 有 Plugins/ 子目录 → PLUGIN
+        3. 有 Content/ 子目录 → CONTENT
+        4. 有 Others/ 子目录 → OTHERS
+        5. 默认 → CONTENT（向后兼容旧资产）
+        
+        Args:
+            wrapper_path: 包装文件夹路径
+            
+        Returns:
+            PackageType 枚举值
+        """
+        if not wrapper_path.is_dir():
+            return PackageType.CONTENT
+        
+        try:
+            sub_dirs = {d.name for d in wrapper_path.iterdir() if d.is_dir()}
+        except OSError:
+            return PackageType.CONTENT
+        
+        if "Project" in sub_dirs:
+            return PackageType.PROJECT
+        if "Plugins" in sub_dirs:
+            return PackageType.PLUGIN
+        if "Content" in sub_dirs:
+            return PackageType.CONTENT
+        if "Others" in sub_dirs:
+            return PackageType.OTHERS
+        
+        # 默认（旧资产全部是 Content 结构）
+        return PackageType.CONTENT
 
     def _fix_drive_letter_in_cache(
         self,
@@ -480,4 +551,15 @@ class AssetScanner:
         """委托给 ThumbnailManager 恢复缩略图"""
         if self._thumbnail_manager:
             return self._thumbnail_manager.restore_thumbnail_from_asset(asset_path, asset_id, thumbnails_dir)
+        return None
+
+    def _delegate_generate_others_thumbnail(
+        self,
+        asset_path: Path,
+        asset_id: Optional[str],
+        thumbnails_dir: Optional[Path]
+    ) -> Optional[Path]:
+        """委托给 ThumbnailManager 为 Others 类型生成缩略图"""
+        if self._thumbnail_manager:
+            return self._thumbnail_manager.generate_others_thumbnail(asset_path, asset_id, thumbnails_dir)
         return None

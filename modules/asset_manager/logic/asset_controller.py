@@ -29,6 +29,8 @@ class AssetController:
         self.logic = logic
         self._search_text: str = ""
         self._selected_category: Optional[str] = None
+        self._selected_type: Optional[str] = None
+        self._selected_version: Optional[str] = None
         self._sort_method: str = "添加时间（最新）"
 
     @property
@@ -61,6 +63,23 @@ class AssetController:
             category: 分类名称，"全部分类" 表示不过滤
         """
         self._selected_category = None if category == "全部分类" else category
+
+    def set_type_filter(self, type_name: str) -> None:
+        """设置类型过滤
+        
+        Args:
+            type_name: 类型名称，"全部类型" 表示不过滤
+        """
+        self._selected_type = None if type_name == "全部类型" else type_name.lower()
+
+    def set_version_filter(self, version: str) -> None:
+        """设置版本过滤
+        
+        Args:
+            version: 版本号，"全部版本" 表示不过滤
+                     版本向后兼容：选择 5.3 时也显示 5.0/5.1/5.2/5.3
+        """
+        self._selected_version = None if version == "全部版本" else version
 
     def set_sort_method(self, sort_method: str) -> None:
         """设置排序方式
@@ -102,6 +121,20 @@ class AssetController:
                     matched_assets = self.logic.assets
                     logger.debug("显示全部资产")
 
+            # 按 package_type 过滤
+            if self._selected_type and matched_assets:
+                matched_assets = [
+                    a for a in matched_assets
+                    if getattr(a, 'package_type', None)
+                    and a.package_type.value == self._selected_type
+                ]
+                logger.debug(f"类型筛选 '{self._selected_type}' 剩余 {len(matched_assets)} 个")
+
+            # 按版本过滤（向后兼容：选择 5.3 显示 <= 5.3 的资产）
+            if self._selected_version and matched_assets:
+                matched_assets = self._filter_by_version(matched_assets, self._selected_version)
+                logger.debug(f"版本筛选 '{self._selected_version}' 剩余 {len(matched_assets)} 个")
+
             if matched_assets and self._sort_method:
                 matched_assets = self.logic.sort_assets(
                     matched_assets, self._sort_method
@@ -113,6 +146,59 @@ class AssetController:
         except Exception as e:
             logger.error(f"获取过滤资产失败: {e}", exc_info=True)
             return []
+
+    def _filter_by_version(self, assets: list, target_version: str) -> list:
+        """按版本过滤（向后兼容：选择 5.3 时显示 engine_min_version <= 5.3 的资产）
+        
+        无版本信息的资产始终显示。
+        """
+        def parse_version(v: str) -> tuple:
+            """解析版本号为可比较的元组，如 '5.3' -> (5, 3)"""
+            try:
+                parts = v.strip().split('.')
+                return tuple(int(p) for p in parts if p.isdigit())
+            except Exception:
+                return ()
+        
+        target = parse_version(target_version)
+        if not target:
+            return assets
+        
+        result = []
+        for a in assets:
+            ver = getattr(a, 'engine_min_version', '') or ''
+            if not ver:
+                # 无版本信息的资产始终显示
+                result.append(a)
+                continue
+            asset_ver = parse_version(ver)
+            if not asset_ver or asset_ver <= target:
+                result.append(a)
+        return result
+
+    def get_all_engine_versions(self) -> List[str]:
+        """收集所有资产的引擎版本号（去重+排序）
+        
+        Returns:
+            排序后的版本号列表，如 ['4.27', '5.0', '5.1', '5.3']
+        """
+        if not self.logic:
+            return []
+        versions = set()
+        for asset in self.logic.assets:
+            ver = getattr(asset, 'engine_min_version', '') or ''
+            ver = ver.strip()
+            if ver:
+                versions.add(ver)
+        
+        def ver_key(v: str):
+            try:
+                parts = v.split('.')
+                return tuple(int(p) for p in parts if p.isdigit())
+            except Exception:
+                return (0,)
+        
+        return sorted(versions, key=ver_key)
 
     def get_categories(self) -> List[str]:
         """获取所有分类列表
@@ -194,6 +280,12 @@ class AssetController:
         Returns:
             资产数据字典
         """
+        # 调试：检查Asset对象的engine_min_version
+        engine_ver = getattr(asset, 'engine_min_version', 'ATTR_NOT_FOUND')
+        if hasattr(asset, 'name') and asset.name in ['女性基础动作包', 'BasicUI']:
+            print(f"[DEBUG convert_asset_to_dict] {asset.name}: engine_min_version='{engine_ver}'")
+        
+        pkg_type = getattr(asset, 'package_type', None)
         return {
             'id': asset.id,
             'name': asset.name,
@@ -206,11 +298,14 @@ class AssetController:
                 if hasattr(asset.asset_type, 'value')
                 else str(asset.asset_type)
             ),
+            'package_type': pkg_type.value if hasattr(pkg_type, 'value') else 'content',
             'created_time': (
                 asset.created_time.isoformat()
                 if hasattr(asset.created_time, 'isoformat')
                 else str(asset.created_time)
             ),
+            'engine_min_version': getattr(asset, 'engine_min_version', ''),
+            'project_file': getattr(asset, 'project_file', ''),
             'has_document': False,
         }
 
