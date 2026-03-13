@@ -498,11 +498,9 @@ class AssetPreviewCoordinator:
                         progress_callback(1, 1, "资产预览准备完成（空文件夹）")
                 else:
                     total_items = len(items)
-                    self._logger.info(f"开始{operation_text} {total_items} 个项目到 {content_dir}")
+                    self._logger.info(f"开始复制 {total_items} 个项目到 {content_dir}")
 
-                    if use_symlink_preview:
-                        import os
-
+                    # 强制使用复制模式（符号链接会导致 UE 无法自动识别）
                     success = True
                     for idx, item in enumerate(items, 1):
                         try:
@@ -515,64 +513,56 @@ class AssetPreviewCoordinator:
                                 else:
                                     target_item.unlink()
 
-                            if use_symlink_preview:
-                                if item.is_dir():
-                                    os.symlink(str(item.resolve()), str(target_item), target_is_directory=True)
-                                else:
-                                    os.symlink(str(item.resolve()), str(target_item))
+                            # 始终使用复制模式
+                            if item.is_dir():
+                                copy_base_index = idx - 1
+                                item_name = item.name
 
-                                if progress_callback and idx % 5 == 0:
-                                    progress_callback(idx, total_items, f"{operation_text}: {item.name}")
+                                def others_progress_wrapper(
+                                    current,
+                                    total,
+                                    _message,
+                                    base_index=copy_base_index,
+                                    total_base=total_items,
+                                    display_name=item_name
+                                ):
+                                    if not progress_callback or total <= 0 or total_base <= 0:
+                                        return
+                                    overall_current = base_index + (current / total)
+                                    progress_callback(overall_current, total_base, f"复制: {display_name}")
+
+                                copy_ok = self._file_ops.safe_copytree(
+                                    item,
+                                    target_item,
+                                    progress_callback=others_progress_wrapper,
+                                    incremental=False,
+                                    use_symlink=False
+                                )
+                                if not copy_ok:
+                                    raise AssetError(f"复制目录失败: {item.name}")
                             else:
-                                if item.is_dir():
-                                    copy_base_index = idx - 1
-                                    item_name = item.name
+                                target_item.parent.mkdir(parents=True, exist_ok=True)
+                                shutil.copy2(str(item), str(target_item))
 
-                                    def others_progress_wrapper(
-                                        current,
-                                        total,
-                                        _message,
-                                        base_index=copy_base_index,
-                                        total_base=total_items,
-                                        display_name=item_name
-                                    ):
-                                        if not progress_callback or total <= 0 or total_base <= 0:
-                                            return
-                                        overall_current = base_index + (current / total)
-                                        progress_callback(overall_current, total_base, f"复制: {display_name}")
+                                if progress_callback:
+                                    progress_callback(idx, total_items, f"复制: {item.name}")
 
-                                    copy_ok = self._file_ops.safe_copytree(
-                                        item,
-                                        target_item,
-                                        progress_callback=others_progress_wrapper,
-                                        incremental=False,
-                                        use_symlink=False
-                                    )
-                                    if not copy_ok:
-                                        raise AssetError(f"复制目录失败: {item.name}")
-                                else:
-                                    target_item.parent.mkdir(parents=True, exist_ok=True)
-                                    shutil.copy2(str(item), str(target_item))
-
-                                    if progress_callback:
-                                        progress_callback(idx, total_items, f"复制: {item.name}")
-
-                            self._logger.debug(f"已{operation_text}: {item.name}")
+                            self._logger.debug(f"已复制: {item.name}")
 
                         except Exception as e:
                             success = False
-                            self._logger.error(f"{operation_text} {item.name} 失败: {e}", exc_info=True)
+                            self._logger.error(f"复制 {item.name} 失败: {e}", exc_info=True)
                             break
 
                     if not success:
-                        error_msg = f"资产{operation_text}失败，请查看日志"
+                        error_msg = f"资产复制失败，请查看日志"
                         if on_error:
                             on_error(error_msg)
                         return
 
                     if progress_callback:
-                        progress_callback(total_items, total_items, f"已{operation_text} {total_items} 个项目")
-                    self._logger.info(f"成功{operation_text} {total_items} 个项目")
+                        progress_callback(total_items, total_items, f"已复制 {total_items} 个项目")
+                    self._logger.info(f"成功复制 {total_items} 个项目")
 
             else:
                 # 旧的直接结构（不应该出现，但保留兼容性）
