@@ -16,6 +16,10 @@ from PyQt6.QtGui import (
     QColor, QPainterPath, QLinearGradient
 )
 
+from core.logger import get_logger
+
+logger = get_logger(__name__)
+
 
 class ProgressButton(QPushButton):
     """带进度条的按钮组件"""
@@ -155,10 +159,11 @@ class ProjectCard(QFrame):
     open_req = pyqtSignal(str)
     import_req = pyqtSignal(str)  # 导入请求信号，传递工程路径
     
-    def __init__(self, name, path, ver, mod, theme, thumb_path=None, parent=None):
+    def __init__(self, name, path, ver, mod, theme, thumb_path=None, category="默认", parent=None):
         super().__init__(parent)
         self.name, self.path, self.ver, self.mod, self.theme = name, path, ver, mod, theme
         self.thumb_path = thumb_path
+        self.category = category
         self.setObjectName("ProjectCard")
         self.setFixedSize(180, 220)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -193,11 +198,31 @@ class ProjectCard(QFrame):
         tl.addWidget(self.thumb)
         l.addWidget(ts)
         
-        # 版本标签 - 放在缩略图左下角（使用内联样式，按照文档要求保留）
-        self.version_label = QLabel(f"UE {ver}")
-        self.version_label.setObjectName("VersionLabel")
-        self.version_label.setParent(self.thumb)
-        self.version_label.setStyleSheet("""
+        # 版本徽标 - 放在缩略图右上角（蓝色，类似资产卡片）
+        self.version_badge = QLabel(f"UE {ver}")
+        self.version_badge.setObjectName("VersionBadge")
+        self.version_badge.setParent(self.thumb)
+        self.version_badge.setStyleSheet("""
+            QLabel {
+                color: #ffffff;
+                font-size: 11px;
+                font-weight: bold;
+                background-color: rgba(0, 122, 204, 0.85);
+                border-radius: 3px;
+                padding: 3px 6px;
+            }
+        """)
+        self.version_badge.setTextInteractionFlags(Qt.TextInteractionFlag.NoTextInteraction)
+        self.version_badge.setCursor(Qt.CursorShape.ArrowCursor)
+        self.version_badge.setFixedSize(self.version_badge.sizeHint())
+        # 定位到右上角
+        self.version_badge.move(168 - 8 - self.version_badge.width(), 8)
+        
+        # 分类标签 - 放在缩略图左下角（替换原来的版本标签）
+        self.category_label = QLabel(category)
+        self.category_label.setObjectName("CategoryLabel")
+        self.category_label.setParent(self.thumb)
+        self.category_label.setStyleSheet("""
             QLabel {
                 color: #b0b0b0;
                 font-size: 11px;
@@ -207,10 +232,10 @@ class ProjectCard(QFrame):
                 padding: 4px 10px;
             }
         """)
-        self.version_label.setTextInteractionFlags(Qt.TextInteractionFlag.NoTextInteraction)
-        self.version_label.setCursor(Qt.CursorShape.ArrowCursor)
-        self.version_label.setFixedSize(self.version_label.sizeHint())
-        self.version_label.move(8, 108 - 8 - self.version_label.height())
+        self.category_label.setTextInteractionFlags(Qt.TextInteractionFlag.NoTextInteraction)
+        self.category_label.setCursor(Qt.CursorShape.ArrowCursor)
+        self.category_label.setFixedSize(self.category_label.sizeHint())
+        self.category_label.move(8, 108 - 8 - self.category_label.height())
         
         # 信息区
         iw = QWidget()
@@ -309,6 +334,17 @@ class ProjectScanner(QThread):
         ]
         self.exclude_paths = exclude_paths or []
         self.projs = []
+        self.recent_projects_order = self._load_recent_projects_order()
+    
+    def _load_recent_projects_order(self):
+        """从 UE 编辑器配置中加载最近打开的项目顺序
+        
+        Returns:
+            dict: {项目路径: 修改时间戳}，时间戳越大表示越近修改
+        """
+        # 暂时使用修改时间作为排序依据
+        # UE 的 RecentProjects.json 配置文件路径不确定，且格式可能因版本而异
+        return {}
     
     def run(self):
         self.projs = []
@@ -334,17 +370,34 @@ class ProjectScanner(QThread):
     
     def _is_excluded(self, path: Path) -> bool:
         """检查路径是否在排除列表中"""
+        if not self.exclude_paths:
+            return False
+            
         try:
             resolved_path = path.resolve()
             for exclude_path in self.exclude_paths:
                 try:
                     resolved_exclude = Path(exclude_path).resolve()
-                    # 检查是否是排除路径或其子路径
-                    if resolved_path == resolved_exclude or resolved_exclude in resolved_path.parents:
-                        return True
-                except:
+                    # 检查 path 是否在排除路径下（排除路径是 path 的父目录/祖先目录）
+                    try:
+                        # Python 3.9+ 方法
+                        if resolved_path.is_relative_to(resolved_exclude):
+                            logger.debug(f"路径 {path} 被排除（匹配规则: {exclude_path}）")
+                            return True
+                    except AttributeError:
+                        # Python 3.8 兼容方法
+                        if resolved_path == resolved_exclude or resolved_exclude in resolved_path.parents:
+                            logger.debug(f"路径 {path} 被排除（匹配规则: {exclude_path}）")
+                            return True
+                except Exception as e:
+                    logger.debug(f"解析排除路径失败: {exclude_path}, 错误: {e}")
                     continue
-        except:
+        except PermissionError:
+            # 系统目录访问被拒绝是正常的，不需要警告
+            logger.debug(f"无权限访问路径: {path}")
+            pass
+        except Exception as e:
+            logger.debug(f"解析路径失败: {path}, 错误: {e}")
             pass
         return False
     
@@ -356,8 +409,9 @@ class ProjectScanner(QThread):
                 if not item.is_dir():
                     continue
                 
-                # 检查是否在排除路径中
+                # 检查是否在排除路径中 - 优先检查
                 if self._is_excluded(item):
+                    logger.debug(f"跳过排除路径: {item}")
                     continue
                 
                 # 跳过系统目录和隐藏目录
@@ -386,21 +440,94 @@ class ProjectScanner(QThread):
                 if ups:
                     up = ups[0]
                     ver = self._ver(up)
-                    mt = datetime.fromtimestamp(up.stat().st_mtime)
+                    stat = up.stat()
+                    mt = datetime.fromtimestamp(stat.st_mtime)
                     thumb = self._get_thumbnail(item)
+                    
+                    # 获取最近打开时间（通过 Saved 目录下的文件判断）
+                    recent_order = self._get_last_opened_time(item)
+                    
+                    # 读取工程分类（从 .UeToolkitconfig/project.json）
+                    category = self._get_project_category(item)
                     
                     self.projs.append({
                         'name': item.name, 
                         'path': str(item), 
                         'version': ver, 
                         'modified': mt.strftime("%Y-%m-%d"),
-                        'thumbnail': thumb
+                        'recent_order': recent_order,  # 最近打开时间戳（数字越大越近）
+                        'thumbnail': thumb,
+                        'category': category  # 工程分类
                     })
                     self.prog.emit(f"找到: {item.name}")
                 else:
                     self._scan(item, depth+1, maxd)
         except:
             pass
+    
+    def _get_project_category(self, project_dir: Path) -> str:
+        """读取工程分类
+        
+        从工程目录下的 .UeToolkitconfig/project.json 读取分类信息
+        
+        Args:
+            project_dir: 工程目录路径
+            
+        Returns:
+            str: 工程分类，默认为"默认"
+        """
+        try:
+            config_file = project_dir / ".UeToolkitconfig" / "project.json"
+            if config_file.exists():
+                with open(config_file, 'r', encoding='utf-8') as f:
+                    config = json.load(f)
+                    return config.get('category', '默认')
+        except Exception:
+            pass
+        return '默认'
+    
+    def _get_last_opened_time(self, project_dir: Path) -> int:
+        """获取工程最近打开时间
+        
+        通过检查 Saved 目录下的文件来判断工程最近打开时间：
+        1. 优先检查 Saved/Logs/*.log（每次启动都会更新）
+        2. 其次检查 Saved/Config/Windows/EditorPerProjectUserSettings.ini
+        3. 最后使用 .uproject 文件的修改时间作为后备
+        
+        Args:
+            project_dir: 工程目录路径
+            
+        Returns:
+            int: 时间戳（秒），越大表示越近打开
+        """
+        try:
+            saved_dir = project_dir / "Saved"
+            if not saved_dir.exists():
+                # 没有 Saved 目录，使用 .uproject 文件时间
+                uproject = list(project_dir.glob("*.uproject"))[0]
+                return int(uproject.stat().st_mtime)
+            
+            # 1. 检查日志文件（最可靠）
+            logs_dir = saved_dir / "Logs"
+            if logs_dir.exists():
+                log_files = list(logs_dir.glob("*.log"))
+                if log_files:
+                    # 找到最新的日志文件
+                    latest_log = max(log_files, key=lambda f: f.stat().st_mtime)
+                    return int(latest_log.stat().st_mtime)
+            
+            # 2. 检查编辑器配置文件
+            config_file = saved_dir / "Config" / "Windows" / "EditorPerProjectUserSettings.ini"
+            if config_file.exists():
+                return int(config_file.stat().st_mtime)
+            
+            # 3. 后备方案：使用 .uproject 文件时间
+            uproject = list(project_dir.glob("*.uproject"))[0]
+            return int(uproject.stat().st_mtime)
+            
+        except Exception:
+            # 出错时返回 0（排在最后）
+            return 0
     
     def _get_thumbnail(self, proj_dir):
         """获取工程缩略图"""
@@ -499,6 +626,51 @@ class ProjectSearchWindow(QWidget):
         content_layout.setContentsMargins(20,15,20,20)
         content_layout.setSpacing(15)
         
+        # 提示信息栏（根据资产类型显示不同提示）
+        if self.package_type:
+            from ..logic.asset_model import PackageType
+            pkg_type_str = self.package_type.value if hasattr(self.package_type, 'value') else str(self.package_type)
+            
+            tip_widget = QWidget()
+            tip_widget.setObjectName("ProjectSearchTipArea")
+            tip_layout = QHBoxLayout(tip_widget)
+            tip_layout.setContentsMargins(12, 10, 12, 10)
+            tip_layout.setSpacing(10)
+            
+            # 图标
+            icon_label = QLabel("ℹ️")
+            icon_label.setStyleSheet("font-size: 16px;")
+            tip_layout.addWidget(icon_label)
+            
+            # 提示文本
+            tip_text = QLabel()
+            tip_text.setWordWrap(True)
+            tip_text.setObjectName("ProjectSearchTipText")
+            
+            if pkg_type_str.lower() == 'plugin':
+                tip_text.setText("💡 提示：导入插件后需要重启项目才能在编辑器中看到插件")
+            elif pkg_type_str.lower() == 'content':
+                tip_text.setText("💡 提示：资产包将直接复制到项目的 Content 目录，无需重启项目")
+            elif pkg_type_str.lower() == 'project':
+                tip_text.setText("💡 提示：将导入工程资产 Content 文件夹下的资产到目标工程")
+            
+            tip_layout.addWidget(tip_text, 1)
+            
+            # 样式
+            tip_widget.setStyleSheet("""
+                QWidget#ProjectSearchTipArea {
+                    background-color: rgba(74, 158, 255, 0.1);
+                    border-left: 3px solid #4a9eff;
+                    border-radius: 4px;
+                }
+                QLabel#ProjectSearchTipText {
+                    color: #4a9eff;
+                    font-size: 13px;
+                }
+            """)
+            
+            content_layout.addWidget(tip_widget)
+        
         # 过滤栏
         fw = QWidget()
         fw.setObjectName("ProjectSearchFilterArea")
@@ -515,6 +687,16 @@ class ProjectSearchWindow(QWidget):
         self.si.textChanged.connect(self._filter)
         fl.addWidget(self.si)
         
+        # 分类筛选下拉框
+        self.category_filter = QComboBox()
+        self.category_filter.setFixedHeight(36)
+        self.category_filter.setMinimumWidth(120)
+        self.category_filter.setMaximumWidth(180)
+        self.category_filter.setObjectName("ProjectSearchVersionFilter")  # 使用与版本筛选相同的样式
+        self.category_filter.addItem("全部分类")
+        self.category_filter.currentTextChanged.connect(self._filter)
+        fl.addWidget(self.category_filter)
+        
         # 版本选择框（插件导入时隐藏）
         self.vc = QComboBox()
         self.vc.addItems(["所有版本","UE 5.4","UE 5.3","UE 5.2","UE 5.1"])
@@ -524,25 +706,15 @@ class ProjectSearchWindow(QWidget):
         self.vc.setObjectName("ProjectSearchVersionFilter")
         self.vc.currentTextChanged.connect(self._filter)
         
-        # 检测是否为插件类型，如果是则隐藏版本选择框
-        is_plugin = False
+        # 检测是否为插件、资产包或工程类型，如果是则隐藏版本选择框
+        is_plugin_or_content_or_project = False
         if self.package_type:
             from ..logic.asset_model import PackageType
             pkg_type_str = self.package_type.value if hasattr(self.package_type, 'value') else str(self.package_type)
-            is_plugin = pkg_type_str.lower() == 'plugin'
+            is_plugin_or_content_or_project = pkg_type_str.lower() in ['plugin', 'content', 'project']
         
-        if not is_plugin:
+        if not is_plugin_or_content_or_project:
             fl.addWidget(self.vc)
-        
-        # 排序选择框
-        self.sc = QComboBox()
-        self.sc.addItems(["最近修改","工程名称","引擎版本"])
-        self.sc.setFixedHeight(36)
-        self.sc.setMinimumWidth(120)
-        self.sc.setMaximumWidth(180)
-        self.sc.setObjectName("ProjectSearchSortCombo")
-        self.sc.currentTextChanged.connect(self._sort)
-        fl.addWidget(self.sc)
         
         # 弹性空间
         fl.addStretch()
@@ -739,36 +911,35 @@ class ProjectSearchWindow(QWidget):
         exclude_paths = []
         
         try:
-            # 获取资产库路径
-            if self.logic:
-                from core.services import config_service
-                asset_config = config_service.get_module_config("asset_manager")
-                
-                # 支持新旧两种配置格式
-                asset_library_path = asset_config.get("asset_library_path")
-                if asset_library_path:
-                    exclude_paths.append(asset_library_path)
-                else:
-                    # 旧格式：asset_library_configs
-                    asset_library_configs = asset_config.get("asset_library_configs", {})
-                    if asset_library_configs:
-                        for lib_config in asset_library_configs.values():
-                            lib_path = lib_config.get("path")
-                            if lib_path:
-                                exclude_paths.append(lib_path)
-            
-            # 获取预览工程路径
             from core.services import config_service
-            app_config = config_service.get_module_config("app")
-            preview_projects = app_config.get("preview_projects", {})
-            for preview_config in preview_projects.values():
-                preview_path = preview_config.get("path")
+            asset_config = config_service.get_module_config("asset_manager") or {}
+            
+            # 1. 获取资产库路径（从 asset_libraries 数组读取）
+            asset_libraries = asset_config.get("asset_libraries", [])
+            for lib in asset_libraries:
+                lib_path = lib.get("path", "")
+                if lib_path:
+                    exclude_paths.append(lib_path)
+                    logger.debug(f"排除资产库: {lib_path}")
+            
+            # 2. 获取当前资产库路径（兼容旧配置）
+            current_library = asset_config.get("current_asset_library", "")
+            if current_library:
+                exclude_paths.append(current_library)
+                logger.debug(f"排除当前资产库: {current_library}")
+            
+            # 3. 获取预览工程路径
+            preview_projects = asset_config.get("preview_projects", [])
+            for proj in preview_projects:
+                preview_path = proj.get("path", "")
                 if preview_path:
                     exclude_paths.append(preview_path)
+                    logger.debug(f"排除预览工程: {preview_path}")
+            
+            logger.info(f"工程扫描排除路径列表: {exclude_paths}")
+            
         except Exception as e:
-            import logging
-            logger = logging.getLogger(__name__)
-            logger.warning(f"获取排除路径失败: {e}")
+            logger.error(f"获取排除路径失败: {e}", exc_info=True)
         
         return exclude_paths
     
@@ -776,21 +947,82 @@ class ProjectSearchWindow(QWidget):
         self.all = ps
         self.projs = ps
         
-        # 如果是插件类型，自动过滤版本
-        if self.package_type:
+        # 加载分类列表到下拉框
+        self._load_categories()
+        
+        # 如果是插件或资产包类型，自动过滤版本
+        if self.package_type and self.engine_version:
             from ..logic.asset_model import PackageType
             pkg_type_str = self.package_type.value if hasattr(self.package_type, 'value') else str(self.package_type)
-            is_plugin = pkg_type_str.lower() == 'plugin'
             
-            if is_plugin and self.engine_version:
-                # 插件只能导入到匹配版本的工程
+            if pkg_type_str.lower() == 'plugin':
+                # 插件必须严格匹配版本
                 filtered = []
                 for p in ps:
                     project_version = p.get('version', '')
-                    # 匹配版本（如 "5.4" 匹配 "5.4"）
+                    # 严格匹配版本（如 "5.4" 匹配 "5.4"）
                     if project_version and self.engine_version in project_version:
                         filtered.append(p)
                 self.projs = filtered
+                logger.info(f"插件版本筛选: 需要 UE {self.engine_version}，筛选后剩余 {len(filtered)} 个工程")
+            
+            elif pkg_type_str.lower() == 'content':
+                # 资产包可以向上兼容（可以导入到相同或更高版本的工程）
+                filtered = []
+                try:
+                    # 解析资产包的版本号（如 "5.4" -> [5, 4]）
+                    asset_version_parts = [int(x) for x in self.engine_version.split('.')]
+                    
+                    for p in ps:
+                        project_version = p.get('version', '')
+                        if not project_version:
+                            continue
+                        
+                        try:
+                            # 解析工程版本号
+                            project_version_parts = [int(x) for x in project_version.split('.')]
+                            
+                            # 比较版本号：工程版本 >= 资产包版本
+                            if project_version_parts >= asset_version_parts:
+                                filtered.append(p)
+                        except (ValueError, AttributeError):
+                            # 版本号解析失败，跳过
+                            continue
+                    
+                    self.projs = filtered
+                    logger.info(f"资产包版本筛选: 需要 UE {self.engine_version} 或更高版本，筛选后剩余 {len(filtered)} 个工程")
+                except (ValueError, AttributeError) as e:
+                    # 资产包版本号解析失败，不进行筛选
+                    logger.warning(f"资产包版本号解析失败: {self.engine_version}, 错误: {e}")
+            
+            elif pkg_type_str.lower() == 'project':
+                # 工程资产的 Content 可以向上兼容（类似资产包）
+                filtered = []
+                try:
+                    # 解析工程资产的版本号（如 "5.4" -> [5, 4]）
+                    asset_version_parts = [int(x) for x in self.engine_version.split('.')]
+                    
+                    for p in ps:
+                        project_version = p.get('version', '')
+                        if not project_version:
+                            continue
+                        
+                        try:
+                            # 解析目标工程版本号
+                            project_version_parts = [int(x) for x in project_version.split('.')]
+                            
+                            # 比较版本号：目标工程版本 >= 工程资产版本
+                            if project_version_parts >= asset_version_parts:
+                                filtered.append(p)
+                        except (ValueError, AttributeError):
+                            # 版本号解析失败，跳过
+                            continue
+                    
+                    self.projs = filtered
+                    logger.info(f"工程资产版本筛选: 需要 UE {self.engine_version} 或更高版本，筛选后剩余 {len(filtered)} 个工程")
+                except (ValueError, AttributeError) as e:
+                    # 工程资产版本号解析失败，不进行筛选
+                    logger.warning(f"工程资产版本号解析失败: {self.engine_version}, 错误: {e}")
         
         # 更新版本选择框 - 基于搜索到的工程版本
         self._update_version_filter()
@@ -798,6 +1030,32 @@ class ProjectSearchWindow(QWidget):
         # 应用当前排序
         self._sort()
         self.rl.setText(f"找到 {len(self.projs)} 个工程")
+    
+    def _load_categories(self):
+        """从工程列表中提取所有分类并加载到下拉框"""
+        categories = set()
+        for p in self.all:
+            cat = p.get('category', '默认')
+            if cat:
+                categories.add(cat)
+        
+        # 保存当前选择
+        current = self.category_filter.currentText()
+        
+        # 更新下拉框
+        self.category_filter.blockSignals(True)
+        self.category_filter.clear()
+        self.category_filter.addItem("全部分类")
+        for cat in sorted(categories):
+            self.category_filter.addItem(cat)
+        
+        # 恢复选择
+        if current and current != "全部分类":
+            idx = self.category_filter.findText(current)
+            if idx >= 0:
+                self.category_filter.setCurrentIndex(idx)
+        
+        self.category_filter.blockSignals(False)
     
     def _prog(self, m):
         self.rl.setText(m)
@@ -819,7 +1077,8 @@ class ProjectSearchWindow(QWidget):
                 project.get('version','Unknown'), 
                 project.get('modified',''), 
                 "dark" if self.dark else "light",
-                thumb_path=project.get('thumbnail')
+                thumb_path=project.get('thumbnail'),
+                category=project.get('category', '默认')
             )
             c.open_req.connect(self._open)
             
@@ -871,6 +1130,7 @@ class ProjectSearchWindow(QWidget):
     def _filter(self):
         st = self.si.text().lower()
         vf = self.vc.currentText()
+        cf = self.category_filter.currentText()
         
         f = []
         for p in self.all:
@@ -878,19 +1138,17 @@ class ProjectSearchWindow(QWidget):
                 continue
             if vf != "所有版本" and p.get('version','') not in vf:
                 continue
+            if cf != "全部分类" and p.get('category', '默认') != cf:
+                continue
             f.append(p)
         
         self.projs = f
         self._refresh()
     
     def _sort(self):
-        sb = self.sc.currentText()
-        if sb == "工程名称":
-            self.projs.sort(key=lambda x: x['name'])
-        elif sb == "引擎版本":
-            self.projs.sort(key=lambda x: x.get('version',''))
-        else:
-            self.projs.sort(key=lambda x: x.get('modified',''), reverse=True)
+        """按最近打开时间排序（降序）"""
+        # 按 recent_order（最近打开时间戳）排序，数字越大越靠前（越近打开）
+        self.projs.sort(key=lambda x: x.get('recent_order', 0), reverse=True)
         self._refresh()
     
     def _open(self, pp):
@@ -921,6 +1179,34 @@ class ProjectSearchWindow(QWidget):
         """处理工程导入请求"""
         if not self.logic or not self.asset_name:
             return
+        
+        # 检查目标工程是否正在运行
+        from pathlib import Path
+        target_project = Path(project_path)
+        
+        # 检查是否有 .uproject 文件被占用（说明 UE 编辑器正在运行）
+        uproject_files = list(target_project.glob("*.uproject"))
+        if uproject_files:
+            try:
+                # 尝试以独占模式打开 .uproject 文件
+                with open(uproject_files[0], 'r+') as f:
+                    pass
+            except PermissionError:
+                # 文件被占用，提示用户
+                from PyQt6.QtWidgets import QMessageBox
+                QMessageBox.warning(
+                    self,
+                    "工程正在运行",
+                    f"目标工程正在 UE 编辑器中打开。\n\n"
+                    f"导入资产时需要覆盖同名文件，如果编辑器正在使用这些文件，可能会导致导入失败。\n\n"
+                    f"建议：先关闭 UE 编辑器，再导入资产。\n\n"
+                    f"工程路径：{project_path}",
+                    QMessageBox.StandardButton.Ok
+                )
+                return
+            except Exception:
+                # 其他错误忽略，继续导入
+                pass
         
         # 查找资产
         asset = None
@@ -975,9 +1261,11 @@ class ProjectSearchWindow(QWidget):
                     
                     # 判断是否为插件类型
                     is_plugin = False
+                    is_others = False
                     if self.package_type:
                         pkg_type_str = self.package_type.value if hasattr(self.package_type, 'value') else str(self.package_type)
                         is_plugin = pkg_type_str.lower() == 'plugin'
+                        is_others = pkg_type_str.lower() == 'others'
                     
                     if is_plugin:
                         # 插件导入逻辑：复制到 Plugins 文件夹
@@ -1000,47 +1288,163 @@ class ProjectSearchWindow(QWidget):
                                 success = False
                         else:
                             success = False
-                    else:
-                        # 原有逻辑：导入 Content 文件夹内的实际资产
-                        content_folder = self.asset.path / "Content"
-                        
-                        if content_folder.exists() and content_folder.is_dir():
-                            # 新结构：复制 Content 文件夹内的所有内容到目标工程的 Content 文件夹
-                            # 遍历 Content 文件夹内的所有项目并复制
-                            success = True
-                            content_items = list(content_folder.iterdir())
-                            total_items = len(content_items)
                             
-                            for idx, item in enumerate(content_items):
-                                target_path = target_project / "Content" / item.name
-                                
-                                # 创建进度包装器
-                                def item_progress_wrapper(current, total, message):
-                                    if total > 0:
-                                        # 计算总体进度：(已完成项目 + 当前项目进度) / 总项目数
-                                        overall_progress = ((idx + current / total) / total_items) * 0.9
-                                        self.progress_update.emit(overall_progress)
-                                
-                                if item.is_dir():
-                                    item_success = self.logic._file_ops.safe_copytree(
-                                        item, target_path, progress_callback=item_progress_wrapper
-                                    )
-                                else:
-                                    item_success = self.logic._file_ops.safe_copy_file(
-                                        item, target_path, progress_callback=item_progress_wrapper
-                                    )
-                                
-                                if not item_success:
-                                    success = False
-                                    break
+                    elif is_others:
+                        # 其他资源导入逻辑：从 Others 文件夹递归复制所有内容到目标工程的 Content/资产名/ 下
+                        # 结构：Others/原始文件名/Models|Textures/ → Content/资产名/原始文件名/Models|Textures/
+                        others_folder = self.asset_path / "Others"
+                        if others_folder.exists() and others_folder.is_dir():
+                            asset_name = self.asset_path.name
+                            target_base = target_project / "Content" / asset_name
+                            
+                            logger.info(f"其他资源导入: 从 {others_folder} 复制所有内容到 {target_base}")
+                            
+                            # 确保目标目录存在
+                            target_base.mkdir(parents=True, exist_ok=True)
+                            
+                            # 递归复制 Others 文件夹下的所有内容
+                            success = True
+                            items = list(others_folder.iterdir())
+                            total_items = len(items)
+                            
+                            if total_items == 0:
+                                logger.error("Others 文件夹为空")
+                                success = False
+                            else:
+                                for idx, item in enumerate(items):
+                                    target_path = target_base / item.name
+                                    
+                                    # 创建进度包装器
+                                    def item_progress_wrapper(current, total, message):
+                                        if total > 0:
+                                            overall_progress = ((idx + current / total) / total_items) * 0.9
+                                            self.progress_update.emit(overall_progress)
+                                    
+                                    if item.is_dir():
+                                        item_success = self.logic._file_ops.safe_copytree(
+                                            item, target_path, progress_callback=item_progress_wrapper
+                                        )
+                                    else:
+                                        item_success = self.logic._file_ops.safe_copy_file(
+                                            item, target_path, progress_callback=item_progress_wrapper
+                                        )
+                                    
+                                    if not item_success:
+                                        success = False
+                                        logger.error(f"其他资源导入失败: {item} -> {target_path}")
+                                        break
                         else:
-                            # 兼容旧结构：直接复制整个资产文件夹
-                            source_folder_name = self.asset.path.name
-                            success = self.logic._file_ops.safe_copytree(
-                                self.asset.path,
-                                target_project / "Content" / source_folder_name,
-                                progress_callback=copy_progress_wrapper
-                            )
+                            logger.error(f"Others 文件夹不存在: {others_folder}")
+                            success = False
+                    
+                    else:
+                        # 资产包/工程资产导入逻辑：导入 Content 文件夹内的实际资产
+                        # 判断是否为工程资产
+                        is_project_asset = False
+                        if self.package_type:
+                            pkg_type_str = self.package_type.value if hasattr(self.package_type, 'value') else str(self.package_type)
+                            is_project_asset = pkg_type_str.lower() == 'project'
+                        
+                        if is_project_asset:
+                            # 工程资产：实际工程在 Project 子文件夹下的某个工程文件夹中
+                            # 结构：资产路径/Project/工程文件夹/Content/
+                            project_folder = self.asset.path / "Project"
+                            
+                            if project_folder.exists() and project_folder.is_dir():
+                                # 查找 Project 文件夹下的第一个包含 .uproject 的子文件夹
+                                ue_project_folder = None
+                                for item in project_folder.iterdir():
+                                    if item.is_dir():
+                                        # 检查是否包含 .uproject 文件
+                                        uproject_files = list(item.glob("*.uproject"))
+                                        if uproject_files:
+                                            ue_project_folder = item
+                                            break
+                                
+                                if ue_project_folder:
+                                    content_folder = ue_project_folder / "Content"
+                                    
+                                    if content_folder.exists() and content_folder.is_dir():
+                                        # 复制 Content 文件夹内的所有内容到目标工程的 Content 文件夹
+                                        success = True
+                                        content_items = list(content_folder.iterdir())
+                                        total_items = len(content_items)
+                                        
+                                        logger.info(f"工程资产导入: 从 {content_folder} 复制 {total_items} 个项目到 {target_project / 'Content'}")
+                                        
+                                        for idx, item in enumerate(content_items):
+                                            target_path = target_project / "Content" / item.name
+                                            
+                                            # 创建进度包装器
+                                            def item_progress_wrapper(current, total, message):
+                                                if total > 0:
+                                                    # 计算总体进度：(已完成项目 + 当前项目进度) / 总项目数
+                                                    overall_progress = ((idx + current / total) / total_items) * 0.9
+                                                    self.progress_update.emit(overall_progress)
+                                            
+                                            if item.is_dir():
+                                                item_success = self.logic._file_ops.safe_copytree(
+                                                    item, target_path, progress_callback=item_progress_wrapper
+                                                )
+                                            else:
+                                                item_success = self.logic._file_ops.safe_copy_file(
+                                                    item, target_path, progress_callback=item_progress_wrapper
+                                                )
+                                            
+                                            if not item_success:
+                                                success = False
+                                                logger.error(f"工程资产导入失败: {item} -> {target_path}")
+                                                break
+                                    else:
+                                        logger.error(f"工程资产 Content 文件夹不存在: {content_folder}")
+                                        success = False
+                                else:
+                                    logger.error(f"在 {project_folder} 下未找到包含 .uproject 的工程文件夹")
+                                    success = False
+                            else:
+                                logger.error(f"工程资产 Project 文件夹不存在: {project_folder}")
+                                success = False
+                        else:
+                            # 资产包：Content 文件夹在资产根目录下
+                            content_folder = self.asset.path / "Content"
+                            
+                            if content_folder.exists() and content_folder.is_dir():
+                                # 新结构：复制 Content 文件夹内的所有内容到目标工程的 Content 文件夹
+                                success = True
+                                content_items = list(content_folder.iterdir())
+                                total_items = len(content_items)
+                                
+                                for idx, item in enumerate(content_items):
+                                    target_path = target_project / "Content" / item.name
+                                    
+                                    # 创建进度包装器
+                                    def item_progress_wrapper(current, total, message):
+                                        if total > 0:
+                                            # 计算总体进度：(已完成项目 + 当前项目进度) / 总项目数
+                                            overall_progress = ((idx + current / total) / total_items) * 0.9
+                                            self.progress_update.emit(overall_progress)
+                                    
+                                    if item.is_dir():
+                                        item_success = self.logic._file_ops.safe_copytree(
+                                            item, target_path, progress_callback=item_progress_wrapper
+                                        )
+                                    else:
+                                        item_success = self.logic._file_ops.safe_copy_file(
+                                            item, target_path, progress_callback=item_progress_wrapper
+                                        )
+                                    
+                                    if not item_success:
+                                        success = False
+                                        break
+                            else:
+                                # 兼容旧结构：直接复制整个资产文件夹（仅用于没有 Content 文件夹的旧资产包）
+                                source_folder_name = self.asset.path.name
+                                logger.warning(f"使用旧结构导入: {self.asset.path} -> {target_project / 'Content' / source_folder_name}")
+                                success = self.logic._file_ops.safe_copytree(
+                                    self.asset.path,
+                                    target_project / "Content" / source_folder_name,
+                                    progress_callback=copy_progress_wrapper
+                                )
                     
                     # 复制完成，更新到90%（剩余10%留给finish_import_animation）
                     if success:

@@ -481,6 +481,103 @@ class AssetPreviewCoordinator:
                     if progress_callback:
                         progress_callback(total_items, total_items, f"已{operation_text} {total_items} 个项目")
                     self._logger.info(f"成功{operation_text} {total_items} 个项目")
+            elif (asset.path / "Others").exists() and (asset.path / "Others").is_dir():
+                # OTHERS 类型：从 Others 文件夹递归复制所有内容到预览工程的 Content/资产名/ 下
+                # 结构：Others/原始文件名/Models|Textures/ → Content/资产名/原始文件名/Models|Textures/
+                others_folder = asset.path / "Others"
+                target_asset_dir = content_dir / asset.name
+                self._logger.info(
+                    f"检测到 Others 结构，从 {others_folder} {operation_text}内容到 {target_asset_dir}"
+                )
+
+                # 确保目标目录存在
+                target_asset_dir.mkdir(parents=True, exist_ok=True)
+
+                # 获取 Others 下的所有项目
+                items = list(others_folder.iterdir())
+
+                if not items:
+                    self._logger.info("Others 文件夹为空")
+                    if progress_callback:
+                        progress_callback(1, 1, "资产预览准备完成（空文件夹）")
+                else:
+                    total_items = len(items)
+                    self._logger.info(f"开始{operation_text} {total_items} 个项目到 {target_asset_dir}")
+
+                    if use_symlink_preview:
+                        import os
+
+                    success = True
+                    for idx, item in enumerate(items, 1):
+                        try:
+                            target_item = target_asset_dir / item.name
+
+                            # 删除旧的目标（如果存在）
+                            if target_item.exists():
+                                if target_item.is_dir():
+                                    shutil.rmtree(target_item)
+                                else:
+                                    target_item.unlink()
+
+                            if use_symlink_preview:
+                                if item.is_dir():
+                                    os.symlink(str(item.resolve()), str(target_item), target_is_directory=True)
+                                else:
+                                    os.symlink(str(item.resolve()), str(target_item))
+
+                                if progress_callback and idx % 5 == 0:
+                                    progress_callback(idx, total_items, f"{operation_text}: {item.name}")
+                            else:
+                                if item.is_dir():
+                                    copy_base_index = idx - 1
+                                    item_name = item.name
+
+                                    def others_progress_wrapper(
+                                        current,
+                                        total,
+                                        _message,
+                                        base_index=copy_base_index,
+                                        total_base=total_items,
+                                        display_name=item_name
+                                    ):
+                                        if not progress_callback or total <= 0 or total_base <= 0:
+                                            return
+                                        overall_current = base_index + (current / total)
+                                        progress_callback(overall_current, total_base, f"复制: {display_name}")
+
+                                    copy_ok = self._file_ops.safe_copytree(
+                                        item,
+                                        target_item,
+                                        progress_callback=others_progress_wrapper,
+                                        incremental=False,
+                                        use_symlink=False
+                                    )
+                                    if not copy_ok:
+                                        raise AssetError(f"复制目录失败: {item.name}")
+                                else:
+                                    target_item.parent.mkdir(parents=True, exist_ok=True)
+                                    shutil.copy2(str(item), str(target_item))
+
+                                    if progress_callback:
+                                        progress_callback(idx, total_items, f"复制: {item.name}")
+
+                            self._logger.debug(f"已{operation_text}: {item.name}")
+
+                        except Exception as e:
+                            success = False
+                            self._logger.error(f"{operation_text} {item.name} 失败: {e}", exc_info=True)
+                            break
+
+                    if not success:
+                        error_msg = f"资产{operation_text}失败，请查看日志"
+                        if on_error:
+                            on_error(error_msg)
+                        return
+
+                    if progress_callback:
+                        progress_callback(total_items, total_items, f"已{operation_text} {total_items} 个项目")
+                    self._logger.info(f"成功{operation_text} {total_items} 个项目")
+
             else:
                 # 旧的直接结构（不应该出现，但保留兼容性）
                 self._logger.warning(f"资产 {asset.name} 没有 Content 子文件夹，使用直接{operation_text}模式")
@@ -547,6 +644,7 @@ class AssetPreviewCoordinator:
                             if use_symlink_preview:
                                 # 检查资产是否使用包装结构
                                 asset_content_folder = asset.path / "Content"
+                                asset_others_folder = asset.path / "Others"
                                 if asset_content_folder.exists() and asset_content_folder.is_dir():
                                     # 包装结构：预览时链接的是 asset/Content/ 下的每个子文件夹
                                     # 同步时需要按相同结构同步回去
@@ -557,6 +655,18 @@ class AssetPreviewCoordinator:
                                             original_item = asset_content_folder / preview_item.name
                                             if original_item.exists():
                                                 self._sync_changes_back(preview_item, original_item)
+                                elif asset_others_folder.exists() and asset_others_folder.is_dir():
+                                    # OTHERS 类型：预览时链接的是 Others/资产名/ 下的子文件夹
+                                    # 同步时需要找到对应的原始位置
+                                    for preview_item in content_dir.iterdir():
+                                        if preview_item.is_dir():
+                                            # 在 Others 下的第一层文件夹中查找对应的子文件夹
+                                            for first_item in asset_others_folder.iterdir():
+                                                if first_item.is_dir():
+                                                    original_item = first_item / preview_item.name
+                                                    if original_item.exists():
+                                                        self._sync_changes_back(preview_item, original_item)
+                                                        break
                                 else:
                                     # 旧的直接结构（不应该出现，但保留兼容性）
                                     if asset.asset_type == AssetType.PACKAGE:
