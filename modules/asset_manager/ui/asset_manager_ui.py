@@ -433,6 +433,52 @@ class AssetManagerUI(BaseModuleWidget):
             # 通过控制器获取过滤后的资产列表
             matched_assets = self.controller.get_filtered_assets()
             
+            # 检查是否为空状态
+            if len(matched_assets) == 0:
+                # 判断是真的为空还是搜索/筛选结果为空
+                total_assets = len(self.logic.assets) if self.logic else 0
+                
+                if total_assets == 0:
+                    # 资产库真的为空
+                    logger.info("资产库为空，显示空状态占位符")
+                    # 隐藏所有卡片
+                    for card in self.asset_cards.values():
+                        card.setVisible(False)
+                    # 隐藏网格容器
+                    self.grid_widget.hide()
+                    # 显示空状态占位符
+                    self._show_empty_state_placeholder()
+                else:
+                    # 搜索/筛选结果为空
+                    logger.info("搜索/筛选结果为空，显示无结果提示")
+                    # 隐藏所有卡片
+                    for card in self.asset_cards.values():
+                        card.setVisible(False)
+                    # 隐藏网格容器
+                    self.grid_widget.hide()
+                    # 显示无结果占位符
+                    self._show_no_results_placeholder()
+                return
+            
+            # 移除空状态占位符（如果存在）
+            if hasattr(self, '_empty_state_container') and self._empty_state_container:
+                try:
+                    self._empty_state_container.deleteLater()
+                    self._empty_state_container = None
+                except:
+                    pass
+            
+            # 移除无结果占位符（如果存在）
+            if hasattr(self, '_no_results_container') and self._no_results_container:
+                try:
+                    self._no_results_container.deleteLater()
+                    self._no_results_container = None
+                except:
+                    pass
+            
+            # 显示网格容器
+            self.grid_widget.show()
+            
             # 先隐藏所有卡片
             for card in self.asset_cards.values():
                 card.setVisible(False)
@@ -641,6 +687,207 @@ class AssetManagerUI(BaseModuleWidget):
         except Exception as e:
             logger.error(f"显示初始加载占位符失败: {e}")
     
+    def _create_empty_state_widget(self):
+        """创建空状态占位符控件"""
+        empty_container = QWidget()
+        empty_container.setObjectName("assetManagerEmptyContainer")
+        empty_layout = QVBoxLayout()
+        empty_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        empty_layout.setSpacing(20)
+        
+        # 图标 📦
+        icon_label = QLabel("📦")
+        icon_label.setObjectName("assetManagerEmptyIcon")
+        icon_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        empty_layout.addWidget(icon_label)
+        
+        # 主标题
+        title_label = QLabel("资产库为空")
+        title_label.setObjectName("assetManagerEmptyLabel")
+        title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        empty_layout.addWidget(title_label)
+        
+        empty_layout.addSpacing(10)
+        
+        # 功能亮点列表
+        features_layout = QVBoxLayout()
+        features_layout.setSpacing(8)
+        features_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        
+        features = [
+            "✨ 智能识别资产类型（内容包、插件、工程、模型、图片等）",
+            "📦 支持压缩包直接添加，自动解压和包装",
+            "🎯 拖入即可，无需手动解压"
+        ]
+        
+        for feature in features:
+            feature_label = QLabel(feature)
+            feature_label.setObjectName("assetManagerEmptyHint")
+            feature_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            features_layout.addWidget(feature_label)
+        
+        empty_layout.addLayout(features_layout)
+        
+        empty_layout.addSpacing(10)
+        
+        # 操作引导
+        hint_label = QLabel("拖入资产文件或点击添加按钮开始使用")
+        hint_label.setObjectName("assetManagerEmptyHint")
+        hint_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        empty_layout.addWidget(hint_label)
+        
+        empty_container.setLayout(empty_layout)
+        return empty_container
+    
+    def _create_no_results_widget(self):
+        """创建搜索/筛选无结果占位符控件"""
+        no_results_container = QWidget()
+        no_results_container.setObjectName("assetManagerEmptyContainer")
+        no_results_layout = QVBoxLayout()
+        no_results_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        no_results_layout.setSpacing(20)
+        
+        # 图标 🔍
+        icon_label = QLabel("🔍")
+        icon_label.setObjectName("assetManagerEmptyIcon")
+        icon_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        no_results_layout.addWidget(icon_label)
+        
+        # 主标题
+        title_label = QLabel("未找到匹配的资产")
+        title_label.setObjectName("assetManagerEmptyLabel")
+        title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        no_results_layout.addWidget(title_label)
+        
+        no_results_layout.addSpacing(10)
+        
+        # 提示信息
+        hint_label = QLabel("尝试调整搜索关键词或筛选条件")
+        hint_label.setObjectName("assetManagerEmptyHint")
+        hint_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        no_results_layout.addWidget(hint_label)
+        
+        no_results_container.setLayout(no_results_layout)
+        return no_results_container
+    
+    def _show_empty_state_placeholder(self):
+        """显示空状态占位符"""
+        try:
+            self.grid_widget.hide()
+            
+            # 移除旧的占位符
+            if hasattr(self, '_empty_state_container') and self._empty_state_container:
+                try:
+                    self._empty_state_container.deleteLater()
+                    self._empty_state_container = None
+                except:
+                    pass
+            
+            # 创建并显示空状态占位符
+            empty_container = self._create_empty_state_widget()
+            self.scroll_content.layout().insertWidget(0, empty_container)
+            self._empty_state_container = empty_container
+            
+            logger.info("显示空状态占位符")
+        except Exception as e:
+            logger.error(f"显示空状态占位符失败: {e}")
+    
+    def _show_no_results_placeholder(self):
+        """显示搜索/筛选无结果占位符"""
+        try:
+            self.grid_widget.hide()
+            
+            # 移除旧的占位符
+            if hasattr(self, '_no_results_container') and self._no_results_container:
+                try:
+                    self._no_results_container.deleteLater()
+                    self._no_results_container = None
+                except:
+                    pass
+            
+            # 创建并显示无结果占位符
+            no_results_container = self._create_no_results_widget()
+            self.scroll_content.layout().insertWidget(0, no_results_container)
+            self._no_results_container = no_results_container
+            
+            logger.info("显示搜索/筛选无结果占位符")
+        except Exception as e:
+            logger.error(f"显示无结果占位符失败: {e}")
+    def _create_empty_state_widget(self):
+        """创建空状态占位符控件"""
+        empty_container = QWidget()
+        empty_container.setObjectName("assetManagerEmptyContainer")
+        empty_layout = QVBoxLayout()
+        empty_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        empty_layout.setSpacing(20)
+
+        # 图标 📦
+        icon_label = QLabel("📦")
+        icon_label.setObjectName("assetManagerEmptyIcon")
+        icon_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        empty_layout.addWidget(icon_label)
+
+        # 主标题
+        title_label = QLabel("资产库为空")
+        title_label.setObjectName("assetManagerEmptyLabel")
+        title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        empty_layout.addWidget(title_label)
+
+        empty_layout.addSpacing(10)
+
+        # 功能亮点列表
+        features_layout = QVBoxLayout()
+        features_layout.setSpacing(8)
+        features_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        features = [
+            "✨ 智能识别资产类型（内容包、插件、工程、模型、图片等）",
+            "📦 支持压缩包直接添加，自动解压和包装",
+            "🎯 拖入即可，无需手动解压"
+        ]
+
+        for feature in features:
+            feature_label = QLabel(feature)
+            feature_label.setObjectName("assetManagerEmptyHint")
+            feature_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            features_layout.addWidget(feature_label)
+
+        empty_layout.addLayout(features_layout)
+
+        empty_layout.addSpacing(10)
+
+        # 操作引导
+        hint_label = QLabel("拖入资产文件或点击添加按钮开始使用")
+        hint_label.setObjectName("assetManagerEmptyHint")
+        hint_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        empty_layout.addWidget(hint_label)
+
+        empty_container.setLayout(empty_layout)
+        return empty_container
+
+    def _show_empty_state_placeholder(self):
+        """显示空状态占位符"""
+        try:
+            self.grid_widget.hide()
+
+            # 移除旧的占位符
+            if hasattr(self, '_empty_state_container') and self._empty_state_container:
+                try:
+                    self._empty_state_container.deleteLater()
+                    self._empty_state_container = None
+                except:
+                    pass
+
+            # 创建并显示空状态占位符
+            empty_container = self._create_empty_state_widget()
+            self.scroll_content.layout().insertWidget(0, empty_container)
+            self._empty_state_container = empty_container
+
+            logger.info("显示空状态占位符")
+        except Exception as e:
+            logger.error(f"显示空状态占位符失败: {e}")
+
+    
     def _load_assets_async(self, on_complete=None):
         """实际执行异步加载资产"""
         logger.info("开始执行异步加载资产")
@@ -703,6 +950,15 @@ class AssetManagerUI(BaseModuleWidget):
     
     def _create_assets_batch(self, assets, start_index, on_complete):
         """分批创建资产卡片"""
+        # 检查是否为空状态
+        if len(assets) == 0:
+            logger.info("资产库为空，显示空状态占位符")
+            self._show_empty_state_placeholder()
+            self._assets_loaded = True
+            if on_complete:
+                on_complete()
+            return
+        
         batch_size = 30  # 进一步增加批次大小，减少批次切换开销
         end_index = min(start_index + batch_size, len(assets))
 
@@ -711,6 +967,14 @@ class AssetManagerUI(BaseModuleWidget):
         # 第一批时禁用网格更新，避免卡片在创建过程中闪现
         if start_index == 0:
             self.grid_widget.setUpdatesEnabled(False)
+            
+            # 移除空状态占位符（如果存在）
+            if hasattr(self, '_empty_state_container') and self._empty_state_container:
+                try:
+                    self._empty_state_container.deleteLater()
+                    self._empty_state_container = None
+                except:
+                    pass
 
         # 创建当前批次的卡片
         for i in range(start_index, end_index):
