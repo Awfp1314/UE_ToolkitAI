@@ -398,13 +398,13 @@ class PreviewManager:
                     overall_progress = 30 + int(copy_progress)
                     progress_callback(overall_progress, 100, message)
 
-            self._logger.info(f"🔗 Preview mode: using symlink for fast copy")
+            self._logger.info(f"📋 Preview mode: using copy for safety")
             success = self._file_ops.safe_copytree(
                 source_path, 
                 target_path, 
                 progress_callback=copy_progress_wrapper,
                 incremental=False,  # 预览后会清空，不使用增量
-                use_symlink=True    # 🔬 实验性：使用符号链接（极快）
+                use_symlink=False   # 使用复制模式（已废除符号链接）
             )
             if not success:
                 self._logger.error("Failed to copy asset to preview project")

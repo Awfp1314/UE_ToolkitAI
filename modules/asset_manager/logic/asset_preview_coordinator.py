@@ -235,38 +235,7 @@ class AssetPreviewCoordinator:
             self._logger.error(f"保存预览工程失败: {e}", exc_info=True)
             return False
 
-    def get_use_symlink_preview(self) -> bool:
-        """获取是否使用符号链接进行资产预览。
 
-        默认关闭（False），使用复制模式以降低误修改原资产风险。
-        """
-        try:
-            config = self._config_manager.load_user_config() or {}
-            return bool(config.get("use_symlink_preview", False))
-        except Exception as e:
-            self._logger.error(f"获取预览模式失败: {e}", exc_info=True)
-            return False
-
-    def set_use_symlink_preview(self, enabled: bool) -> bool:
-        """设置是否使用符号链接进行资产预览。"""
-        try:
-            config = self._config_manager.load_user_config() or {}
-            config["use_symlink_preview"] = bool(enabled)
-
-            save_result = self._config_manager.save_user_config(
-                config,
-                backup_reason="set_use_symlink_preview"
-            )
-            if not save_result:
-                self._logger.error("保存预览模式失败")
-                return False
-
-            mode_text = "符号链接" if enabled else "复制"
-            self._logger.info(f"预览模式已更新: {mode_text}")
-            return True
-        except Exception as e:
-            self._logger.error(f"设置预览模式失败: {e}", exc_info=True)
-            return False
 
     # ─── 预览工程清理 ──────────────────────────────────────
 
@@ -334,6 +303,9 @@ class AssetPreviewCoordinator:
             save_config_callback: 保存配置回调
             thumbnails_dir: 缩略图目录
         """
+        self._logger.info(f"🎬 开始预览资产: {asset.name}, 预览工程: {preview_project}")
+        self._logger.info(f"🔍 progress_callback 是否存在: {progress_callback is not None}")
+        
         try:
             # 检查UE版本兼容性（已禁用）
             # if not self._check_ue_version_compatibility(asset, preview_project, on_error):
@@ -379,110 +351,135 @@ class AssetPreviewCoordinator:
                     except Exception as e:
                         self._logger.warning(f"清理缓存失败 {cache_folder.name}: {e}")
 
-            use_symlink_preview = self.get_use_symlink_preview()
-            operation_text = "链接" if use_symlink_preview else "复制"
-            self._logger.info(
-                f"准备{operation_text}资产到预览工程: {asset.name} "
-                f"(模式: {'符号链接' if use_symlink_preview else '复制'})"
-            )
+            # 强制使用复制模式（已废除符号链接功能）
+            use_symlink_preview = False
+            operation_text = "复制"
+            self._logger.info(f"📋 准备{operation_text}资产到预览工程: {asset.name} (模式: 复制)")
+            self._logger.info(f"🔍 资产路径: {asset.path}")
+            self._logger.info(f"🔍 预览工程Content路径: {content_dir}")
 
-            # 启动虚幻引擎（先启动，再复制文件，让 UE 能检测到新文件）
+            # 复制/链接资产到预览工程
+            if progress_callback:
+                self._logger.info(f"✅ 调用 progress_callback: 正在{operation_text}资产文件...")
+                progress_callback(0, 1, f"正在{operation_text}资产文件...")
+            else:
+                self._logger.warning(f"⚠️ progress_callback 为 None，无法显示进度")
+            
+            try:
+                # 检查资产是否使用包装结构（包含 Content 子文件夹）
+                asset_content_folder = asset.path / "Content"
+                if asset_content_folder.exists() and asset_content_folder.is_dir():
+                    # 包装结构：将 Content 文件夹内的内容复制到预览工程 Content
+                    self._logger.info(f"检测到包装结构，从 {asset_content_folder} {operation_text}内容到 {content_dir}")
+                    
+                    all_items = list(asset_content_folder.iterdir())
+                    total_items = len(all_items)
+                    
+                    if total_items > 0:
+                        # 预先计算总大小
+                        total_bytes = 0
+                        item_sizes = []
+                        for item in all_items:
+                            if item.is_dir():
+                                dir_size = sum(f.stat().st_size for f in item.rglob('*') if f.is_file())
+                                item_sizes.append(dir_size)
+                                total_bytes += dir_size
+                            else:
+                                file_size = item.stat().st_size
+                                item_sizes.append(file_size)
+                                total_bytes += file_size
+                        
+                        self._logger.info(f"📊 统计到 {total_items} 个项目，总大小 {self._file_ops.format_size(total_bytes)}")
+                        
+                        copied_bytes = 0
+                        for idx, (item, item_size) in enumerate(zip(all_items, item_sizes), 1):
+                            target_item = content_dir / item.name
+                            
+                            # 定义子项的进度回调
+                            def item_progress(current_bytes, total_bytes_item, message):
+                                if progress_callback and total_bytes > 0:
+                                    current_total = copied_bytes + current_bytes
+                                    progress_callback(current_total, total_bytes, f"{operation_text}: {item.name}")
+                            
+                            # 使用安全的文件操作方法
+                            if item.is_dir():
+                                success = self._file_ops.safe_copytree(
+                                    item, target_item, incremental=False, use_symlink=False, 
+                                    progress_callback=item_progress
+                                )
+                            else:
+                                success = self._file_ops.safe_copy_file(
+                                    item, target_item, progress_callback=item_progress
+                                )
+                            
+                            if not success:
+                                error_msg = f"{operation_text} {item.name} 失败"
+                                self._logger.error(error_msg)
+                                if on_error:
+                                    on_error(error_msg)
+                                return
+                            
+                            self._logger.debug(f"已{operation_text}: {item.name}")
+                            copied_bytes += item_size
+                        
+                        if progress_callback:
+                            progress_callback(total_bytes, total_bytes, f"已{operation_text} {total_items} 个项目")
+                        self._logger.info(f"✅ 成功{operation_text} {total_items} 个项目，总大小 {self._file_ops.format_size(copied_bytes)}")
+                
+                else:
+                    # 旧的直接结构
+                    self._logger.warning(f"资产 {asset.name} 没有 Content 子文件夹，使用直接{operation_text}模式")
+                    if asset.asset_type == AssetType.PACKAGE:
+                        dest_dir = content_dir / asset.path.name
+                        success = self._file_ops.safe_copytree(
+                            asset.path, dest_dir, use_symlink=False, 
+                            progress_callback=progress_callback
+                        )
+                        if not success:
+                            error_msg = f"{operation_text}资产失败"
+                            self._logger.error(error_msg)
+                            if on_error:
+                                on_error(error_msg)
+                            return
+                    else:
+                        dest_file = content_dir / asset.path.name
+                        success = self._file_ops.safe_copy_file(
+                            asset.path, dest_file, progress_callback=progress_callback
+                        )
+                        if not success:
+                            error_msg = f"{operation_text}文件失败"
+                            self._logger.error(error_msg)
+                            if on_error:
+                                on_error(error_msg)
+                            return
+                    
+                    if progress_callback:
+                        progress_callback(1, 1, f"{operation_text}完成！")
+            
+            except Exception as e:
+                error_msg = f"{operation_text}文件失败: {e}"
+                self._logger.error(error_msg, exc_info=True)
+                if on_error:
+                    on_error(error_msg)
+                return
+
+            # 启动虚幻引擎
             self._logger.info("启动虚幻引擎预览工程...")
             
             if progress_callback:
-                progress_callback(0.3, 1, "正在启动虚幻引擎...")
+                progress_callback(1, 1, "正在启动虚幻引擎...")
             
-            def launch_and_copy_then_monitor():
-                """在独立线程中：启动 UE → 等待启动 → 复制文件 → 监听关闭"""
+            def monitor_ue_process():
+                """在独立线程中监听虚幻引擎进程"""
                 try:
-                    # 步骤 1: 启动 UE
                     process = self._launch_unreal_project(preview_project)
                     
                     if process:
                         self.current_preview_process = process
                         self.current_preview_project_path = preview_project
                         self._logger.info(f"已记录当前预览工程: {preview_project.name} (PID: {process.pid})")
-                    
-                    # 步骤 2: 等待 UE 完全启动（10 秒）
-                    self._logger.info("等待虚幻引擎完全启动...")
-                    if progress_callback:
-                        progress_callback(0.4, 1, "等待虚幻引擎启动...")
-                    
-                    import time
-                    time.sleep(10)  # 等待 10 秒让 UE 完全启动
-                    
-                    # 步骤 3: 复制文件到 Content 文件夹
-                    self._logger.info("虚幻引擎已启动，开始复制资产文件...")
-                    if progress_callback:
-                        progress_callback(0.5, 1, "正在复制资产文件...")
-                    
-                    try:
-                        # 检查资产是否使用包装结构（包含 Content 子文件夹）
-                        asset_content_folder = asset.path / "Content"
-                        if asset_content_folder.exists() and asset_content_folder.is_dir():
-                            # 包装结构：将 Content 文件夹内的内容复制到预览工程 Content
-                            self._logger.info(f"检测到包装结构，从 {asset_content_folder} 复制内容到 {content_dir}")
-                            
-                            all_items = list(asset_content_folder.iterdir())
-                            total_items = len(all_items)
-                            
-                            if total_items > 0:
-                                for idx, item in enumerate(all_items, 1):
-                                    target_item = content_dir / item.name
-                                    
-                                    if item.is_dir():
-                                        self._file_ops.safe_copytree(item, target_item, incremental=False, use_symlink=False)
-                                    else:
-                                        target_item.parent.mkdir(parents=True, exist_ok=True)
-                                        shutil.copy2(str(item), str(target_item))
-                                    
-                                    self._logger.debug(f"已复制: {item.name}")
-                                
-                                self._logger.info(f"成功复制 {total_items} 个项目")
                         
-                        elif (asset.path / "Others").exists() and (asset.path / "Others").is_dir():
-                            # OTHERS 类型：从 Others 文件夹递归复制所有内容到 Content
-                            others_folder = asset.path / "Others"
-                            self._logger.info(f"检测到 Others 结构，从 {others_folder} 复制内容到 {content_dir}")
-                            
-                            items = list(others_folder.iterdir())
-                            total_items = len(items)
-                            
-                            if total_items > 0:
-                                for idx, item in enumerate(items, 1):
-                                    target_item = content_dir / item.name
-                                    
-                                    if item.is_dir():
-                                        self._file_ops.safe_copytree(item, target_item, incremental=False, use_symlink=False)
-                                    else:
-                                        target_item.parent.mkdir(parents=True, exist_ok=True)
-                                        shutil.copy2(str(item), str(target_item))
-                                    
-                                    self._logger.debug(f"已复制: {item.name}")
-                                
-                                self._logger.info(f"成功复制 {total_items} 个项目")
-                        
-                        else:
-                            # 旧的直接结构
-                            self._logger.warning(f"资产 {asset.name} 没有 Content 子文件夹，使用直接复制模式")
-                            if asset.asset_type == AssetType.PACKAGE:
-                                dest_dir = content_dir / asset.path.name
-                                self._file_ops.safe_copytree(asset.path, dest_dir, use_symlink=False)
-                            else:
-                                dest_file = content_dir / asset.path.name
-                                shutil.copy2(asset.path, dest_file)
-                        
-                        self._logger.info("资产文件复制完成，UE 应该会自动检测到新文件")
-                        if progress_callback:
-                            progress_callback(1, 1, "资产复制完成，等待 UE 识别...")
-                    
-                    except Exception as e:
-                        self._logger.error(f"复制文件时出错: {e}", exc_info=True)
-                        if on_error:
-                            on_error(f"复制文件失败: {e}")
-                    
-                    # 步骤 4: 监听 UE 关闭
-                    if process:
+                        # 等待进程结束
                         self._logger.info("监听虚幻引擎进程，等待关闭后自动清理...")
                         process.wait()
                         self._logger.info("虚幻引擎已关闭，开始处理截图和清理预览工程...")
@@ -519,7 +516,7 @@ class AssetPreviewCoordinator:
                     self.current_preview_process = None
                     self.current_preview_project_path = None
             
-            monitor_thread = threading.Thread(target=launch_and_copy_then_monitor, daemon=True)
+            monitor_thread = threading.Thread(target=monitor_ue_process, daemon=True)
             monitor_thread.start()
             
         except Exception as e:
@@ -528,88 +525,6 @@ class AssetPreviewCoordinator:
             if on_error:
                 on_error(error_msg)
 
-    # ─── 预览修改同步 ─────────────────────────────────────
-
-    def _sync_changes_back(self, preview_content_dir: Path, asset_content_dir: Path) -> None:
-        """将 UE 中的修改同步回原始资产目录
-
-        三种同步：
-        1. 修改：预览工程 Content 中非符号链接的文件 → 覆盖回资产库 Content
-        2. 新增：预览工程 Content 中非符号链接且资产库 Content 没有的 → 复制到资产库 Content
-        3. 删除：资产库 Content 有但预览工程 Content 中不存在的 → 从资产库 Content 删除
-
-        Args:
-            preview_content_dir: 预览工程的 Content 目录（或其子目录）
-            asset_content_dir: 资产库中的 Content 目录（asset.path / "Content"）
-        """
-        import os
-
-        if not preview_content_dir.exists():
-            return
-
-        synced_count = 0
-        new_count = 0
-        deleted_count = 0
-
-        # ── 第1步：同步修改和新增（预览工程 Content → 资产库 Content）──
-        for item in preview_content_dir.rglob('*'):
-            if not item.is_file():
-                continue
-
-            # 跳过符号链接（未被修改的文件）
-            if os.path.islink(str(item)):
-                continue
-
-            # 这是一个真实文件 — UE 修改或新建的
-            rel_path = item.relative_to(preview_content_dir)
-            target_path = asset_content_dir / rel_path
-            
-            try:
-                target_path.parent.mkdir(parents=True, exist_ok=True)
-                is_new = not target_path.exists()
-                shutil.copy2(str(item), str(target_path))
-                
-                if is_new:
-                    new_count += 1
-                    self._logger.info(f"同步新文件: {rel_path}")
-                else:
-                    synced_count += 1
-                    self._logger.info(f"同步修改: {rel_path}")
-            except Exception as e:
-                self._logger.error(f"同步文件失败 {rel_path}: {e}")
-
-        # ── 第2步：同步删除（资产库 Content 中有但预览工程 Content 中没有的）──
-        for item in asset_content_dir.rglob('*'):
-            if not item.is_file():
-                continue
-
-            rel_path = item.relative_to(asset_content_dir)
-            preview_item = preview_content_dir / rel_path
-
-            # 如果预览工程 Content 中既没有符号链接也没有真实文件，说明被 UE 删了
-            if not preview_item.exists() and not os.path.islink(str(preview_item)):
-                try:
-                    item.unlink()
-                    deleted_count += 1
-                    self._logger.info(f"同步删除: {rel_path}")
-                except Exception as e:
-                    self._logger.error(f"删除文件失败 {rel_path}: {e}")
-
-        # 清理空目录
-        if deleted_count > 0:
-            for dirpath in sorted(asset_content_dir.rglob('*'), reverse=True):
-                if dirpath.is_dir() and not any(dirpath.iterdir()):
-                    try:
-                        dirpath.rmdir()
-                        self._logger.info(f"清理空目录: {dirpath.relative_to(asset_content_dir)}")
-                    except Exception:
-                        pass
-        
-        total = synced_count + new_count + deleted_count
-        if total > 0:
-            self._logger.info(f"预览修改已同步: {synced_count} 修改, {new_count} 新增, {deleted_count} 删除")
-        else:
-            self._logger.info("预览中无修改，无需同步")
 
     # ─── 进程管理 ──────────────────────────────────────────
 
@@ -1122,8 +1037,24 @@ class AssetPreviewCoordinator:
                 else:
                     self._logger.info(f"开始复制 {total_items} 个项目")
 
+                    # 预先计算总大小（用于进度映射）
+                    total_bytes = 0
+                    item_sizes = []
+                    for item in all_items:
+                        if item.is_dir():
+                            dir_size = sum(f.stat().st_size for f in item.rglob('*') if f.is_file())
+                            item_sizes.append(dir_size)
+                            total_bytes += dir_size
+                        else:
+                            file_size = item.stat().st_size
+                            item_sizes.append(file_size)
+                            total_bytes += file_size
+                    
+                    self._logger.info(f"📊 统计到 {total_items} 个项目，总大小 {self._file_ops.format_size(total_bytes)}")
+
                     # 逐个复制每个项目
-                    for idx, item in enumerate(all_items, 1):
+                    copied_bytes = 0
+                    for idx, (item, item_size) in enumerate(zip(all_items, item_sizes), 1):
                         try:
                             target_item = target_content / item.name
 
@@ -1136,26 +1067,43 @@ class AssetPreviewCoordinator:
                                 else:
                                     target_item.unlink()
 
-                            # 复制文件或文件夹
-                            if progress_callback:
-                                progress_callback(idx - 1, total_items, f"复制: {item.name}")
+                            # 定义子项的进度回调
+                            def item_progress(current_bytes, total_bytes_item, message):
+                                if progress_callback and total_bytes > 0:
+                                    current_total = copied_bytes + current_bytes
+                                    progress_callback(current_total, total_bytes, f"复制: {item.name}")
 
+                            # 使用安全的文件操作方法
                             if item.is_dir():
-                                shutil.copytree(item, target_item)
+                                success = self._file_ops.safe_copytree(
+                                    item, target_item, progress_callback=item_progress
+                                )
                             else:
-                                shutil.copy2(item, target_item)
+                                success = self._file_ops.safe_copy_file(
+                                    item, target_item, progress_callback=item_progress
+                                )
+                            
+                            if not success:
+                                error_msg = f"复制 {item.name} 失败"
+                                self._logger.error(error_msg)
+                                if error_callback:
+                                    error_callback(error_msg)
+                                return False
 
                             self._logger.debug(f"已复制: {item.name}")
+                            
+                            # 更新已复制字节数
+                            copied_bytes += item_size
 
                         except Exception as e:
-                            self._logger.error(f"复制 {item.name} 失败: {e}")
+                            self._logger.error(f"复制 {item.name} 失败: {e}", exc_info=True)
                             if error_callback:
                                 error_callback(f"复制 {item.name} 失败: {e}")
                             return False
 
                     if progress_callback:
-                        progress_callback(total_items, total_items, f"已复制 {total_items} 个项目")
-                    self._logger.info(f"成功复制 {total_items} 个项目")
+                        progress_callback(total_bytes, total_bytes, f"已复制 {total_items} 个项目")
+                    self._logger.info(f"✅ 成功复制 {total_items} 个项目，总大小 {self._file_ops.format_size(copied_bytes)}")
             else:
                 # 旧的直接结构（不应该出现，但保留兼容性）
                 self._logger.warning(f"资产 {asset.name} 没有 Content 子文件夹，使用直接复制模式")
@@ -1167,12 +1115,34 @@ class AssetPreviewCoordinator:
                             progress_callback(0, 1, "正在删除已有的同名文件夹...")
                         shutil.rmtree(dest_dir)
 
-                    self._file_ops.safe_copytree(asset.path, dest_dir, progress_callback=progress_callback)
+                    # 定义进度回调映射
+                    def copy_progress(current, total, message):
+                        if progress_callback:
+                            progress_callback(current, total, message)
+                    
+                    success = self._file_ops.safe_copytree(
+                        asset.path, dest_dir, progress_callback=copy_progress
+                    )
+                    if not success:
+                        error_msg = f"复制资产失败: {asset.name}"
+                        self._logger.error(error_msg)
+                        if error_callback:
+                            error_callback(error_msg)
+                        return False
                 else:
                     if progress_callback:
                         progress_callback(0, 1, f"正在复制: {asset.path.name}")
                     dest_file = target_content / asset.path.name
-                    shutil.copy2(asset.path, dest_file)
+                    
+                    # 使用安全的文件复制方法
+                    success = self._file_ops.safe_copy_file(asset.path, dest_file)
+                    if not success:
+                        error_msg = f"复制文件失败: {asset.path.name}"
+                        self._logger.error(error_msg)
+                        if error_callback:
+                            error_callback(error_msg)
+                        return False
+                    
                     if progress_callback:
                         progress_callback(1, 1, "复制完成！")
             

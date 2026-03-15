@@ -105,43 +105,70 @@ class AssetMigrator:
 
                 self._logger.info(f"Copying {total_items} items from Content folder")
 
+                # 预先计算总大小
+                total_bytes = 0
+                item_sizes = []
+                for item in all_items:
+                    if item.is_dir():
+                        dir_size = sum(f.stat().st_size for f in item.rglob('*') if f.is_file())
+                        item_sizes.append(dir_size)
+                        total_bytes += dir_size
+                    else:
+                        file_size = item.stat().st_size
+                        item_sizes.append(file_size)
+                        total_bytes += file_size
+                
+                self._logger.info(f"📊 Total {total_items} items, size {self._file_ops.format_size(total_bytes)}")
+
                 # 逐个复制每个项目
-                import shutil
-                for idx, item in enumerate(all_items, 1):
+                copied_bytes = 0
+                for idx, (item, item_size) in enumerate(zip(all_items, item_sizes), 1):
                     try:
                         target_item = target_content_dir / item.name
 
                         # 删除旧的目标（如果存在）
                         if target_item.exists():
                             if progress_callback:
-                                percent = int((idx - 0.5) / total_items * 100)
+                                percent = int((copied_bytes / total_bytes) * 100) if total_bytes > 0 else 0
                                 progress_callback(percent, 100, f"Removing old: {item.name}")
                             if target_item.is_dir():
                                 shutil.rmtree(target_item)
                             else:
                                 target_item.unlink()
 
-                        # 复制文件或文件夹
-                        if progress_callback:
-                            percent = int((idx - 0.5) / total_items * 100)
-                            progress_callback(percent, 100, f"Copying: {item.name}")
+                        # 定义子项的进度回调
+                        def item_progress(current_bytes, total_bytes_item, message):
+                            if progress_callback and total_bytes > 0:
+                                current_total = copied_bytes + current_bytes
+                                percent = int((current_total / total_bytes) * 100)
+                                progress_callback(percent, 100, f"Copying: {item.name}")
 
+                        # 使用安全的文件操作方法
                         if item.is_dir():
-                            shutil.copytree(item, target_item)
+                            success = self._file_ops.safe_copytree(
+                                item, target_item, progress_callback=item_progress
+                            )
                         else:
-                            shutil.copy2(item, target_item)
+                            success = self._file_ops.safe_copy_file(
+                                item, target_item, progress_callback=item_progress
+                            )
+                        
+                        if not success:
+                            self._logger.error(f"Failed to copy {item.name}")
+                            return False
 
                         self._logger.debug(f"Copied: {item.name}")
+                        copied_bytes += item_size
 
                         if progress_callback:
-                            percent = int(idx / total_items * 100)
+                            percent = int((copied_bytes / total_bytes) * 100) if total_bytes > 0 else 100
                             progress_callback(percent, 100, f"Copied: {item.name}")
 
                     except Exception as e:
-                        self._logger.error(f"Failed to copy {item.name}: {e}")
+                        self._logger.error(f"Failed to copy {item.name}: {e}", exc_info=True)
                         return False
 
-                self._logger.info(f"Successfully copied {total_items} items")
+                self._logger.info(f"✅ Successfully copied {total_items} items, size {self._file_ops.format_size(copied_bytes)}")
                 if progress_callback:
                     progress_callback(100, 100, "Migration complete")
                 return True

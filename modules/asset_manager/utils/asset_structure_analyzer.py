@@ -202,7 +202,9 @@ class AssetStructureAnalyzer:
         logger.info(f"搜索到的 Content 文件夹: {content_dirs}")
         
         if not content_dirs:
-            return None
+            # 没有找到 Content 文件夹，尝试隐式 Content 识别
+            logger.info("未找到 Content 文件夹，尝试隐式 Content 识别")
+            return self._find_implicit_content_package(root)
         
         # 过滤：只保留包含 UE 资产的 Content 文件夹
         valid_contents = []
@@ -219,7 +221,8 @@ class AssetStructureAnalyzer:
         if not valid_contents:
             # Content 文件夹存在但没有 UE 资产
             # 可能是空的或者只有其他类型文件
-            return None
+            # 尝试兜底逻辑：查找"隐式 Content"（没有 Content 文件夹但有 UE 资产）
+            return self._find_implicit_content_package(root)
         
         # 选择最浅层级的 Content（避免嵌套误判）
         valid_contents.sort(key=lambda x: len(x[0].parts))
@@ -243,6 +246,93 @@ class AssetStructureAnalyzer:
             ue_asset_count=asset_count,
             description=f"UE 资产包，包含 {asset_count} 个资产文件",
             warnings=warnings
+        )
+    
+    def _find_implicit_content_package(self, root: Path) -> Optional[AnalysisResult]:
+        """查找"隐式 Content"资产包
+        
+        处理没有 Content 文件夹，但包含 UE 资产文件的情况。
+        只有满足以下所有条件时才识别为 CONTENT_PACKAGE：
+        1. 没有 Content/ 文件夹
+        2. 有 .uasset 或 .umap 文件
+        3. 这些文件分布在至少 1 个典型的 UE 文件夹中
+        4. 没有 .uproject 或 .uplugin 文件
+        
+        Args:
+            root: 搜索根目录
+            
+        Returns:
+            AnalysisResult 或 None
+        """
+        # 典型的 UE Content 子文件夹名称（大小写不敏感）
+        TYPICAL_UE_FOLDERS = {
+            'blueprints', 'materials', 'meshes', 'textures', 'animations',
+            'sounds', 'particles', 'ui', 'maps', 'characters', 'weapons',
+            'effects', 'environment', 'props', 'vehicles', 'audio', 'models',
+            'fx', 'vfx', 'sfx', 'music', 'cinematics', 'cutscenes'
+        }
+        
+        # 查找所有 UE 资产文件
+        ue_assets = []
+        for ext in ('.uasset', '.umap'):
+            ue_assets.extend(root.rglob(f'*{ext}'))
+        
+        if not ue_assets:
+            logger.info("未找到 UE 资产文件")
+            return None
+        
+        logger.info(f"找到 {len(ue_assets)} 个 UE 资产文件")
+        
+        # 统计这些资产分布在哪些文件夹中
+        asset_folders = set()
+        for asset_file in ue_assets:
+            # 获取相对于 root 的路径
+            try:
+                rel_path = asset_file.relative_to(root)
+                # 检查所有层级的文件夹名（不只是第一层）
+                for part in rel_path.parts[:-1]:  # 排除文件名本身
+                    folder_name = part.lower()
+                    asset_folders.add(folder_name)
+                    logger.debug(f"资产文件夹: {folder_name}")
+            except ValueError:
+                continue
+        
+        logger.info(f"资产分布在 {len(asset_folders)} 个文件夹中: {sorted(asset_folders)}")
+        
+        # 检查是否有至少 1 个典型的 UE 文件夹
+        typical_folders_found = asset_folders & TYPICAL_UE_FOLDERS
+        
+        if len(typical_folders_found) < 1:
+            logger.info(f"不满足隐式 Content 条件：没有典型的 UE 文件夹（找到的文件夹：{sorted(asset_folders)}）")
+            return None
+        
+        logger.info(f"检测到隐式 Content 结构：{len(ue_assets)} 个 UE 资产分布在 {len(typical_folders_found)} 个典型文件夹中")
+        logger.info(f"典型文件夹：{sorted(typical_folders_found)}")
+        
+        # 检测双层嵌套结构（资产名/资产名/）
+        # 如果根目录只有一个子目录，且子目录名与根目录名相同或相似
+        root_subdirs = [d for d in root.iterdir() if d.is_dir() and not d.name.startswith('.')]
+        
+        asset_root = root
+        if len(root_subdirs) == 1:
+            subdir = root_subdirs[0]
+            # 检查是否是双层嵌套（名称相同或相似）
+            if subdir.name.lower() == root.name.lower() or \
+               subdir.name.lower().replace('_', '').replace('-', '') == root.name.lower().replace('_', '').replace('-', ''):
+                logger.info(f"检测到双层嵌套结构，跳过外层：{root.name} -> {subdir.name}")
+                asset_root = subdir
+        
+        # 推断资产名称
+        suggested_name = self._infer_name_from_path(asset_root, root)
+        
+        return AnalysisResult(
+            structure_type=StructureType.CONTENT_PACKAGE,
+            content_root=asset_root,  # 将整个目录视为 Content
+            asset_root=asset_root,
+            suggested_name=suggested_name,
+            ue_asset_count=len(ue_assets),
+            description=f"UE 资产包（隐式 Content），包含 {len(ue_assets)} 个资产文件",
+            warnings=[f"未检测到 Content 文件夹，但包含典型的 UE 资产结构（{', '.join(sorted(typical_folders_found))}），将自动包装"]
         )
     
     def _find_ue_project(self, root: Path) -> Optional[AnalysisResult]:

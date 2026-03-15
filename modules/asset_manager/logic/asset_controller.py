@@ -31,7 +31,7 @@ class AssetController:
         self._selected_category: Optional[str] = None
         self._selected_type: Optional[str] = None
         self._selected_version: Optional[str] = None
-        self._sort_method: str = "添加时间（最新）"
+        self._sort_method: str = "🕐 最新添加"
 
     @property
     def search_text(self) -> str:
@@ -392,3 +392,84 @@ class AssetController:
             logger.debug(f"视图模式已保存到 app_config.ui_states: {view_mode}")
         except Exception as e:
             logger.warning(f"保存视图模式失败: {e}")
+
+    def add_asset_sync(self, asset_info: dict) -> bool:
+        """同步添加资产（用于批量导入）
+        
+        Args:
+            asset_info: 资产信息字典，包含以下字段：
+                - path: 资产路径
+                - type: 资产类型
+                - name: 资产名称
+                - category: 分类
+                - engine_version: 引擎版本
+                - package_type: 包装类型
+                - plugin_folder_name: 插件文件夹名（可选）
+                - archive_content_path: 压缩包内容路径（可选）
+                - original_source_path: 原始源路径（可选）
+                - archive_temp_dir: 临时解压目录（可选）
+                
+        Returns:
+            bool: 成功返回 True，失败返回 False
+        """
+        if not self.logic:
+            logger.error("Logic 层未初始化")
+            return False
+        
+        try:
+            from pathlib import Path
+            from ..logic.asset_model import PackageType
+            
+            # 确定实际添加路径
+            archive_content_path = asset_info.get('archive_content_path')
+            if archive_content_path and Path(archive_content_path).exists():
+                add_path = Path(archive_content_path)
+                logger.info(f"使用预分析的压缩包内容路径: {add_path}")
+            else:
+                add_path = Path(asset_info['path'])
+            
+            # 获取原始文件名（用于压缩包，避免使用临时目录名）
+            original_filename = ""
+            original_source = asset_info.get('original_source_path')
+            if original_source and Path(original_source).exists():
+                if Path(original_source).is_file():
+                    original_filename = Path(original_source).stem
+                else:
+                    original_filename = Path(original_source).name
+            
+            # 调用 logic 层的异步添加方法（支持 original_filename 参数）
+            result = self.logic.add_asset_async(
+                asset_path=add_path,
+                asset_type=asset_info['type'],
+                name=asset_info['name'],
+                category=asset_info['category'],
+                description="",
+                create_markdown=asset_info.get('create_doc', False),
+                engine_version=asset_info.get('engine_version', ''),
+                package_type=asset_info.get('package_type', PackageType.CONTENT),
+                plugin_folder_name=asset_info.get('plugin_folder_name', ''),
+                original_filename=original_filename,
+                progress_callback=None
+            )
+            
+            if result:
+                logger.info(f"成功添加资产: {asset_info['name']}")
+                return True
+            else:
+                logger.error(f"添加资产失败: {asset_info['name']}")
+                return False
+                
+        except Exception as e:
+            logger.error(f"同步添加资产失败: {e}", exc_info=True)
+            return False
+        finally:
+            # 清理临时文件
+            archive_temp_dir = asset_info.get('archive_temp_dir')
+            archive_extractor = asset_info.get('archive_extractor')
+            if archive_extractor and archive_temp_dir:
+                try:
+                    archive_extractor.cleanup(archive_temp_dir)
+                    logger.info(f"已清理临时目录: {archive_temp_dir}")
+                except Exception as e:
+                    logger.warning(f"清理临时目录失败: {e}")
+            return False

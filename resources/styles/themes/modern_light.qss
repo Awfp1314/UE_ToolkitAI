@@ -25,10 +25,10 @@ QWidget {
    ======================================== */
 
 /* 此文件用于定义通用组件样式（按钮、输入框、滚动条等）
-   目前主窗口样式已在 widgets/main_window.qss 中定义
+   目前主窗口样式已�?widgets/main_window.qss 中定�?
    未来可在此添加更多通用组件样式 */
 
-/* ===== 全局滚动条样式（自动隐藏效果） ===== */
+/* ===== 全局滚动条样式（自动隐藏效果�?===== */
 QScrollBar:vertical {
     background: transparent;
     width: 8px;
@@ -43,7 +43,7 @@ QScrollBar::handle:vertical {
 }
 
 QScrollBar::handle:vertical:hover {
-    background: rgba(0, 0, 0, 0.3);  /* 悬停时显示 */
+    background: rgba(0, 0, 0, 0.3);  /* 悬停时显�?*/
 }
 
 QScrollBar::handle:vertical:pressed {
@@ -61,7 +61,7 @@ QScrollBar::sub-page:vertical {
     background: none;
 }
 
-/* 水平滚动条 */
+/* 水平滚动�?*/
 QScrollBar:horizontal {
     background: transparent;
     height: 8px;
@@ -76,7 +76,7 @@ QScrollBar::handle:horizontal {
 }
 
 QScrollBar::handle:horizontal:hover {
-    background: rgba(0, 0, 0, 0.3);  /* 悬停时显示 */
+    background: rgba(0, 0, 0, 0.3);  /* 悬停时显�?*/
 }
 
 QScrollBar::handle:horizontal:pressed {
@@ -98,14 +98,14 @@ QScrollBar::sub-page:horizontal {
 
 /* ===== add_asset_dialog.qss ===== */
 
-/* ===== 添加资产对话框样式 ===== */
+/* ===== 添加资产对话框样�?===== */
 
-/* 对话框本身 */
+/* 对话框本�?*/
 #AddAssetDialog {
     background-color: transparent;
 }
 
-/* 主容器 */
+/* 主容�?*/
 #AddAssetDialogContainer {
     background: qlineargradient(
         x1:0, y1:0, x2:1, y2:1,
@@ -116,7 +116,7 @@ QScrollBar::sub-page:horizontal {
     border-radius: 0px;
 }
 
-/* 标题栏 */
+/* 标题�?*/
 #AddAssetDialogTitleBar {
     background: #f8f8f8;
     border-bottom: 1px solid rgba(0, 0, 0, 0.15);
@@ -147,7 +147,7 @@ QScrollBar::sub-page:horizontal {
     padding: 3px 0px;
 }
 
-/* 输入框 */
+/* 输入�?*/
 #AddAssetDialogInput,
 #AddAssetDialogPathInput {
     background-color: #f5f5f5;
@@ -170,7 +170,7 @@ QScrollBar::sub-page:horizontal {
     color: rgba(0, 0, 0, 0.45);
 }
 
-/* 类型选择下拉框（QComboBox） */
+/* 类型选择下拉框（QComboBox�?*/
 QComboBox#AddAssetDialogInput {
     padding-right: 30px;
 }
@@ -212,7 +212,7 @@ QComboBox#AddAssetDialogInput QAbstractItemView::item:selected {
     color: #1a1a1a;
 }
 
-/* 下拉框 */
+/* 下拉�?*/
 #AddAssetDialogCombo {
     background-color: #f0f0f0;
     border: none;
@@ -392,7 +392,7 @@ QComboBox#AddAssetDialogInput QAbstractItemView::item:selected {
 
 /* ===== asset_path_setup_dialog.qss ===== */
 
-/* ===== 资产库路径设置弹窗样式 ===== */
+/* ===== 资产库路径设置弹窗样�?===== */
 
 /* 容器 */
 #AssetPathSetupDialogContainer {
@@ -401,7 +401,7 @@ QComboBox#AddAssetDialogInput QAbstractItemView::item:selected {
     border-radius: 0px;
 }
 
-/* 标题栏 */
+/* 标题�?*/
 #AssetPathSetupDialogTitleBar {
     background: qlineargradient(
         x1:0, y1:0, x2:0, y2:1,
@@ -445,7 +445,7 @@ QComboBox#AddAssetDialogInput QAbstractItemView::item:selected {
     font-weight: bold;
 }
 
-/* 输入框 */
+/* 输入�?*/
 #AssetPathSetupDialogInput {
     background-color: #ffffff;
     color: #1a1a1a;
@@ -525,11 +525,11 @@ QComboBox#AddAssetDialogInput QAbstractItemView::item:selected {
 /* ===== category_management_dialog.qss ===== */
 
 /* ========================================
-   分类管理对话框样式
+   分类管理对话框样�?
    从内联样式迁移到QSS系统
    ======================================== */
 
-/* ===== 对话框容器 ===== */
+/* ===== 对话框容�?===== */
 #CategoryDialogContainer {
     background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
         stop:0 #f0f0f0,
@@ -539,7 +539,7 @@ QComboBox#AddAssetDialogInput QAbstractItemView::item:selected {
     border-radius: 0px;
 }
 
-/* ===== 标题栏 ===== */
+/* ===== 标题�?===== */
 #CategoryDialogTitleBar {
     background: transparent;
     border-bottom: 1px solid rgba(0, 0, 0, 0.1);
@@ -583,7 +583,7 @@ QComboBox#AddAssetDialogInput QAbstractItemView::item:selected {
     background: transparent;
 }
 
-/* ===== 输入框 ===== */
+/* ===== 输入�?===== */
 #CategoryInput {
     background-color: #f0f0f0;
     border: none;
@@ -658,7 +658,7 @@ QComboBox#AddAssetDialogInput QAbstractItemView::item:selected {
     background-color: #5aa9ff;
 }
 
-/* ===== 分类列表滚动条 ===== */
+/* ===== 分类列表滚动�?===== */
 #CategoryList QScrollBar:vertical {
     background-color: transparent;
     width: 8px;
@@ -726,7 +726,7 @@ QComboBox#AddAssetDialogInput QAbstractItemView::item:selected {
 /* ===== chat_input.qss ===== */
 
 /* ========================================
-   AI助手聊天输入框样式
+   AI助手聊天输入框样�?
    ======================================== */
 
 /* ===== 聊天区域 ===== */
@@ -743,14 +743,14 @@ QComboBox#AddAssetDialogInput QAbstractItemView::item:selected {
     background-color: transparent;
 }
 
-/* ===== 输入框容器 ===== */
+/* ===== 输入框容�?===== */
 #ChatInputContainer {
     background-color: #F0F0F0;
     border: none;
     border-radius: 26px;
 }
 
-/* ===== 文本输入框 ===== */
+/* ===== 文本输入�?===== */
 #ChatInput {
     background-color: transparent;
     border: none;
@@ -767,7 +767,7 @@ QComboBox#AddAssetDialogInput QAbstractItemView::item:selected {
     outline: none;
 }
 
-/* ===== 滚动条 ===== */
+/* ===== 滚动�?===== */
 #ChatInput QScrollBar:vertical {
     background: transparent;
     width: 6px;
@@ -795,7 +795,7 @@ QComboBox#AddAssetDialogInput QAbstractItemView::item:selected {
 }
 
 /* ===== 按钮样式 ===== */
-/* 注意：按钮的背景、悬停效果由 paintEvent 自定义绘制 */
+/* 注意：按钮的背景、悬停效果由 paintEvent 自定义绘�?*/
 /* QSS只控制基础属性，不设置background避免覆盖 */
 #ChatAddButton {
     border: none;
@@ -808,9 +808,9 @@ QComboBox#AddAssetDialogInput QAbstractItemView::item:selected {
 
 /* ===== confirm_dialog.qss ===== */
 
-/* ===== 确认对话框样式 ===== */
+/* ===== 确认对话框样�?===== */
 
-/* 对话框本身 */
+/* 对话框本�?*/
 #ConfirmDialog {
     background-color: #f8f8f8;
     border: 1px solid rgba(0, 0, 0, 0.2);
@@ -880,11 +880,11 @@ QComboBox#AddAssetDialogInput QAbstractItemView::item:selected {
 /* ===== edit_asset_dialog.qss ===== */
 
 /* ========================================
-   编辑资产对话框样式
+   编辑资产对话框样�?
    从内联样式迁移到QSS系统
    ======================================== */
 
-/* ===== 对话框容器 ===== */
+/* ===== 对话框容�?===== */
 #EditAssetDialogContainer {
     background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
         stop:0 #f0f0f0,
@@ -894,7 +894,7 @@ QComboBox#AddAssetDialogInput QAbstractItemView::item:selected {
     border-radius: 0px;
 }
 
-/* ===== 标题栏 ===== */
+/* ===== 标题�?===== */
 #EditAssetDialogTitleBar {
     background: transparent;
     border-bottom: 1px solid rgba(0, 0, 0, 0.1);
@@ -938,7 +938,7 @@ QComboBox#AddAssetDialogInput QAbstractItemView::item:selected {
     background: transparent;
 }
 
-/* ===== 输入框 ===== */
+/* ===== 输入�?===== */
 #EditAssetInput {
     background-color: rgba(0, 0, 0, 0.08);
     border: none;
@@ -958,7 +958,7 @@ QComboBox#AddAssetDialogInput QAbstractItemView::item:selected {
     color: rgba(0, 0, 0, 0.3);
 }
 
-/* ===== 分类选择框 ===== */
+/* ===== 分类选择�?===== */
 #EditAssetCategoryCombo {
     background-color: rgba(0, 0, 0, 0.08);
     border: none;
@@ -1147,12 +1147,12 @@ QComboBox#AddAssetDialogInput QAbstractItemView::item:selected {
 
 /* ===== main_window.qss ===== */
 
-/* ===== 主窗口 ===== */
+/* ===== 主窗�?===== */
 QMainWindow {
     background: transparent;
 }
 
-/* ===== 主容器（圆角 + 统一边框） ===== */
+/* ===== 主容器（圆角 + 统一边框�?===== */
 #MainContainer {
     background: #ffffff;
     border: 1px solid rgba(0, 0, 0, 0.2);
@@ -1180,7 +1180,7 @@ QMainWindow {
     color: #4a9eff;
 }
 
-/* ===== 窗口控制按钮（现代化设计） ===== */
+/* ===== 窗口控制按钮（现代化设计�?===== */
 #WindowButton {
     background: transparent;
     border: none;
@@ -1196,7 +1196,7 @@ QMainWindow {
     color: #1a1a1a;
 }
 
-/* 禁用的窗口按钮 */
+/* 禁用的窗口按�?*/
 #WindowButtonDisabled {
     background: transparent;
     border: none;
@@ -1226,7 +1226,7 @@ QMainWindow {
     color: #1a1a1a;
 }
 
-/* ===== 左侧导航面板 - 深色渐变背景 + 右侧分隔线 ===== */
+/* ===== 左侧导航面板 - 深色渐变背景 + 右侧分隔�?===== */
 #LeftPanel {
     background: qlineargradient(
         x1:0, y1:0, x2:0, y2:1,
@@ -1275,7 +1275,7 @@ QMainWindow {
     border: none;
 }
 
-/* ===== 导航按钮 - 简洁视图切换风格 ===== */
+/* ===== 导航按钮 - 简洁视图切换风�?===== */
 #NavTextButton {
     background: transparent;
     border: none;
@@ -1295,14 +1295,14 @@ QMainWindow {
     color: #1a1a1a;
 }
 
-/* 选中状态 - 使用悬停样式 */
+/* 选中状�?- 使用悬停样式 */
 #NavTextButton:checked {
     background: rgba(0, 0, 0, 0.08);
     color: #1a1a1a;
     font-weight: 600;
 }
 
-/* 选中状态悬停 - 保持一致 */
+/* 选中状态悬�?- 保持一�?*/
 #NavTextButton:checked:hover {
     background: rgba(0, 0, 0, 0.08);
     color: #1a1a1a;
@@ -1319,7 +1319,7 @@ QMainWindow {
     outline: none;
 }
 
-/* ===== 右侧面板（渐变背景 + 右下圆角） ===== */
+/* ===== 右侧面板（渐变背�?+ 右下圆角�?===== */
 #RightPanel {
     background: transparent;
     border-bottom-right-radius: 0px;
@@ -1333,7 +1333,7 @@ QMainWindow {
     border-bottom: 1px solid rgba(0, 0, 0, 0.15);
 }
 
-/* ===== 副标题（优化：更突出的主标题） ===== */
+/* ===== 副标题（优化：更突出的主标题�?===== */
 #SubTitle {
     color: #1a1a1a;
     font-size: 20px;
@@ -1342,7 +1342,7 @@ QMainWindow {
     background: transparent;
 }
 
-/* ===== 主题切换按钮（右侧标题区） ===== */
+/* ===== 主题切换按钮（右侧标题区�?===== */
 #ThemeToggleButton {
     background: transparent;
     border: none;
@@ -1369,7 +1369,7 @@ QMainWindow {
     outline: none;
 }
 
-/* ===== 设置图标按钮（右侧标题区） ===== */
+/* ===== 设置图标按钮（右侧标题区�?===== */
 #SettingsIconButton {
     background: transparent;
     border: none;
@@ -1450,7 +1450,7 @@ QMainWindow {
 }
 
 
-/* ===== 问题反馈按钮（透明背景） ===== */
+/* ===== 问题反馈按钮（透明背景�?===== */
 #FeedbackButton {
     background: transparent;
     border: none;
@@ -1459,7 +1459,7 @@ QMainWindow {
     font-size: 14px;
     font-weight: 500;
     text-align: center;
-    padding: 8px 16px;
+    padding: 8px 12px;
     outline: none;
 }
 
@@ -1538,7 +1538,7 @@ QMainWindow {
     outline: none;
 }
 
-/* ===== 更新小红点 ===== */
+/* ===== 更新小红�?===== */
 #UpdateBadge {
     background: transparent;
     color: #ff4444;
@@ -1578,9 +1578,9 @@ QMainWindow {
 
 /* ===== message_dialog.qss ===== */
 
-/* ===== 消息对话框 ===== */
+/* ===== 消息对话�?===== */
 
-/* 对话框本身 - 透明背景 */
+/* 对话框本�?- 透明背景 */
 #MessageDialog {
     background-color: transparent;
 }
@@ -1592,7 +1592,7 @@ QMainWindow {
     border-radius: 0px;
 }
 
-/* ===== 标题栏 ===== */
+/* ===== 标题�?===== */
 #MessageDialogTitleBar {
     background-color: #f0f0f0;
     border-top: 1px solid rgba(0, 0, 0, 0.2);
@@ -1671,9 +1671,9 @@ QMainWindow {
 
 /* ===== project_selector_dialog.qss ===== */
 
-/* ===== 预览工程选择对话框 ===== */
+/* ===== 预览工程选择对话�?===== */
 
-/* 对话框本身 - 透明背景 */
+/* 对话框本�?- 透明背景 */
 #ProjectSelectorDialog {
     background-color: transparent;
 }
@@ -1685,7 +1685,7 @@ QMainWindow {
     border-radius: 0px;
 }
 
-/* ===== 标题栏 ===== */
+/* ===== 标题�?===== */
 #ProjectSelectorTitleBar {
     background-color: #f0f0f0;
     border-top: 1px solid rgba(0, 0, 0, 0.2);
@@ -1709,7 +1709,7 @@ QMainWindow {
     padding: 2px 0px;
 }
 
-/* ===== 下拉框 ===== */
+/* ===== 下拉�?===== */
 #ProjectSelectorCombo {
     background-color: #f0f0f0;
     border: none;
@@ -1749,7 +1749,7 @@ QMainWindow {
     show-decoration-selected: 1;
 }
 
-/* 下拉列表项 */
+/* 下拉列表�?*/
 #ProjectSelectorCombo QAbstractItemView::item {
     min-height: 28px;
     padding: 4px 10px;
@@ -1808,7 +1808,7 @@ QMainWindow {
    设置界面样式
    ======================================== */
 
-/* ===== 设置选项卡 ===== */
+/* ===== 设置选项�?===== */
 #SettingsTabWidget::pane {
     background: transparent;
     border: none;
@@ -1837,7 +1837,7 @@ QMainWindow {
     font-weight: 600;
 }
 
-/* ===== 选项卡页面 ===== */
+/* ===== 选项卡页�?===== */
 #TabPage {
     background: transparent;
 }
@@ -1852,7 +1852,7 @@ QMainWindow {
     background: transparent;
 }
 
-/* ===== 滚动条样式 ===== */
+/* ===== 滚动条样�?===== */
 #SettingsScrollArea QScrollBar:vertical {
     background: transparent;
     width: 8px;
@@ -1886,13 +1886,13 @@ QMainWindow {
     border-radius: 0px;
 }
 
-/* ===== 设置行 ===== */
+/* ===== 设置�?===== */
 #SettingRow {
     background: transparent;
     border: none;
 }
 
-/* ===== 子区块标题 ===== */
+/* ===== 子区块标�?===== */
 #SubSectionLabel {
     color: #4a9eff;
     font-size: 15px;
@@ -2022,7 +2022,7 @@ QMainWindow {
     );
 }
 
-/* ===== 单选按钮 ===== */
+/* ===== 单选按�?===== */
 #ThemeRadio {
     color: #1a1a1a;
     font-size: 13px;
@@ -2053,7 +2053,7 @@ QMainWindow {
     );
 }
 
-/* ===== 下拉框 ===== */
+/* ===== 下拉�?===== */
 #SettingComboBox {
     background: rgba(0, 0, 0, 0.08);
     border: none;
@@ -2128,7 +2128,7 @@ QMainWindow {
     );
 }
 
-/* ===== 输入框 ===== */
+/* ===== 输入�?===== */
 #PathLineEdit {
     background: rgba(0, 0, 0, 0.08);
     border: none;
@@ -2173,7 +2173,7 @@ QMainWindow {
     color: #1a1a1a;
 }
 
-/* ===== 密码输入框容器 ===== */
+/* ===== 密码输入框容�?===== */
 #PasswordInputContainer {
     background: transparent;
 }
@@ -2193,27 +2193,27 @@ QMainWindow {
     background: rgba(0, 0, 0, 0.15);
 }
 
-/* ===== 内嵌的可见性切换按钮 ===== */
+/* ===== 内嵌的可见性切换按�?===== */
 #PasswordToggleButtonInline {
     background: transparent;
     border: none;
     border-radius: 4px;
-    color: rgba(0, 0, 0, 0.5);  /* 灰白色 */
+    color: rgba(0, 0, 0, 0.5);  /* 灰白�?*/
     font-size: 16px;
     padding: 0px;
 }
 
 #PasswordToggleButtonInline:hover {
     background: rgba(255, 255, 255, 0.08);
-    color: rgba(0, 0, 0, 0.55);  /* 悬停时稍微亮一点 */
+    color: rgba(0, 0, 0, 0.55);  /* 悬停时稍微亮一�?*/
 }
 
 #PasswordToggleButtonInline:checked {
-    color: rgba(0, 0, 0, 0.7);  /* 显示密码时更亮 */
+    color: rgba(0, 0, 0, 0.7);  /* 显示密码时更�?*/
 }
 
 #PasswordToggleButtonInline:checked:hover {
-    color: #1a1a1a;  /* 显示密码悬停时最亮 */
+    color: #1a1a1a;  /* 显示密码悬停时最�?*/
 }
 
 #SaveButton {
@@ -2254,7 +2254,7 @@ QMainWindow {
     border: none;
     border-radius: 6px;
     color: #ffffff;
-    padding: 8px 16px;
+    padding: 8px 12px;
     font-size: 12px;
     font-weight: 500;
 }
@@ -2276,7 +2276,7 @@ QMainWindow {
 
 /* ===== 启动加载界面样式 ===== */
 
-/* ----- 主容器 ----- */
+/* ----- 主容�?----- */
 #SplashContainer {
     background: qlineargradient(
         x1:0, y1:0, x2:0, y2:1,
@@ -2300,7 +2300,7 @@ QMainWindow {
 /* ----- 图标 ----- */
 #SplashIcon {
     background-color: transparent;
-    font-size: 56px;  /* emoji后备方案的字体大小 */
+    font-size: 56px;  /* emoji后备方案的字体大�?*/
 }
 
 /* ----- 加载消息 ----- */
@@ -2310,7 +2310,7 @@ QMainWindow {
     background-color: transparent;
 }
 
-/* ----- 百分比标签（已废弃，保留以防万一） ----- */
+/* ----- 百分比标签（已废弃，保留以防万一�?----- */
 #SplashPercentage {
     color: #4a9eff;
     font-size: 14px;
@@ -2318,7 +2318,7 @@ QMainWindow {
     background-color: transparent;
 }
 
-/* ----- 版本号 ----- */
+/* ----- 版本�?----- */
 #SplashVersion {
     color: #999999;
     font-size: 11px;
@@ -2333,9 +2333,9 @@ QMainWindow {
 }
 
 #SplashProgressBar::chunk {
-    background-color: #5aa9ff;  /* 使用纯色，避免渐变产生分段效果 */
+    background-color: #5aa9ff;  /* 使用纯色，避免渐变产生分段效�?*/
     border-radius: 2px;
-    width: 120px;  /* 适中的chunk宽度，平衡流畅度和连续性 */
+    width: 120px;  /* 适中的chunk宽度，平衡流畅度和连续�?*/
 }
 
 
@@ -2357,7 +2357,7 @@ QMainWindow {
     border: none;
 }
 
-/* AI消息文本浏览器 */
+/* AI消息文本浏览�?*/
 #AIMessageContent {
     background-color: transparent;
     border: none;
@@ -2440,32 +2440,32 @@ QPushButton#action_button[theme="light"]:pressed {
     border: none;
 }
 
-/* 垂直滚动条 */
+/* 垂直滚动�?*/
 #ChatScrollArea QScrollBar:vertical {
     background: transparent;
     width: 8px;
     margin: 0px;
 }
 
-/* 滚动条滑块 */
+/* 滚动条滑�?*/
 #ChatScrollArea QScrollBar::handle:vertical {
     background: rgba(0, 0, 0, 0.3);
     border-radius: 4px;
     min-height: 20px;
 }
 
-/* 滚动条滑块悬停 */
+/* 滚动条滑块悬�?*/
 #ChatScrollArea QScrollBar::handle:vertical:hover {
     background: rgba(0, 0, 0, 0.5);
 }
 
-/* 隐藏滚动条上下箭头按钮 */
+/* 隐藏滚动条上下箭头按�?*/
 #ChatScrollArea QScrollBar::add-line:vertical,
 #ChatScrollArea QScrollBar::sub-line:vertical {
     height: 0px;
 }
 
-/* 隐藏滚动条背景区域 */
+/* 隐藏滚动条背景区�?*/
 #ChatScrollArea QScrollBar::add-page:vertical,
 #ChatScrollArea QScrollBar::sub-page:vertical {
     background: none;
@@ -2475,8 +2475,8 @@ QPushButton#action_button[theme="light"]:pressed {
 /* ===== asset_manager\asset_card.qss ===== */
 
 /* ========================================
-   现代化资产卡片样式
-   从 modern_asset_card.py 迁移的内联样式
+   现代化资产卡片样�?
+   �?modern_asset_card.py 迁移的内联样�?
    ======================================== */
 
 /* ===== 标准资产卡片 (ModernAssetCard) ===== */
@@ -2501,14 +2501,14 @@ QPushButton#action_button[theme="light"]:pressed {
     border: none;
 }
 
-/* ===== 缩略图容器 ===== */
+/* ===== 缩略图容�?===== */
 #AssetCard #ThumbnailContainer,
 #CompactAssetCard #ThumbnailContainer {
     background-color: transparent;
 }
 
 /* ===== 分类标签 ===== */
-/* 注意：分类标签使用内联样式，不在此定义 */
+/* 注意：分类标签使用内联样式，不在此定�?*/
 
 /* ===== 资产类型图标 ===== */
 #AssetCard #TypeLabel {
@@ -2516,6 +2516,28 @@ QPushButton#action_button[theme="light"]:pressed {
     background-color: transparent;
     border: none;
     padding: 0px;
+}
+
+/* ===== 空状态提示 ===== */
+#assetManagerEmptyContainer {
+    background: transparent;
+}
+
+#assetManagerEmptyIcon {
+    font-size: 64px;
+    color: rgba(0, 0, 0, 0.3);
+}
+
+#assetManagerEmptyLabel {
+    font-size: 18px;
+    font-weight: bold;
+    color: rgba(0, 0, 0, 0.7);
+}
+
+#assetManagerEmptyHint {
+    font-size: 13px;
+    color: rgba(0, 0, 0, 0.4);
+    line-height: 1.6;
 }
 
 #CompactAssetCard #TypeLabel {
@@ -2546,7 +2568,7 @@ QPushButton#action_button[theme="light"]:pressed {
     background-color: transparent;
 }
 
-/* ===== 渐变分隔线 ===== */
+/* ===== 渐变分隔�?===== */
 #AssetCard #Separator {
     background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
         stop:0 transparent,
@@ -2581,7 +2603,7 @@ QPushButton#action_button[theme="light"]:pressed {
     border-radius: 0px;
     font-size: 13px;
     font-weight: 600;
-    padding: 8px 16px;
+    padding: 8px 12px;
     outline: none;
 }
 
@@ -2600,6 +2622,12 @@ QPushButton#action_button[theme="light"]:pressed {
 
 #AssetCard #PreviewButton:focus {
     outline: none;
+}
+
+#AssetCard #PreviewButton:disabled {
+    background: rgba(0, 0, 0, 0.03);
+    color: rgba(0, 0, 0, 0.3);
+    border: none;
 }
 
 /* ===== 预览按钮（紧凑卡片） ===== */
@@ -2629,6 +2657,12 @@ QPushButton#action_button[theme="light"]:pressed {
 
 #CompactAssetCard #PreviewButton:focus {
     outline: none;
+}
+
+#CompactAssetCard #PreviewButton:disabled {
+    background: rgba(0, 0, 0, 0.03);
+    color: rgba(0, 0, 0, 0.3);
+    border: none;
 }
 
 /* ===== 导入按钮（标准卡片） ===== */
@@ -2697,7 +2731,7 @@ QMenu#AssetCardMenu {
 
 QMenu#AssetCardMenu::item {
     background-color: transparent;
-    padding: 8px 16px;
+    padding: 8px 12px;
     border-radius: 0px;
     margin: 1px;
 }
@@ -2720,7 +2754,7 @@ QMenu#AssetCardMenu::separator {
 
 /* ===== asset_manager\asset_detail_dialog.qss ===== */
 
-/* ===== 资产详情对话框 ===== */
+/* ===== 资产详情对话�?===== */
 #AssetDetailContainer {
     background: #f8f8f8;
     border-radius: 0px;
@@ -2756,13 +2790,13 @@ QMenu#AssetCardMenu::separator {
     color: #ff6b6b;
 }
 
-/* ===== 缩略图容器 ===== */
+/* ===== 缩略图容�?===== */
 #ThumbnailContainer {
     background: #f0f0f0;
     border-radius: 10px;
 }
 
-/* ===== 占位符图标 ===== */
+/* ===== 占位符图�?===== */
 #ThumbnailPlaceholder {
     font-size: 42px;
     color: rgba(0, 0, 0, 0.3);
@@ -2890,12 +2924,89 @@ QMenu#AssetCardMenu::separator {
     background-color: transparent;
 }
 
-/* ===== 搜索框 ===== */
+/* ===== 工具栏区�?===== */
+#AssetToolbarArea {
+    background-color: #ffffff;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+/* ===== 标签页区�?===== */
+#AssetTabsArea {
+    background-color: transparent;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+#AssetTabsScroll {
+    background-color: transparent;
+    border: none;
+}
+
+#AssetTabsContainer {
+    background-color: transparent;
+}
+
+/* 分类标签按钮 */
+#AssetCategoryTab {
+    background-color: rgba(0, 0, 0, 0.15);
+    color: rgba(0, 0, 0, 0.7);
+    border: none;
+    border-radius: 8px;
+    padding: 2px 8px;
+    font-size: 10px;
+}
+
+#AssetCategoryTab:hover {
+    background-color: rgba(0, 0, 0, 0.25);
+    color: rgba(0, 0, 0, 0.9);
+}
+
+#AssetCategoryTab[active="true"] {
+    background-color: rgba(33, 150, 243, 0.85);
+    color: #ffffff;
+    font-weight: bold;
+}
+
+/* 筛选按�?*/
+#AssetFilterButton {
+    background-color: #f5f5f5;
+    color: rgba(0, 0, 0, 0.9);
+    border: 1px solid rgba(0, 0, 0, 0.1);
+    border-radius: 4px;
+    padding: 8px 12px;
+    font-size: 13px;
+}
+
+#AssetFilterButton:hover {
+    background-color: #eeeeee;
+}
+
+/* 筛选菜�?*/
+#AssetFilterMenu {
+    background-color: #ffffff;
+    border: 1px solid rgba(0, 0, 0, 0.2);
+    border-radius: 6px;
+    padding: 5px;
+}
+
+#FilterMenuCombo {
+    background-color: #f5f5f5;
+    color: rgba(0, 0, 0, 0.9);
+    border: 1px solid rgba(0, 0, 0, 0.1);
+    border-radius: 4px;
+    padding: 6px 10px;
+    min-width: 180px;
+}
+
+#FilterMenuCombo:hover {
+    border-color: #2196F3;
+}
+
+/* ===== 搜索�?===== */
 #AssetSearchInput {
     background-color: #f5f5f5;
     border: none;
     border-radius: 6px;
-    padding: 8px 16px;
+    padding: 8px 12px;
     color: #1a1a1a;
     font-size: 14px;
 }
@@ -2973,7 +3084,7 @@ QMenu#AssetCardMenu::separator {
     background-color: #f5f5f5;
     border: none;
     border-radius: 6px;
-    padding: 8px 16px;
+    padding: 8px 12px;
     color: #1a1a1a;
     font-size: 14px;
     text-align: center;
@@ -3027,12 +3138,12 @@ QMenu#AssetCardMenu::separator {
     color: #1a1a1a;
 }
 
-/* ===== 排序下拉框 ===== */
+/* ===== 排序下拉�?===== */
 #AssetSortCombo {
     background-color: #f5f5f5;
     border: none;
     border-radius: 6px;
-    padding: 8px 16px;
+    padding: 8px 12px;
     color: #1a1a1a;
     font-size: 14px;
     text-align: center;
@@ -3060,7 +3171,6 @@ QMenu#AssetCardMenu::separator {
     height: 0px;
 }
 
-/* 排序下拉列表 */
 #AssetSortCombo QAbstractItemView {
     background-color: #f5f5f5;
     border: 1px solid rgba(0, 0, 0, 0.15);
@@ -3086,12 +3196,77 @@ QMenu#AssetCardMenu::separator {
     color: #1a1a1a;
 }
 
+/* ===== 筛选标�?===== */
+#AssetFilterLabel {
+    color: rgba(0, 0, 0, 0.7);
+    font-size: 13px;
+    padding: 0px 5px 0px 0px;
+}
+
+/* ===== 分类筛选下拉框 ===== */
+#AssetCategoryFilter {
+    background-color: #f5f5f5;
+    border: none;
+    border-radius: 6px;
+    padding: 8px 12px;
+    color: #1a1a1a;
+    font-size: 14px;
+    text-align: center;
+}
+
+#AssetCategoryFilter:hover {
+    background-color: #eeeeee;
+    border: none;
+}
+
+#AssetCategoryFilter:focus {
+    background-color: #eeeeee;
+    border: none;
+    outline: none;
+}
+
+#AssetCategoryFilter::drop-down {
+    border: none;
+    width: 0px;
+}
+
+#AssetCategoryFilter::down-arrow {
+    image: none;
+    width: 0px;
+    height: 0px;
+}
+
+#AssetCategoryFilter QAbstractItemView {
+    background-color: #f5f5f5;
+    border: 1px solid rgba(0, 0, 0, 0.15);
+    padding: 4px;
+    outline: none;
+    selection-background-color: #4a9eff;
+    selection-color: #1a1a1a;
+}
+
+#AssetCategoryFilter QAbstractItemView::item {
+    height: 32px;
+    padding: 4px 12px;
+    border-radius: 4px;
+    color: #1a1a1a;
+}
+
+#AssetCategoryFilter QAbstractItemView::item:hover {
+    background-color: rgba(0, 0, 0, 0.08);
+}
+
+#AssetCategoryFilter QAbstractItemView::item:selected {
+    background-color: #4a9eff;
+    color: #1a1a1a;
+}
+
 /* ===== 类型筛选下拉框 ===== */
 #AssetTypeFilter {
     background-color: #f5f5f5;
     border: none;
     border-radius: 6px;
-    padding: 8px 16px;
+    padding: 8px 12px;
     color: #1a1a1a;
     font-size: 14px;
     text-align: center;
@@ -3149,7 +3324,7 @@ QMenu#AssetCardMenu::separator {
     background-color: #f5f5f5;
     border: none;
     border-radius: 6px;
-    padding: 8px 16px;
+    padding: 8px 12px;
     color: #1a1a1a;
     font-size: 14px;
     text-align: center;
@@ -3207,7 +3382,7 @@ QMenu#AssetCardMenu::separator {
     background: #f5f5f5;
     border: none;
     border-radius: 6px;
-    padding: 8px 16px;
+    padding: 8px 12px;
     color: #1a1a1a;
     font-size: 14px;
     font-weight: 500;
@@ -3228,14 +3403,14 @@ QMenu#AssetCardMenu::separator {
    工程搜索窗口样式
    ======================================== */
 
-/* ===== 主容器 ===== */
+/* ===== 主容�?===== */
 #ProjectSearchContainer {
     background: #ffffff;
     border-radius: 0px;
     border: 1px solid rgba(0, 0, 0, 0.2);
 }
 
-/* ===== 标题栏 ===== */
+/* ===== 标题�?===== */
 #ProjectSearchTitleBar {
     background: rgba(0, 0, 0, 0.08);
 }
@@ -3244,7 +3419,7 @@ QMenu#AssetCardMenu::separator {
     color: #1a1a1a;
 }
 
-/* 标题栏按钮 */
+/* 标题栏按�?*/
 #ProjectSearchThemeButton,
 #ProjectSearchMinButton,
 #ProjectSearchMaxButton {
@@ -3279,12 +3454,12 @@ QMenu#AssetCardMenu::separator {
     background: transparent;
 }
 
-/* 搜索框 */
+/* 搜索�?*/
 #ProjectSearchInput {
     background: #f5f5f5;
     border: none;
     border-radius: 6px;
-    padding: 8px 16px;
+    padding: 8px 12px;
     color: #1a1a1a;
     font-size: 14px;
 }
@@ -3303,7 +3478,7 @@ QMenu#AssetCardMenu::separator {
     background: #f5f5f5;
     border: none;
     border-radius: 6px;
-    padding: 8px 16px;
+    padding: 8px 12px;
     color: #1a1a1a;
     font-size: 14px;
     text-align: center;
@@ -3368,7 +3543,7 @@ QMenu#AssetCardMenu::separator {
     background: #f5f5f5;
     border: none;
     border-radius: 6px;
-    padding: 8px 16px;
+    padding: 8px 12px;
     color: #1a1a1a;
     font-size: 14px;
     font-weight: 500;
@@ -3449,7 +3624,7 @@ QMenu#AssetCardMenu::separator {
     border: 1px solid rgba(0, 0, 0, 0.4);
 }
 
-/* 卡片缩略图区域 */
+/* 卡片缩略图区�?*/
 #ProjectCardThumb {
     background: rgba(0, 0, 0, 0.08);
     border-top-left-radius: 0px;
@@ -3479,7 +3654,7 @@ QMenu#AssetCardMenu::separator {
     border-radius: 10px;
     font-weight: 600;
     font-size: 11px;
-    padding: 8px 16px;
+    padding: 8px 12px;
     outline: none;
 }
 
@@ -3503,7 +3678,7 @@ QMenu#AssetCardMenu::separator {
 
 /* ===== 工程配置界面样式 ===== */
 
-/* 主容器 */
+/* 主容�?*/
 #ConfigToolUI {
     background-color: #ffffff;
 }
@@ -3532,7 +3707,7 @@ QMenu#AssetCardMenu::separator {
     background-color: rgba(0, 0, 0, 0.15);
 }
 
-/* 分隔线 */
+/* 分隔�?*/
 #ConfigToolSeparator {
     background: qlineargradient(
         x1:0, y1:0, x2:1, y2:0,
@@ -3553,7 +3728,7 @@ QMenu#AssetCardMenu::separator {
     background-color: transparent;
 }
 
-/* 空状态标签 */
+/* 空状态标�?*/
 #ConfigToolEmptyLabel {
     color: rgba(0, 0, 0, 0.3);
     font-size: 16px;
@@ -3627,9 +3802,9 @@ QMenu#AssetCardMenu::separator {
 
 /* ===== site_recommendations\site_recommendations.qss ===== */
 
-/* ===== 作者推荐界面样式 ===== */
+/* ===== 作者推荐界面样�?===== */
 
-/* 主容器 */
+/* 主容�?*/
 #SiteRecommendationsUI {
     background-color: #ffffff;
 }
@@ -3641,7 +3816,7 @@ QMenu#AssetCardMenu::separator {
     padding: 5px 0;
 }
 
-/* 分隔线 */
+/* 分隔�?*/
 #SiteRecommendationsSeparator {
     background: qlineargradient(
         x1:0, y1:0, x2:1, y2:0,
@@ -3756,7 +3931,7 @@ QCheckBox:disabled {
    设置页面字体优化
    ======================================== */
 
-/* 分组标题（如"主题设置"、"关闭方式设置"） */
+/* 分组标题（如"主题设置"�?关闭方式设置"�?*/
 #SubSectionLabel {
     color: #4a9eff;
     font-size: 14px;
@@ -3764,7 +3939,7 @@ QCheckBox:disabled {
     padding: 8px 0px 4px 0px;
 }
 
-/* 选项标签（如"默认主题"、"悬浮窗"） */
+/* 选项标签（如"默认主题"�?悬浮�?�?*/
 #SettingLabel {
     color: #1a1a1a;
     font-size: 12px;

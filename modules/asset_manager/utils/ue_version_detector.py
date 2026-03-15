@@ -39,6 +39,16 @@ class UEVersionDetector:
         if not asset_path.exists():
             return ""
         
+        # 如果是目录，优先检查 .uproject 文件（项目类型）
+        if asset_path.is_dir():
+            uproject_files = list(asset_path.glob("*.uproject"))
+            if uproject_files:
+                version = self._read_uproject_version(uproject_files[0])
+                if version:
+                    if self._logger:
+                        self._logger.debug(f"从.uproject读取版本: {asset_path.name} -> UE {version}")
+                    return version
+        
         # 查找.uasset文件
         uasset_files = []
         if asset_path.is_file() and asset_path.suffix == '.uasset':
@@ -67,6 +77,29 @@ class UEVersionDetector:
             self._logger.debug(f"检测到资产版本: {asset_path.name} -> UE {version}")
         
         return version
+    
+    def _read_uproject_version(self, uproject_file: Path) -> str:
+        """从.uproject文件读取引擎版本
+        
+        Args:
+            uproject_file: .uproject文件路径
+            
+        Returns:
+            str: 版本字符串（如"4.26", "5.4"），读取失败返回空字符串
+        """
+        try:
+            import json
+            with open(uproject_file, 'r', encoding='utf-8') as f:
+                uproject_data = json.load(f)
+                # .uproject 使用 EngineAssociation 字段，格式可能是 "4.26" 或 "{GUID}"
+                engine_assoc = uproject_data.get('EngineAssociation', '')
+                if engine_assoc and not engine_assoc.startswith('{'):
+                    # 如果不是 GUID，直接使用
+                    return engine_assoc
+        except Exception as e:
+            if self._logger:
+                self._logger.debug(f"读取.uproject版本失败: {uproject_file} - {e}")
+        return ""
     
     def _detect_ue5_features(self, asset_path: Path) -> bool:
         """检测资产是否包含UE5特性（Lumen、Nanite等）
@@ -164,7 +197,7 @@ class UEVersionDetector:
                 # 使用更直接的方法：读取偏移 4 位置的数据作为版本指示
                 # 实际上最可靠的是读取 Package 的 Compatible 和 SavedByEngineVersion
                 
-                # 使用正确的UE版本映射表
+                # 使用改进的UE版本映射表（更精确）
                 if file_version_ue4 >= 1000:  # UE5
                     # UE5 版本映射
                     if file_version_ue4 >= 1004:
@@ -183,16 +216,28 @@ class UEVersionDetector:
                     return "4.26"
                 elif file_version_ue4 >= 517:
                     return "4.25"
+                elif file_version_ue4 >= 516:
+                    return "4.24"
+                elif file_version_ue4 >= 513:
+                    return "4.23"
+                elif file_version_ue4 >= 510:
+                    return "4.22"
+                elif file_version_ue4 >= 508:
+                    return "4.21"
                 elif file_version_ue4 >= 504:
-                    return "4.20"  # 4.20-4.24 使用 4.20 代表
+                    return "4.20"
+                elif file_version_ue4 >= 498:
+                    return "4.19"
+                elif file_version_ue4 >= 491:
+                    return "4.18"
                 elif file_version_ue4 >= 482:
-                    return "4.16"  # 4.16-4.19 使用 4.16 代表
+                    return "4.16"
                 elif file_version_ue4 >= 352:
-                    return "4.11"  # 4.11-4.15 使用 4.11 代表
+                    return "4.11"
                 elif file_version_ue4 >= 342:
-                    return "4.7"   # 4.7-4.10 使用 4.7 代表
+                    return "4.7"
                 else:
-                    return "4.0"   # 4.0-4.6 及更早版本
+                    return "4.0"
                 
         except Exception as e:
             if self._logger:

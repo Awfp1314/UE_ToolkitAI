@@ -199,10 +199,17 @@ class AssetManagerLogic(QObject):
 
         # 加载分类（就地修改，保持与 _asset_core.categories 的引用一致）
         new_categories = lib_config.get("categories", config.get("categories", ["默认分类"]))
+        print("=" * 80)
+        print(f"[加载分类] lib_config.get('categories'): {lib_config.get('categories')}")
+        print(f"[加载分类] config.get('categories'): {config.get('categories')}")
+        print(f"[加载分类] new_categories: {new_categories}")
+        print("=" * 80)
         if "默认分类" not in new_categories:
             new_categories.insert(0, "默认分类")
         self.categories.clear()
         self.categories.extend(new_categories)
+        print(f"[加载分类] self.categories 更新后: {self.categories}")
+        print("=" * 80)
 
         # 优先从缓存加载资产（快速启动）
         cached_assets_data = lib_config.get("assets", config.get("assets", []))
@@ -439,13 +446,19 @@ class AssetManagerLogic(QObject):
                         create_markdown: bool = False, engine_version: str = "",
                         package_type: PackageType = PackageType.CONTENT,
                         plugin_folder_name: str = "",
+                        original_filename: str = "",
                         progress_callback: Optional[Callable[[int, int, str], None]] = None
                         ) -> Optional[Asset]:
-        """异步添加资产（支持进度回调）"""
+        """异步添加资产（支持进度回调）
+        
+        Args:
+            original_filename: 原始文件名（用于压缩包，避免使用临时目录名）
+        """
         return self._add_asset_impl(
             asset_path, asset_type, name, category, description,
             create_markdown, engine_version, package_type=package_type,
             plugin_folder_name=plugin_folder_name,
+            original_filename=original_filename,
             progress_callback=progress_callback
         )
 
@@ -454,6 +467,7 @@ class AssetManagerLogic(QObject):
                          engine_version: str,
                          package_type: PackageType = PackageType.CONTENT,
                          plugin_folder_name: str = "",
+                         original_filename: str = "",
                          progress_callback: Optional[Callable] = None) -> Optional[Asset]:
         """添加资产的统一实现
         
@@ -465,7 +479,13 @@ class AssetManagerLogic(QObject):
         
         Args:
             plugin_folder_name: 插件类型时，插件的原始文件夹名称
+            original_filename: 原始文件名（用于压缩包，避免使用临时目录名）
         """
+        # 性能监控：记录开始时间和各步骤耗时
+        import time
+        perf_start = time.time()
+        perf_steps = {}
+        
         # 暂时禁用自动检测器，避免在添加资产期间触发重复检测
         auto_detector_was_enabled = False
         if hasattr(self, '_auto_detector') and self._auto_detector:
@@ -494,10 +514,15 @@ class AssetManagerLogic(QObject):
             if progress_callback:
                 progress_callback(5, 100, "创建资产目录...")
 
+            # 性能监控：记录目录创建开始
+            step_start = time.time()
+            
             # 确保分类文件夹存在
             category_folder = library_path / category
             if not category_folder.exists():
                 category_folder.mkdir(parents=True, exist_ok=True)
+            
+            perf_steps['创建目录'] = time.time() - step_start
 
             # 确定资产包装文件夹名称（用户命名，处理重名）
             asset_wrapper_name = name if name else asset_path.name
@@ -518,6 +543,9 @@ class AssetManagerLogic(QObject):
             if progress_callback:
                 progress_callback(10, 100, "移动资产文件...")
 
+            # 性能监控：记录文件复制开始
+            step_start = time.time()
+            
             def move_progress(current, total, message):
                 if progress_callback and total > 0:
                     move_pct = (current / total) * 70
@@ -563,17 +591,238 @@ class AssetManagerLogic(QObject):
                     asset_path, target_path, progress_callback=move_progress
                 )
             else:
-                # Others 类型：直接复制到 Others/ 下
-                target_path = inner_folder / asset_path.name
-                logger.info(f"导入其他资源: {asset_path} -> {target_path}")
-                if asset_path.is_dir():
-                    success = self._file_ops.safe_copytree(
-                        asset_path, target_path, progress_callback=move_progress
-                    )
-                else:
-                    success = self._file_ops.safe_copy_file(
-                        asset_path, target_path, progress_callback=move_progress
-                    )
+                # Others 类型：智能提取并分类整理
+                # 结构：自定义名称/Others/资产名/Models|Textures|...
+                logger.info(f"导入其他资源（智能整理模式）: {asset_path}")
+                
+                import zipfile
+                import tempfile
+                from pathlib import Path
+                from ..utils.archive_extractor import is_ad_file
+                
+                # 创建资产名称子文件夹（在 Others/ 下）
+                # 优先使用原始文件名，避免使用临时目录名
+                subfolder_name = original_filename if original_filename else asset_path.name
+                asset_subfolder = inner_folder / subfolder_name
+                asset_subfolder.mkdir(parents=True, exist_ok=True)
+                logger.info(f"OTHERS 类型子文件夹名称: {subfolder_name} (原始: {original_filename}, 路径: {asset_path.name})")
+                
+                # 按类型分类文件
+                model_extensions = {'.fbx', '.obj', '.gltf', '.glb', '.abc', '.usd', '.usda', '.usdc'}
+                texture_extensions = {'.png', '.jpg', '.jpeg', '.tga', '.bmp', '.exr', '.hdr', '.tif', '.tiff'}
+                audio_extensions = {'.wav', '.mp3', '.ogg', '.flac', '.aac', '.m4a'}
+                video_extensions = {'.mp4', '.avi', '.mov', '.mkv', '.wmv', '.flv', '.webm'}
+                ue_asset_extensions = {'.uasset', '.umap', '.uexp', '.ubulk'}
+                
+                # 收集文件（按类型分类，同时记录文件大小）
+                models = {}  # {文件名: (文件路径, 文件大小)}
+                textures = {}
+                audios = {}
+                videos = {}
+                ue_assets = {}
+                temp_dirs = []
+                
+                try:
+                    def scan_and_extract(directory):
+                        """递归扫描目录，自动解压嵌套 zip，收集文件（过滤广告）"""
+                        for item in directory.iterdir():
+                            if item.is_file():
+                                # 检查是否为广告文件
+                                if is_ad_file(item):
+                                    logger.info(f"🚫 跳过广告文件: {item.name}")
+                                    continue
+                                
+                                ext = item.suffix.lower()
+                                if ext == '.zip':
+                                    # 自动解压嵌套 zip
+                                    try:
+                                        temp_dir = Path(tempfile.mkdtemp(prefix='ue_toolkit_nested_'))
+                                        temp_dirs.append(temp_dir)
+                                        logger.info(f"解压嵌套 zip: {item.name}")
+                                        
+                                        with zipfile.ZipFile(item, 'r') as zip_ref:
+                                            zip_ref.extractall(temp_dir)
+                                        
+                                        scan_and_extract(temp_dir)
+                                    except Exception as e:
+                                        logger.warning(f"解压嵌套 zip 失败: {item}, {e}")
+                                elif ext in model_extensions:
+                                    # 去重：同名文件只保留一个
+                                    if item.name not in models:
+                                        file_size = item.stat().st_size
+                                        models[item.name] = (item, file_size)
+                                elif ext in texture_extensions:
+                                    if item.name not in textures:
+                                        file_size = item.stat().st_size
+                                        textures[item.name] = (item, file_size)
+                                elif ext in audio_extensions:
+                                    if item.name not in audios:
+                                        file_size = item.stat().st_size
+                                        audios[item.name] = (item, file_size)
+                                elif ext in video_extensions:
+                                    if item.name not in videos:
+                                        file_size = item.stat().st_size
+                                        videos[item.name] = (item, file_size)
+                                elif ext in ue_asset_extensions:
+                                    if item.name not in ue_assets:
+                                        file_size = item.stat().st_size
+                                        ue_assets[item.name] = (item, file_size)
+                            elif item.is_dir():
+                                scan_and_extract(item)
+                    
+                    # 开始扫描
+                    scan_and_extract(asset_path)
+                    
+                    # 统计文件数量和总大小
+                    total_files = len(models) + len(textures) + len(audios) + len(videos) + len(ue_assets)
+                    total_bytes = sum(size for _, size in models.values()) + \
+                                  sum(size for _, size in textures.values()) + \
+                                  sum(size for _, size in audios.values()) + \
+                                  sum(size for _, size in videos.values()) + \
+                                  sum(size for _, size in ue_assets.values())
+                    
+                    if total_files == 0:
+                        logger.error("未找到任何有用的文件")
+                        success = False
+                    else:
+                        success = True
+                        logger.info(f"📊 找到文件: 模型 {len(models)}, 贴图 {len(textures)}, 音频 {len(audios)}, 视频 {len(videos)}, UE资产 {len(ue_assets)}")
+                        logger.info(f"📊 总大小: {self._file_ops.format_size(total_bytes)}, 总文件数: {total_files}")
+                        
+                        copied_bytes = 0
+                        
+                        def copy_file_with_progress(source_file, target_file, file_size, file_type):
+                            """复制文件并报告进度（基于字节数）"""
+                            nonlocal copied_bytes
+                            
+                            logger.debug(f"📄 开始复制 {file_type}: {source_file.name} ({self._file_ops.format_size(file_size)})")
+                            
+                            # 小文件（< 1MB）：直接复制
+                            if file_size < 1024 * 1024:
+                                import shutil
+                                shutil.copy2(source_file, target_file)
+                                copied_bytes += file_size
+                                
+                                if progress_callback:
+                                    progress = 10 + int(copied_bytes / total_bytes * 70)
+                                    progress_callback(progress, 100, f"复制{file_type}: {source_file.name}")
+                            else:
+                                # 大文件（≥ 1MB）：分块复制并实时报告进度
+                                chunk_size = 1024 * 1024  # 1MB per chunk
+                                
+                                with open(source_file, 'rb') as fsrc:
+                                    with open(target_file, 'wb') as fdst:
+                                        while True:
+                                            chunk = fsrc.read(chunk_size)
+                                            if not chunk:
+                                                break
+                                            fdst.write(chunk)
+                                            copied_bytes += len(chunk)
+                                            
+                                            if progress_callback:
+                                                progress = 10 + int(copied_bytes / total_bytes * 70)
+                                                progress_callback(progress, 100, f"复制{file_type}: {source_file.name}")
+                                
+                                # 复制元数据
+                                import shutil
+                                shutil.copystat(str(source_file), str(target_file))
+                        
+                        # 复制模型文件到 Models/
+                        if models:
+                            models_folder = asset_subfolder / "Models"
+                            models_folder.mkdir(parents=True, exist_ok=True)
+                            for filename, (source_file, file_size) in models.items():
+                                target_file = models_folder / filename
+                                try:
+                                    copy_file_with_progress(source_file, target_file, file_size, "模型")
+                                except Exception as e:
+                                    logger.error(f"复制模型失败: {source_file} -> {target_file}, {e}")
+                                    success = False
+                                    break
+                        
+                        # 复制贴图文件到 Textures/
+                        if success and textures:
+                            textures_folder = asset_subfolder / "Textures"
+                            textures_folder.mkdir(parents=True, exist_ok=True)
+                            for filename, (source_file, file_size) in textures.items():
+                                target_file = textures_folder / filename
+                                try:
+                                    copy_file_with_progress(source_file, target_file, file_size, "贴图")
+                                except Exception as e:
+                                    logger.error(f"复制贴图失败: {source_file} -> {target_file}, {e}")
+                                    success = False
+                                    break
+                        
+                        # 复制音频文件到 Audio/
+                        if success and audios:
+                            audio_folder = asset_subfolder / "Audio"
+                            audio_folder.mkdir(parents=True, exist_ok=True)
+                            for filename, (source_file, file_size) in audios.items():
+                                target_file = audio_folder / filename
+                                try:
+                                    copy_file_with_progress(source_file, target_file, file_size, "音频")
+                                except Exception as e:
+                                    logger.error(f"复制音频失败: {source_file} -> {target_file}, {e}")
+                                    success = False
+                                    break
+                        
+                        # 复制视频文件到 Video/
+                        if success and videos:
+                            video_folder = asset_subfolder / "Video"
+                            video_folder.mkdir(parents=True, exist_ok=True)
+                            for filename, (source_file, file_size) in videos.items():
+                                target_file = video_folder / filename
+                                try:
+                                    copy_file_with_progress(source_file, target_file, file_size, "视频")
+                                except Exception as e:
+                                    logger.error(f"复制视频失败: {source_file} -> {target_file}, {e}")
+                                    success = False
+                                    break
+                        
+                        # 复制 UE 资产到 UEAssets/
+                        if success and ue_assets:
+                            ue_folder = asset_subfolder / "UEAssets"
+                            ue_folder.mkdir(parents=True, exist_ok=True)
+                            for filename, (source_file, file_size) in ue_assets.items():
+                                target_file = ue_folder / filename
+                                try:
+                                    copy_file_with_progress(source_file, target_file, file_size, "UE资产")
+                                except Exception as e:
+                                    logger.error(f"复制UE资产失败: {source_file} -> {target_file}, {e}")
+                                    success = False
+                                    break
+                
+                finally:
+                    # 清理临时目录（延迟删除，避免文件占用）
+                    import time
+                    import gc
+                    
+                    # 强制垃圾回收，释放文件句柄
+                    gc.collect()
+                    
+                    # 等待一小段时间，让 Windows 释放文件句柄
+                    time.sleep(0.5)
+                    
+                    for temp_dir in temp_dirs:
+                        try:
+                            import shutil
+                            # 重试机制：最多尝试 3 次
+                            for attempt in range(3):
+                                try:
+                                    shutil.rmtree(temp_dir)
+                                    logger.info(f"成功清理临时目录: {temp_dir}")
+                                    break
+                                except PermissionError as pe:
+                                    if attempt < 2:
+                                        logger.warning(f"临时目录被占用，等待后重试 ({attempt + 1}/3): {temp_dir}")
+                                        time.sleep(1)
+                                    else:
+                                        logger.warning(f"临时目录清理失败（文件被占用），将在程序退出时由系统清理: {temp_dir}")
+                                except Exception as e:
+                                    logger.warning(f"清理临时目录失败: {temp_dir}, {e}")
+                                    break
+                        except Exception as e:
+                            logger.warning(f"清理临时目录时出错: {temp_dir}, {e}")
 
             if success is False:
                 error_msg = f"复制资产失败: {asset_path}"
@@ -581,12 +830,18 @@ class AssetManagerLogic(QObject):
                 self.error_occurred.emit(error_msg)
                 return None
 
+            # 性能监控：记录文件复制耗时
+            perf_steps['复制文件'] = time.time() - step_start
+            
             # 记录复制位置
             logger.info(f"资产已复制到: {inner_folder} (类型: {package_type.display_name})")
 
             if progress_callback:
                 progress_callback(80, 100, "创建资产记录...")
 
+            # 性能监控：记录资产记录创建开始
+            step_start = time.time()
+            
             # 创建资产对象（指向包装文件夹，而不是内部子文件夹）
             asset_id = str(uuid.uuid4())
             asset_name = asset_wrapper_name
@@ -613,13 +868,21 @@ class AssetManagerLogic(QObject):
             # 如果是插件类型，设置默认缩略图（在保存配置之前）
             if package_type == PackageType.PLUGIN:
                 self._set_plugin_default_thumbnail(asset)
+            # 如果是 OTHERS 类型，根据内容设置默认缩略图
+            elif package_type == PackageType.OTHERS:
+                self._set_others_default_thumbnail(asset, wrapper_path)
+            
+            perf_steps['创建记录'] = time.time() - step_start
 
             if progress_callback:
                 progress_callback(90, 100, "保存配置...")
             else:
                 self.progress_updated.emit(0, 1, "正在保存配置...")
 
+            # 性能监控：记录保存配置开始
+            step_start = time.time()
             self._save_config()
+            perf_steps['保存配置'] = time.time() - step_start
             logger.info(f"添加资产成功: {asset_name} ({asset_type.value}), 插件类型: {package_type == PackageType.PLUGIN}")
 
             self.asset_added.emit(asset)
@@ -629,7 +892,12 @@ class AssetManagerLogic(QObject):
                     progress_callback(95, 100, "创建文档...")
                 else:
                     self.progress_updated.emit(0, 1, "正在创建文档...")
+                
+                # 性能监控：记录文档创建开始
+                step_start = time.time()
                 self._create_asset_markdown(asset)
+                perf_steps['创建文档'] = time.time() - step_start
+                
                 if not progress_callback:
                     self.progress_updated.emit(1, 1, "文档创建完成")
 
@@ -638,6 +906,10 @@ class AssetManagerLogic(QObject):
             else:
                 self.progress_updated.emit(1, 1, "资产添加完成！")
 
+            # 性能监控：记录总耗时并输出到日志文件
+            total_time = time.time() - perf_start
+            self._log_performance(asset_name, package_type, size, perf_steps, total_time, wrapper_path)
+            
             return asset
 
         except Exception as e:
@@ -667,24 +939,59 @@ class AssetManagerLogic(QObject):
             total_items = len(items)
             logger.info(f"源路径为 Content 文件夹，复制 {total_items} 个子项到: {target_folder}")
             
-            for idx, item in enumerate(items, 1):
+            # 预先扫描所有文件，计算总大小（用于进度映射）
+            total_bytes = 0
+            item_sizes = []
+            for item in items:
+                if item.is_dir():
+                    # 递归计算目录大小
+                    dir_size = sum(f.stat().st_size for f in item.rglob('*') if f.is_file())
+                    item_sizes.append(dir_size)
+                    total_bytes += dir_size
+                else:
+                    file_size = item.stat().st_size
+                    item_sizes.append(file_size)
+                    total_bytes += file_size
+            
+            logger.info(f"📊 统计到 {total_items} 个子项，总大小 {self._file_ops.format_size(total_bytes)}")
+            
+            # 复制每个子项
+            copied_bytes = 0
+            for idx, (item, item_size) in enumerate(zip(items, item_sizes), 1):
                 target_item = target_folder / item.name
+                
+                # 定义子项的进度回调（映射到 10-80% 范围）
+                def item_progress(current_bytes, total_bytes_item, message):
+                    if progress_callback and total_bytes > 0:
+                        # 计算当前总进度（已复制 + 当前文件进度）
+                        current_total = copied_bytes + current_bytes
+                        # 映射到 10-80% 范围
+                        pct = (current_total / total_bytes) * 70
+                        progress_callback(10 + int(pct), 100, f"复制: {item.name}")
+                
+                # 复制子项
                 if item.is_dir():
                     item_success = self._file_ops.safe_copytree(
-                        item, target_item, progress_callback=None
+                        item, target_item, progress_callback=item_progress
                     )
                 else:
                     item_success = self._file_ops.safe_copy_file(
-                        item, target_item, progress_callback=None
+                        item, target_item, progress_callback=item_progress
                     )
                 
                 if item_success is False:
                     logger.error(f"复制子项失败: {item} -> {target_item}")
                     return False
                 
-                if progress_callback and total_items > 0:
-                    pct = (idx / total_items) * 70
-                    progress_callback(10 + int(pct), 100, f"复制: {item.name}")
+                # 更新已复制字节数
+                copied_bytes += item_size
+                
+                # 报告子项完成进度
+                if progress_callback and total_bytes > 0:
+                    pct = (copied_bytes / total_bytes) * 70
+                    progress_callback(10 + int(pct), 100, f"已完成: {item.name}")
+            
+            logger.info(f"✅ 成功复制 {total_items} 个子项，总大小 {self._file_ops.format_size(copied_bytes)}")
             return True
         else:
             # 标准流程：复制整个路径到目标文件夹内
@@ -814,6 +1121,122 @@ class AssetManagerLogic(QObject):
         except Exception as e:
             logger.warning(f"创建 Word 文档失败: {e}", exc_info=True)
 
+    def _log_performance(self, asset_name: str, package_type, size: int,
+                         perf_steps: dict, total_time: float, asset_path: Path = None) -> None:
+        """记录性能数据到日志文件
+
+        Args:
+            asset_name: 资产名称
+            package_type: 资产类型
+            size: 资产大小（字节）
+            perf_steps: 各步骤耗时字典
+            total_time: 总耗时（秒）
+            asset_path: 资产路径（用于生成文件结构）
+        """
+        try:
+            from datetime import datetime
+
+            # 性能日志文件路径
+            perf_log_path = Path("project-logs/PERFORMANCE.md")
+
+            # 格式化时间戳
+            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+            # 格式化资产大小
+            size_str = self._file_ops.format_size(size)
+
+            # 构建性能记录
+            perf_record = f"\n### {asset_name}\n\n"
+            perf_record += f"- **时间戳**: {timestamp}\n"
+            perf_record += f"- **资产类型**: {package_type.display_name}\n"
+            perf_record += f"- **资产大小**: {size_str} ({size:,} 字节)\n"
+            perf_record += f"- **总耗时**: {total_time:.2f} 秒\n"
+            perf_record += f"\n**各步骤耗时**:\n\n"
+
+            for step_name, step_time in perf_steps.items():
+                percentage = (step_time / total_time * 100) if total_time > 0 else 0
+                perf_record += f"- {step_name}: {step_time:.2f} 秒 ({percentage:.1f}%)\n"
+
+            # 添加文件结构
+            if asset_path and asset_path.exists():
+                perf_record += f"\n**文件结构**:\n\n"
+                perf_record += "```\n"
+                perf_record += self._generate_tree_structure(asset_path, max_depth=3)
+                perf_record += "```\n"
+
+            perf_record += f"\n---\n"
+
+            # 追加到日志文件
+            with open(perf_log_path, 'a', encoding='utf-8') as f:
+                f.write(perf_record)
+
+            logger.info(f"性能数据已记录: {asset_name}, 总耗时 {total_time:.2f} 秒")
+
+        except Exception as e:
+            logger.warning(f"记录性能数据失败: {e}", exc_info=True)
+
+    def _generate_tree_structure(self, path: Path, prefix: str = "", max_depth: int = 3, 
+                                  current_depth: int = 0, max_files: int = 50) -> str:
+        """生成目录树结构（限制深度和文件数量）
+
+        Args:
+            path: 目录路径
+            prefix: 前缀字符串（用于缩进）
+            max_depth: 最大深度
+            current_depth: 当前深度
+            max_files: 最大文件数量
+
+        Returns:
+            目录树字符串
+        """
+        if current_depth >= max_depth:
+            return ""
+
+        tree = ""
+        file_count = 0
+
+        try:
+            items = sorted(path.iterdir(), key=lambda x: (not x.is_dir(), x.name.lower()))
+            
+            for i, item in enumerate(items):
+                if file_count >= max_files:
+                    tree += f"{prefix}└── ... (省略剩余文件)\n"
+                    break
+
+                is_last = (i == len(items) - 1)
+                connector = "└── " if is_last else "├── "
+                
+                if item.is_dir():
+                    tree += f"{prefix}{connector}{item.name}/\n"
+                    
+                    # 递归处理子目录
+                    if current_depth + 1 < max_depth:
+                        extension = "    " if is_last else "│   "
+                        tree += self._generate_tree_structure(
+                            item, 
+                            prefix + extension, 
+                            max_depth, 
+                            current_depth + 1,
+                            max_files - file_count
+                        )
+                else:
+                    # 显示文件大小
+                    try:
+                        file_size = item.stat().st_size
+                        size_str = self._file_ops.format_size(file_size)
+                        tree += f"{prefix}{connector}{item.name} ({size_str})\n"
+                    except:
+                        tree += f"{prefix}{connector}{item.name}\n"
+                    
+                    file_count += 1
+
+        except PermissionError:
+            tree += f"{prefix}└── [权限不足]\n"
+        except Exception as e:
+            tree += f"{prefix}└── [错误: {e}]\n"
+
+        return tree
+
     def _format_size(self, size: int) -> str:
         """格式化文件大小 - 委托给 FileOperations"""
         return self._file_ops.format_size(size)
@@ -859,6 +1282,107 @@ class AssetManagerLogic(QObject):
             
         except Exception as e:
             logger.warning(f"设置插件默认缩略图失败: {e}", exc_info=True)
+    
+    def _set_others_default_thumbnail(self, asset: Asset, wrapper_path: Path) -> None:
+        """为 OTHERS 类型资产设置默认缩略图
+        
+        根据资产内容类型（图片/视频/音频）设置不同的默认图标：
+        - 图片：使用第一张图片作为缩略图
+        - 视频：使用视频默认图标
+        - 音频：使用音频默认图标
+        - 其他：不设置（保持空白）
+        
+        Args:
+            asset: 资产对象
+            wrapper_path: 资产包装文件夹路径
+        """
+        try:
+            others_folder = wrapper_path / "Others"
+            if not others_folder.exists():
+                return
+            
+            # 定义文件扩展名
+            image_extensions = {'.png', '.jpg', '.jpeg', '.bmp', '.tga', '.tiff', '.tif'}
+            video_extensions = {'.mp4', '.avi', '.mov', '.mkv', '.wmv', '.flv', '.webm'}
+            audio_extensions = {'.wav', '.mp3', '.ogg', '.flac', '.aac', '.m4a'}
+            
+            # 扫描 Others 文件夹，检测资产类型
+            has_images = False
+            has_videos = False
+            has_audios = False
+            first_image = None
+            
+            for file in others_folder.rglob('*'):
+                if file.is_file():
+                    ext = file.suffix.lower()
+                    if ext in image_extensions:
+                        has_images = True
+                        if first_image is None:
+                            first_image = file
+                    elif ext in video_extensions:
+                        has_videos = True
+                    elif ext in audio_extensions:
+                        has_audios = True
+            
+            # 确保缩略图目录存在
+            thumbnails_dir = self.thumbnails_dir
+            if not thumbnails_dir.exists():
+                thumbnails_dir.mkdir(parents=True, exist_ok=True)
+            
+            thumbnail_filename = f"{asset.id}.png"
+            thumbnail_path = thumbnails_dir / thumbnail_filename
+            
+            # 根据资产类型设置缩略图
+            if has_images and first_image:
+                # 图片资源：使用第一张图片作为缩略图
+                try:
+                    from PIL import Image
+                    img = Image.open(first_image)
+                    # 缩放到合适的尺寸（172x115）
+                    img.thumbnail((172, 115), Image.Resampling.LANCZOS)
+                    # 创建白色背景
+                    background = Image.new('RGB', (172, 115), (255, 255, 255))
+                    # 居中粘贴
+                    offset = ((172 - img.width) // 2, (115 - img.height) // 2)
+                    if img.mode == 'RGBA':
+                        background.paste(img, offset, img)
+                    else:
+                        background.paste(img, offset)
+                    background.save(thumbnail_path, 'PNG')
+                    asset.thumbnail_path = thumbnail_path
+                    logger.info(f"已为图片资产设置缩略图: {asset.name}")
+                    return
+                except Exception as e:
+                    logger.warning(f"生成图片缩略图失败: {e}")
+            
+            # 视频或音频资源：使用默认图标
+            if has_videos or has_audios:
+                # 获取默认图标路径
+                if getattr(sys, 'frozen', False):
+                    base_path = Path(sys._MEIPASS)
+                else:
+                    base_path = Path(__file__).parent.parent.parent.parent
+                
+                if has_videos:
+                    default_icon_path = base_path / "resources" / "icons" / "video_default.png"
+                    icon_type = "视频"
+                else:
+                    default_icon_path = base_path / "resources" / "icons" / "audio_default.png"
+                    icon_type = "音频"
+                
+                if not default_icon_path.exists():
+                    logger.warning(f"默认{icon_type}图标不存在: {default_icon_path}")
+                    return
+                
+                # 复制默认图标作为缩略图
+                import shutil
+                shutil.copy2(default_icon_path, thumbnail_path)
+                asset.thumbnail_path = thumbnail_path
+                logger.info(f"已为{icon_type}资产设置默认缩略图: {asset.name}")
+                return
+            
+        except Exception as e:
+            logger.warning(f"设置 OTHERS 默认缩略图失败: {e}", exc_info=True)
 
     def remove_asset(self, asset_id: str, delete_physical: bool = False) -> bool:
         """删除资产"""
@@ -896,14 +1420,34 @@ class AssetManagerLogic(QObject):
                 except Exception as e:
                     logger.warning(f"删除缩略图失败: {e}")
 
-            # 删除关联文档
+            # 删除关联文档（支持 .docx 和旧的 .txt/.md 格式）
             if self.documents_dir:
-                doc_path = self.documents_dir / f"{asset_id}.txt"
+                # 优先删除 .docx 文件
+                doc_path = self.documents_dir / f"{asset_id}.docx"
                 if doc_path.exists():
                     try:
                         doc_path.unlink()
+                        logger.info(f"已删除资产文档: {doc_path}")
                     except Exception as e:
                         logger.warning(f"删除关联文档失败: {e}")
+                
+                # 兼容旧格式：删除 .txt 文件
+                txt_path = self.documents_dir / f"{asset_id}.txt"
+                if txt_path.exists():
+                    try:
+                        txt_path.unlink()
+                        logger.info(f"已删除旧格式文档: {txt_path}")
+                    except Exception as e:
+                        logger.warning(f"删除旧格式文档失败: {e}")
+                
+                # 兼容旧格式：删除 .md 文件
+                md_path = self.documents_dir / f"{asset_id}.md"
+                if md_path.exists():
+                    try:
+                        md_path.unlink()
+                        logger.info(f"已删除旧格式文档: {md_path}")
+                    except Exception as e:
+                        logger.warning(f"删除旧格式文档失败: {e}")
 
             self._save_config()
 
@@ -1006,33 +1550,21 @@ class AssetManagerLogic(QObject):
             return []
 
         try:
-            # SearchEngine 使用不同的排序方法名，需要适配
-            method_map = {
-                "添加时间（最新）": "添加时间（最新）",
-                "添加时间（最早）": "添加时间（最旧）",
-                "名称（A-Z）": "名称（A-Z）",
-                "名称（Z-A）": "名称（Z-A）",
-                "分类（A-Z）": "分类（A-Z）",
-                "分类（Z-A）": "分类（Z-A）",
-            }
-            mapped_method = method_map.get(sort_method, sort_method)
-
-            # SearchEngine.sort 使用 added_time 属性，但 Asset 使用 created_time
             # 保持原有排序逻辑以确保向后兼容
-            if sort_method == "添加时间（最新）":
+            if sort_method in ["添加时间（最新）", "🕐 最新添加"]:
                 return sorted(assets,
                               key=lambda x: x.created_time if x.created_time else datetime.min,
                               reverse=True)
-            elif sort_method == "添加时间（最早）":
+            elif sort_method in ["添加时间（最早）", "🕐 最早添加"]:
                 return sorted(assets,
                               key=lambda x: x.created_time if x.created_time else datetime.min)
-            elif sort_method == "名称（A-Z）":
+            elif sort_method in ["名称（A-Z）", "🔤 名称 A-Z"]:
                 return sorted(assets, key=lambda x: x.name.lower())
-            elif sort_method == "名称（Z-A）":
+            elif sort_method in ["名称（Z-A）", "🔤 名称 Z-A"]:
                 return sorted(assets, key=lambda x: x.name.lower(), reverse=True)
-            elif sort_method == "分类（A-Z）":
+            elif sort_method in ["分类（A-Z）", "📁 分类 A-Z"]:
                 return sorted(assets, key=lambda x: (x.category.lower(), x.name.lower()))
-            elif sort_method == "分类（Z-A）":
+            elif sort_method in ["分类（Z-A）", "📁 分类 Z-A"]:
                 return sorted(assets, key=lambda x: (x.category.lower(), x.name.lower()),
                               reverse=True)
             else:
@@ -1063,18 +1595,29 @@ class AssetManagerLogic(QObject):
 
         old_name = asset.name
         old_category = asset.category
+        old_path = asset.path
 
-        if new_name is not None and new_name.strip():
-            self._asset_core.update_asset(asset_id, name=new_name)
+        # 更新名称（同时重命名文件夹）
+        if new_name is not None and new_name.strip() and new_name != old_name:
+            new_name = new_name.strip()
+            if not self._rename_asset_folder(asset, new_name):
+                logger.warning(f"资产文件夹重命名失败，仅更新配置: {old_name} -> {new_name}")
+            # 更新配置中的名称和路径
+            self._asset_core.update_asset(asset_id, name=new_name, path=str(asset.path))
 
+        # 更新分类（移动到新分类文件夹）
         if new_category is not None and new_category.strip() and new_category != old_category:
             new_category = new_category.strip()
             if new_category not in self.categories:
                 self.add_category(new_category)
 
             if not self._move_asset_to_category(asset, new_category):
+                # 移动失败，仅更新配置中的分类
                 self._asset_core.update_asset(asset_id, category=new_category)
                 logger.warning(f"资产物理移动失败，仅更新配置: {old_category} -> {new_category}")
+            else:
+                # 移动成功，更新配置中的分类和路径
+                self._asset_core.update_asset(asset_id, category=new_category, path=str(asset.path))
 
         # 重建该资产的拼音缓存
         self._search_engine.build_pinyin_cache([asset])
@@ -1160,6 +1703,42 @@ class AssetManagerLogic(QObject):
             logger.error(f"❌ 设置资产库路径失败: {e}", exc_info=True)
             return False
 
+    def _rename_asset_folder(self, asset: Asset, new_name: str) -> bool:
+        """重命名资产文件夹
+        
+        Args:
+            asset: 资产对象
+            new_name: 新的资产名称
+            
+        Returns:
+            bool: 是否成功重命名
+        """
+        try:
+            old_path = asset.path
+            if not old_path.exists():
+                logger.warning(f"资产文件夹不存在，无法重命名: {old_path}")
+                return False
+            
+            # 构建新路径（保持在同一分类文件夹下）
+            new_path = old_path.parent / new_name
+            
+            # 检查新路径是否已存在
+            if new_path.exists():
+                logger.warning(f"目标文件夹已存在，无法重命名: {new_path}")
+                return False
+            
+            # 重命名文件夹
+            old_path.rename(new_path)
+            logger.info(f"重命名资产文件夹: {old_path.name} -> {new_name}")
+            
+            # 更新资产路径
+            asset.path = new_path
+            return True
+            
+        except Exception as e:
+            logger.error(f"重命名资产文件夹失败: {e}", exc_info=True)
+            return False
+    
     def _move_asset_to_category(self, asset: Asset, new_category: str) -> bool:
         """将资产物理移动到新分类文件夹"""
         library_path = self.get_asset_library_path()
@@ -1230,12 +1809,12 @@ class AssetManagerLogic(QObject):
         return self._preview_coordinator.set_additional_preview_projects_with_names(projects)
 
     def get_use_symlink_preview(self) -> bool:
-        """获取是否使用符号链接进行预览（默认 False）。"""
-        return self._preview_coordinator.get_use_symlink_preview()
+        """获取是否使用符号链接进行预览（已废除，始终返回 False）。"""
+        return False
 
     def set_use_symlink_preview(self, enabled: bool) -> bool:
-        """设置是否使用符号链接进行预览。"""
-        return self._preview_coordinator.set_use_symlink_preview(enabled)
+        """设置是否使用符号链接进行预览（已废除，不执行任何操作）。"""
+        return True
 
     def clean_preview_project(self) -> bool:
         """清理预览工程的Content文件夹"""

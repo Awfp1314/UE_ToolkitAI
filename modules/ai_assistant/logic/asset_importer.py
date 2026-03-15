@@ -25,6 +25,14 @@ class AssetImporter:
         """
         self.asset_manager_logic = asset_manager_logic
         self.logger = logger
+        
+        # 初始化 FileOperations（用于安全的文件操作）
+        try:
+            from modules.asset_manager.logic.file_operations import FileOperations
+            self._file_ops = FileOperations(logger=self.logger)
+        except Exception as e:
+            self.logger.warning(f"无法初始化 FileOperations: {e}")
+            self._file_ops = None
     
     def _find_running_ue_project(self) -> Optional[Path]:
         """查找正在运行的UE项目
@@ -193,13 +201,35 @@ class AssetImporter:
                     'target_path': str(target_asset_path)
                 }
             
-            # 复制资产
-            if source_path.is_dir():
-                shutil.copytree(source_path, target_asset_path)
-                self.logger.info(f"已复制资产文件夹: {source_path} -> {target_asset_path}")
+            # 复制资产（使用安全的文件操作方法）
+            if self._file_ops:
+                if source_path.is_dir():
+                    success = self._file_ops.safe_copytree(source_path, target_asset_path)
+                    if not success:
+                        return {
+                            'success': False,
+                            'message': f'[错误] 复制资产文件夹失败: {source_path}',
+                            'asset_name': asset_name
+                        }
+                    self.logger.info(f"已复制资产文件夹: {source_path} -> {target_asset_path}")
+                else:
+                    success = self._file_ops.safe_copy_file(source_path, target_asset_path)
+                    if not success:
+                        return {
+                            'success': False,
+                            'message': f'[错误] 复制资产文件失败: {source_path}',
+                            'asset_name': asset_name
+                        }
+                    self.logger.info(f"已复制资产文件: {source_path} -> {target_asset_path}")
             else:
-                shutil.copy2(source_path, target_asset_path)
-                self.logger.info(f"已复制资产文件: {source_path} -> {target_asset_path}")
+                # 降级到 shutil（不推荐）
+                self.logger.warning("FileOperations 不可用，使用 shutil 降级复制")
+                if source_path.is_dir():
+                    shutil.copytree(source_path, target_asset_path)
+                    self.logger.info(f"已复制资产文件夹: {source_path} -> {target_asset_path}")
+                else:
+                    shutil.copy2(source_path, target_asset_path)
+                    self.logger.info(f"已复制资产文件: {source_path} -> {target_asset_path}")
             
             # 检查是否是自动检测的项目
             auto_detected = not target_project_path

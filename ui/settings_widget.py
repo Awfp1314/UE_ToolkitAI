@@ -1620,7 +1620,6 @@ class AssetSection(SettingsSection):
         super().__init__("资产设置", "📦", parent)
         self.module_provider = module_provider
         self.asset_manager_logic = None
-        self._updating_symlink_preview = False
         self.setup_content()
         # 延迟加载资产管理器逻辑
         self._init_asset_manager_logic()
@@ -1659,15 +1658,6 @@ class AssetSection(SettingsSection):
         browse_btn.clicked.connect(self._browse_asset_library)
         self.add_setting_row("资产库路径", self.asset_lib_container, "存储所有资产文件的根目录")
 
-        # 预览模式（默认复制，符号链接为实验性功能）
-        self.symlink_preview_toggle = QCheckBox("使用符号链接预览资产")
-        self.symlink_preview_toggle.stateChanged.connect(self._on_symlink_preview_toggled)
-        self.add_setting_row(
-            "预览模式",
-            self.symlink_preview_toggle,
-            "⚠️ 实验性功能：开启后预览速度更快，但可能导致资源被高版本 UE 升级并影响低版本兼容。默认关闭，使用复制预览。"
-        )
-        
         # 导入后删除源文件开关
         self.delete_source_toggle = QCheckBox("导入资产后自动删除源文件")
         self.delete_source_toggle.stateChanged.connect(self._on_delete_source_toggled)
@@ -1717,15 +1707,6 @@ class AssetSection(SettingsSection):
             if lib_path:
                 self.asset_lib_input.setText(str(lib_path))
 
-            # 加载预览模式
-            self._updating_symlink_preview = True
-            try:
-                self.symlink_preview_toggle.setChecked(
-                    self.asset_manager_logic.get_use_symlink_preview()
-                )
-            finally:
-                self._updating_symlink_preview = False
-            
             # 加载删除源文件设置
             try:
                 user_config = self.asset_manager_logic.config_manager.load_user_config()
@@ -1743,25 +1724,6 @@ class AssetSection(SettingsSection):
         except Exception as e:
             logger.warning("加载路径配置失败: %s", e)
 
-    def _on_symlink_preview_toggled(self, state):
-        """符号链接预览开关改变时触发"""
-        if self._updating_symlink_preview:
-            return
-
-        if not self.asset_manager_logic:
-            logger.warning("资产管理器未初始化，无法保存预览模式")
-            return
-
-        enabled = state == Qt.CheckState.Checked.value
-        if self.asset_manager_logic.set_use_symlink_preview(enabled):
-            mode_text = "符号链接（实验性）" if enabled else "复制（默认）"
-            logger.info("[资产设置] 预览模式已切换: %s", mode_text)
-            return
-
-        logger.warning("保存预览模式失败，回滚开关状态")
-        self._updating_symlink_preview = True
-        self.symlink_preview_toggle.setChecked(not enabled)
-        self._updating_symlink_preview = False
     
     def _on_delete_source_toggled(self, state):
         """导入后删除源文件开关改变时触发"""

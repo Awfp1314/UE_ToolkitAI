@@ -476,6 +476,41 @@ class ProjectScanner(QThread):
                 if item.name.lower() in self.SKIP_DIRS:
                     continue
 
+                # 过滤排除路径（预览工程、资产库等，包括子目录）- 优先检查
+                if self.excluded_paths:
+                    try:
+                        item_resolved = item.resolve()
+                        is_excluded = False
+                        for excluded_path in self.excluded_paths:
+                            try:
+                                excluded_resolved = Path(excluded_path).resolve()
+                                # 检查 item 是否是排除路径本身，或者排除路径是否是 item 的父目录/祖先目录
+                                # 使用 is_relative_to (Python 3.9+) 或者检查 parents
+                                try:
+                                    # Python 3.9+ 方法
+                                    if item_resolved.is_relative_to(excluded_resolved):
+                                        is_excluded = True
+                                        logger.debug(f"跳过排除路径: {item}")
+                                        break
+                                except AttributeError:
+                                    # Python 3.8 兼容方法
+                                    if item_resolved == excluded_resolved or excluded_resolved in item_resolved.parents:
+                                        is_excluded = True
+                                        logger.debug(f"跳过排除路径: {item}")
+                                        break
+                            except Exception as e:
+                                logger.debug(f"排除路径检查失败: {excluded_path}, 错误: {e}")
+                                continue
+                        if is_excluded:
+                            continue
+                    except PermissionError:
+                        # 系统目录访问被拒绝是正常的，跳过即可
+                        logger.debug(f"无权限访问路径: {item}")
+                        continue
+                    except Exception as e:
+                        logger.debug(f"解析路径失败: {item}, 错误: {e}")
+                        pass
+
                 # 增量模式：跳过已知工程
                 item_str = str(item)
                 if item_str in self.known_paths:
@@ -484,25 +519,6 @@ class ProjectScanner(QThread):
                 # 增量模式：有 .UeToolkitconfig 标记的也跳过
                 if self.known_paths and (item / TOOLKIT_CONFIG_DIR).exists():
                     continue
-
-                # 过滤排除路径（预览工程、资产库等，包括子目录）
-                if self.excluded_paths:
-                    try:
-                        item_resolved = item.resolve()
-                        is_excluded = False
-                        for excluded_path in self.excluded_paths:
-                            try:
-                                excluded_resolved = Path(excluded_path).resolve()
-                                # 检查是否是排除路径本身或其子目录
-                                if item_resolved == excluded_resolved or excluded_resolved in item_resolved.parents:
-                                    is_excluded = True
-                                    break
-                            except Exception:
-                                continue
-                        if is_excluded:
-                            continue
-                    except Exception:
-                        pass
 
                 ups = list(item.glob("*.uproject"))
                 if ups:
@@ -620,44 +636,47 @@ class MyProjectsUI(BaseModuleWidget):
         try:
             from core.services import config_service
             
-            # 1. 获取预览工程路径（从 asset_manager config 读取）
+            # 1. 获取预览工程路径
             asset_config = config_service.get_module_config("asset_manager") or {}
-            preview_projects = (asset_config.get("preview_projects", [])
-                                 or asset_config.get("additional_preview_projects_with_names", []))
+            
+            preview_projects = asset_config.get("preview_projects", [])
             for proj in preview_projects:
                 path = proj.get("path", "")
                 if path:
                     try:
                         excluded_paths.add(str(Path(path).resolve()))
-                    except Exception:
+                        logger.debug(f"排除预览工程: {path}")
+                    except Exception as e:
                         excluded_paths.add(path)
+                        logger.warning(f"预览工程路径解析失败: {e}")
             
-            # 2. 获取资产库路径
-            try:
-                asset_library_path = (asset_config.get("current_asset_library", "")
-                                       or asset_config.get("asset_library_path", ""))
-                if asset_library_path:
+            # 2. 获取资产库路径（从 asset_libraries 数组读取）
+            asset_libraries = asset_config.get("asset_libraries", [])
+            for lib in asset_libraries:
+                lib_path = lib.get("path", "")
+                if lib_path:
                     try:
-                        excluded_paths.add(str(Path(asset_library_path).resolve()))
-                    except Exception:
-                        excluded_paths.add(asset_library_path)
-                
-                for lib in asset_config.get("asset_libraries", []):
-                    lp = lib.get("path", "")
-                    if lp:
-                        try:
-                            excluded_paths.add(str(Path(lp).resolve()))
-                        except Exception:
-                            excluded_paths.add(lp)
-                            
-            except Exception as e:
-                logger.debug(f"获取资产库路径失败: {e}")
+                        resolved_path = str(Path(lib_path).resolve())
+                        excluded_paths.add(resolved_path)
+                        logger.debug(f"排除资产库: {lib_path}")
+                    except Exception as e:
+                        excluded_paths.add(lib_path)
+                        logger.warning(f"资产库路径解析失败: {e}")
             
-            # 3. 可以在这里添加其他需要排除的路径
-            # 比如：临时目录、缓存目录等
+            # 3. 获取当前资产库路径（兼容旧配置）
+            current_library = asset_config.get("current_asset_library", "")
+            if current_library:
+                try:
+                    excluded_paths.add(str(Path(current_library).resolve()))
+                    logger.debug(f"排除当前资产库: {current_library}")
+                except Exception as e:
+                    excluded_paths.add(current_library)
+                    logger.warning(f"当前资产库路径解析失败: {e}")
+            
+            logger.info(f"我的工程排除路径列表: {excluded_paths}")
             
         except Exception as e:
-            logger.warning(f"获取排除路径失败: {e}")
+            logger.error(f"获取排除路径失败: {e}", exc_info=True)
         
         return excluded_paths
 
@@ -678,6 +697,49 @@ class MyProjectsUI(BaseModuleWidget):
             
         except Exception as e:
             logger.error(f"清理缓存并重新扫描失败: {e}")
+    
+    def _filter_excluded_projects(self, projects):
+        """从工程列表中过滤掉被排除的工程"""
+        excluded_paths = self._get_excluded_paths()
+        if not excluded_paths:
+            return projects
+        
+        filtered = []
+        for proj in projects:
+            proj_path = proj.get("path", "")
+            if not proj_path:
+                continue
+            
+            try:
+                proj_resolved = Path(proj_path).resolve()
+                is_excluded = False
+                
+                for excluded_path in excluded_paths:
+                    try:
+                        excluded_resolved = Path(excluded_path).resolve()
+                        # 检查工程是否在排除路径下
+                        try:
+                            # Python 3.9+ 方法
+                            if proj_resolved.is_relative_to(excluded_resolved):
+                                is_excluded = True
+                                logger.info(f"过滤掉被排除的工程: {proj_path}")
+                                break
+                        except AttributeError:
+                            # Python 3.8 兼容方法
+                            if proj_resolved == excluded_resolved or excluded_resolved in proj_resolved.parents:
+                                is_excluded = True
+                                logger.info(f"过滤掉被排除的工程: {proj_path}")
+                                break
+                    except Exception:
+                        continue
+                
+                if not is_excluded:
+                    filtered.append(proj)
+            except Exception:
+                # 解析失败的工程保留
+                filtered.append(proj)
+        
+        return filtered
 
     def _check_excluded_paths_changed(self):
         """检查排除路径是否发生变化，如果变化则重新扫描"""
@@ -812,31 +874,14 @@ class MyProjectsUI(BaseModuleWidget):
             # 从注册表加载（瞬间）
             projects = self.registry.get_projects()
             # 过滤掉已不存在的工程和排除路径
-            excluded_paths = self._get_excluded_paths()
-            valid = []
-            for p in projects:
-                if not Path(p["path"]).exists():
-                    continue
-                # 检查是否在排除路径中
-                is_excluded = False
-                try:
-                    project_path = Path(p["path"]).resolve()
-                    for excluded_path in excluded_paths:
-                        try:
-                            excluded_resolved = Path(excluded_path).resolve()
-                            if project_path == excluded_resolved or excluded_resolved in project_path.parents:
-                                is_excluded = True
-                                break
-                        except Exception:
-                            continue
-                except Exception:
-                    pass
-                
-                if not is_excluded:
-                    valid.append(p)
+            valid = self._filter_excluded_projects(projects)
+            # 再过滤掉不存在的工程
+            valid = [p for p in valid if Path(p["path"]).exists()]
             
             if len(valid) != len(projects):
                 logger.info(f"清理 {len(projects) - len(valid)} 个已不存在或排除的工程")
+                # 更新注册表，移除无效工程
+                self.registry.save_full_scan_result(valid)
 
             self.all_projects = valid
             self._load_categories()

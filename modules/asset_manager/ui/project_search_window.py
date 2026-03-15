@@ -1304,29 +1304,51 @@ class ProjectSearchWindow(QWidget):
                             # 递归复制 Others 文件夹下的所有内容
                             success = True
                             items = list(others_folder.iterdir())
-                            total_items = len(items)
                             
-                            if total_items == 0:
+                            if len(items) == 0:
                                 logger.error("Others 文件夹为空")
                                 success = False
                             else:
-                                for idx, item in enumerate(items):
+                                # 计算总大小（用于更准确的进度）
+                                total_size = 0
+                                for item in items:
+                                    if item.is_file():
+                                        total_size += item.stat().st_size
+                                    elif item.is_dir():
+                                        for subitem in item.rglob('*'):
+                                            if subitem.is_file():
+                                                total_size += subitem.stat().st_size
+                                
+                                copied_size = 0
+                                
+                                for item in items:
                                     target_path = target_base / item.name
                                     
-                                    # 创建进度包装器
+                                    # 创建进度包装器（基于字节大小）
                                     def item_progress_wrapper(current, total, message):
-                                        if total > 0:
-                                            overall_progress = ((idx + current / total) / total_items) * 0.9
+                                        if total_size > 0:
+                                            # 计算当前项目的进度贡献
+                                            item_progress = (current / total) if total > 0 else 0
+                                            # 计算总体进度
+                                            overall_progress = (copied_size + item_progress * total) / total_size * 0.9
                                             self.progress_update.emit(overall_progress)
                                     
                                     if item.is_dir():
                                         item_success = self.logic._file_ops.safe_copytree(
                                             item, target_path, progress_callback=item_progress_wrapper
                                         )
+                                        # 更新已复制大小
+                                        if item_success:
+                                            for subitem in item.rglob('*'):
+                                                if subitem.is_file():
+                                                    copied_size += subitem.stat().st_size
                                     else:
                                         item_success = self.logic._file_ops.safe_copy_file(
                                             item, target_path, progress_callback=item_progress_wrapper
                                         )
+                                        # 更新已复制大小
+                                        if item_success:
+                                            copied_size += item.stat().st_size
                                     
                                     if not item_success:
                                         success = False

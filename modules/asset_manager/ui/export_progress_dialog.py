@@ -26,10 +26,11 @@ class ExportWorker(QThread):
     progress_updated = pyqtSignal(int, str)  # 进度百分比, 当前文件名
     export_finished = pyqtSignal(bool, str)  # 成功/失败, 消息
     
-    def __init__(self, source_path: Path, target_path: Path):
+    def __init__(self, source_path: Path, target_path: Path, package_type: str):
         super().__init__()
         self.source_path = source_path
         self.target_path = target_path
+        self.package_type = package_type  # "content", "plugin", "project"
         self._is_cancelled = False
     
     def cancel(self):
@@ -39,9 +40,72 @@ class ExportWorker(QThread):
     def run(self):
         """执行导出"""
         try:
+            # 根据资产类型确定源内容路径和目标结构
+            if self.package_type == "content":
+                # 资产包：导出 Content 文件夹内容到 自定义名称/Content/
+                content_path = self.source_path / "Content"
+                if not content_path.exists():
+                    self.export_finished.emit(False, "资产包 Content 文件夹不存在")
+                    return
+                source_content_path = content_path
+                target_wrapper = "Content"
+                
+            elif self.package_type == "plugin":
+                # 插件：导出 Plugins 文件夹内容到 自定义名称/Plugins/
+                plugins_path = self.source_path / "Plugins"
+                if not plugins_path.exists():
+                    self.export_finished.emit(False, "插件 Plugins 文件夹不存在")
+                    return
+                source_content_path = plugins_path
+                target_wrapper = "Plugins"
+                
+            elif self.package_type == "project":
+                # 工程资产：找到 Project 下的工程文件夹，导出其 Content 到 自定义名称/Content/
+                project_dir = self.source_path / "Project"
+                if not project_dir.exists():
+                    self.export_finished.emit(False, "工程资产 Project 文件夹不存在")
+                    return
+                
+                # 查找包含 .uproject 文件的工程文件夹
+                project_folder = None
+                for item in project_dir.iterdir():
+                    if item.is_dir():
+                        uproject_files = list(item.glob("*.uproject"))
+                        if uproject_files:
+                            project_folder = item
+                            break
+                
+                if not project_folder:
+                    self.export_finished.emit(False, "未找到工程文件夹")
+                    return
+                
+                content_path = project_folder / "Content"
+                if not content_path.exists():
+                    self.export_finished.emit(False, "工程 Content 文件夹不存在")
+                    return
+                
+                source_content_path = content_path
+                target_wrapper = "Content"
+                
+            elif self.package_type == "others":
+                # 其他资源：导出 Others 文件夹内容到 自定义名称/Others/
+                others_path = self.source_path / "Others"
+                if others_path.exists() and others_path.is_dir():
+                    # 新结构：有 Others 文件夹
+                    source_content_path = others_path
+                else:
+                    # 兼容旧结构：直接从根目录导出
+                    source_content_path = self.source_path
+                target_wrapper = "Others"
+                
+            else:
+                # 未知类型：直接导出整个文件夹
+                source_content_path = self.source_path
+                target_wrapper = None
+            
             # 收集所有文件
             all_files = []
-            for root, dirs, files in os.walk(self.source_path):
+            for root, dirs, files in os.walk(source_content_path):
                 for file in files:
                     file_path = Path(root) / file
                     all_files.append(file_path)
@@ -53,10 +117,8 @@ class ExportWorker(QThread):
             total_files = len(all_files)
             logger.info(f"开始导出，共 {total_files} 个文件")
             
-            # 获取源文件夹名（如 AGhostaghost）
-            folder_name = self.source_path.name
-            # 获取源文件夹的父目录（用于计算相对路径）
-            parent_path = self.source_path.parent
+            # 获取自定义名称（压缩包名去掉 .zip）
+            custom_name = self.target_path.stem
             
             # 创建 ZIP 文件
             with zipfile.ZipFile(self.target_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
@@ -68,11 +130,17 @@ class ExportWorker(QThread):
                             self.target_path.unlink()
                         return
                     
-                    # 计算相对路径（包含源文件夹名，如 AGhostaghost/xxx/file.txt）
-                    rel_path = file_path.relative_to(parent_path)
+                    # 计算相对路径
+                    rel_path = file_path.relative_to(source_content_path)
+                    
+                    # 构建目标路径：自定义名称/Content(或Plugins)/相对路径
+                    if target_wrapper:
+                        zip_path = Path(custom_name) / target_wrapper / rel_path
+                    else:
+                        zip_path = Path(custom_name) / rel_path
                     
                     # 添加到 ZIP
-                    zipf.write(file_path, rel_path)
+                    zipf.write(file_path, zip_path)
                     
                     # 更新进度
                     progress = int((i + 1) / total_files * 100)
@@ -104,10 +172,11 @@ class ExportWorker(QThread):
 class ExportProgressDialog(QDialog):
     """导出进度对话框"""
     
-    def __init__(self, asset_name: str, source_path: Path, parent=None):
+    def __init__(self, asset_name: str, source_path: Path, package_type: str, parent=None):
         super().__init__(parent)
         self.asset_name = asset_name
         self.source_path = source_path
+        self.package_type = package_type  # "content", "plugin", "project"
         self.target_path = None
         self.worker = None
         
@@ -204,7 +273,7 @@ class ExportProgressDialog(QDialog):
         self.status_label.setText("正在压缩...")
         
         # 创建并启动工作线程
-        self.worker = ExportWorker(self.source_path, self.target_path)
+        self.worker = ExportWorker(self.source_path, self.target_path, self.package_type)
         self.worker.progress_updated.connect(self._on_progress_updated)
         self.worker.export_finished.connect(self._on_export_finished)
         self.worker.start()

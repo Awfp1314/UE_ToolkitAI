@@ -104,7 +104,8 @@ class AssetCore:
 
     def update_asset(self, asset_id: str, name: Optional[str] = None,
                      category: Optional[str] = None,
-                     description: Optional[str] = None) -> bool:
+                     description: Optional[str] = None,
+                     path: Optional[str] = None) -> bool:
         """更新资产信息
         
         Args:
@@ -112,6 +113,7 @@ class AssetCore:
             name: 新名称（可选）
             category: 新分类（可选）
             description: 新描述（可选）
+            path: 新路径（可选）
             
         Returns:
             更新成功返回 True，资产不存在返回 False
@@ -129,6 +131,10 @@ class AssetCore:
 
         if description is not None:
             asset.description = description
+        
+        if path is not None:
+            from pathlib import Path
+            asset.path = Path(path)
 
         self.logger.info(f"资产信息已更新: {asset.name} ({asset_id})")
         return True

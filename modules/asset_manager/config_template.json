@@ -1,10 +1,17 @@
 {
   "_version": "2.0.0",
+  "asset_library_path": "",
   "asset_libraries": [],
   "current_asset_library": "",
+  "preview_project": "",
   "preview_projects": [],
-  "use_symlink_preview": false,
+  "additional_preview_projects_with_names": [],
   "last_preview_project": "",
-  "last_target_project": ""
+  "last_preview_project_name": "",
+  "last_target_project": "",
+  "use_symlink_preview": false,
+  "delete_source_after_import": false,
+  "assets": [],
+  "categories": ["默认分类"]
 }
 

@@ -49,7 +49,7 @@ class FileOperations:
             if not path.exists():
                 return True
                 
-            self._logger.warning(f"Removing existing path: {path}")
+            self._logger.info(f"覆盖已存在的路径: {path}")
             
             if path.is_dir():
                 # 使用 safe_remove_tree 处理目录（支持只读文件）
@@ -75,7 +75,7 @@ class FileOperations:
         Args:
             src: 源目录路径
             dst: 目标目录路径
-            progress_callback: 进度回调函数 (current, total, message)
+            progress_callback: 进度回调函数 (copied_bytes, total_bytes, message)
             incremental: 是否使用增量复制（只复制新增或修改的文件）
             use_symlink: 是否使用符号链接（极快，但可能影响UE编辑）
 
@@ -94,10 +94,10 @@ class FileOperations:
             self._logger.error(f"Source path does not exist: {src}")
             return False
 
-        # 如果使用符号链接
+        # 如果使用符号链接（已废除，强制禁用）
         if use_symlink:
-            self._logger.info(f"🔗 Using symlink mode for fast preview")
-            return self._create_symlink_tree(src, dst, progress_callback)
+            self._logger.warning(f"⚠️ 符号链接功能已废除，强制使用复制模式")
+            use_symlink = False  # 强制改为复制模式
 
         # 如果使用增量复制且目标存在，使用增量模式
         if incremental and dst.exists():
@@ -109,13 +109,24 @@ class FileOperations:
 
         # 执行复制（带进度）
         try:
-            self._logger.info(f"Copying tree: {src} -> {dst}")
+            self._logger.info(f"📋 开始复制目录树: {src} -> {dst}")
             
-            # 如果有进度回调，使用自定义复制函数
+            # 如果有进度回调，使用基于文件大小的进度报告
             if progress_callback:
-                # 先统计文件数量
-                total_files = sum(1 for _ in src.rglob('*') if _.is_file())
-                self._logger.info(f"Total files to copy: {total_files}")
+                # 1. 预先扫描所有文件，计算总大小
+                all_files = []
+                total_bytes = 0
+                for src_file in src.rglob('*'):
+                    if src_file.is_file():
+                        try:
+                            file_size = src_file.stat().st_size
+                            all_files.append((src_file, file_size))
+                            total_bytes += file_size
+                        except Exception as e:
+                            self._logger.warning(f"无法获取文件大小: {src_file}, {e}")
+                
+                total_files = len(all_files)
+                self._logger.info(f"📊 统计到 {total_files} 个文件，总大小 {self.format_size(total_bytes)}")
                 
                 if total_files == 0:
                     # 空目录，直接创建
@@ -126,34 +137,63 @@ class FileOperations:
                 # 创建目标目录
                 dst.mkdir(parents=True, exist_ok=True)
                 
-                # 复制文件并报告进度
+                # 2. 复制文件并报告进度（基于字节数）
+                copied_bytes = 0
                 copied_files = 0
-                for src_file in src.rglob('*'):
-                    if src_file.is_file():
-                        # 计算相对路径
-                        rel_path = src_file.relative_to(src)
-                        dst_file = dst / rel_path
-                        
-                        # 创建目标目录
-                        dst_file.parent.mkdir(parents=True, exist_ok=True)
-                        
-                        # 复制文件
+                
+                for src_file, file_size in all_files:
+                    # 计算相对路径
+                    rel_path = src_file.relative_to(src)
+                    dst_file = dst / rel_path
+                    
+                    # 创建目标目录
+                    dst_file.parent.mkdir(parents=True, exist_ok=True)
+                    
+                    # 复制文件
+                    copied_files += 1
+                    self._logger.debug(f"📄 复制文件 [{copied_files}/{total_files}]: {src_file.name} ({self.format_size(file_size)})")
+                    
+                    # 小文件（< 1MB）：直接复制
+                    if file_size < 1024 * 1024:
                         shutil.copy2(str(src_file), str(dst_file))
-                        
-                        # 移除只读属性（避免后续删除时权限错误）
-                        try:
-                            import stat
-                            # 确保文件可写
-                            dst_file.chmod(stat.S_IWRITE | stat.S_IREAD)
-                        except Exception as chmod_error:
-                            # 修改权限失败不影响复制流程
-                            self._logger.debug(f"Failed to change file permissions: {chmod_error}")
+                        copied_bytes += file_size
                         
                         # 报告进度
-                        copied_files += 1
-                        progress_callback(copied_files, total_files, f"Copying: {src_file.name}")
+                        progress_callback(copied_bytes, total_bytes, f"正在复制: {src_file.name}")
+                    else:
+                        # 大文件（≥ 1MB）：分块复制并实时报告进度
+                        chunk_size = 1024 * 1024  # 1MB per chunk
+                        file_copied_bytes = 0
+                        
+                        with open(src_file, 'rb') as fsrc:
+                            with open(dst_file, 'wb') as fdst:
+                                while True:
+                                    chunk = fsrc.read(chunk_size)
+                                    if not chunk:
+                                        break
+                                    fdst.write(chunk)
+                                    file_copied_bytes += len(chunk)
+                                    copied_bytes += len(chunk)
+                                    
+                                    # 报告进度（按字节）
+                                    progress_callback(copied_bytes, total_bytes, f"正在复制: {src_file.name}")
+                        
+                        # 复制元数据（修改时间等）
+                        shutil.copystat(str(src_file), str(dst_file))
+                    
+                    # 移除只读属性（避免后续删除时权限错误）
+                    try:
+                        import stat
+                        dst_file.chmod(stat.S_IWRITE | stat.S_IREAD)
+                    except Exception as chmod_error:
+                        self._logger.debug(f"Failed to change file permissions: {chmod_error}")
+                    
+                    # 每 10 个文件或最后一个文件记录日志
+                    if copied_files % 10 == 0 or copied_files == total_files:
+                        progress_pct = (copied_bytes * 100) // total_bytes if total_bytes > 0 else 100
+                        self._logger.info(f"📊 复制进度: {copied_files}/{total_files} 文件, {self.format_size(copied_bytes)}/{self.format_size(total_bytes)} ({progress_pct}%)")
                 
-                self._logger.info(f"Successfully copied {copied_files} files")
+                self._logger.info(f"✅ 成功复制 {copied_files} 个文件，总大小 {self.format_size(copied_bytes)}")
             else:
                 # 没有进度回调，使用标准方法
                 shutil.copytree(src, dst)
@@ -487,14 +527,41 @@ class FileOperations:
         try:
             self._logger.info(f"Copying file: {src} -> {dst}")
             
-            if progress_callback:
-                progress_callback(0, 1, f"正在复制: {src.name}")
+            # 获取文件大小
+            file_size = src.stat().st_size
             
-            # 复制文件（保留元数据）
-            shutil.copy2(str(src), str(dst))
-            
-            if progress_callback:
-                progress_callback(1, 1, f"已复制: {src.name}")
+            # 如果文件很小（< 1MB）或没有进度回调，直接复制
+            if file_size < 1024 * 1024 or not progress_callback:
+                if progress_callback:
+                    progress_callback(0, 1, f"正在复制: {src.name}")
+                
+                shutil.copy2(str(src), str(dst))
+                
+                if progress_callback:
+                    progress_callback(1, 1, f"已复制: {src.name}")
+            else:
+                # 大文件：分块复制并报告进度
+                chunk_size = 1024 * 1024  # 1MB per chunk
+                copied = 0
+                
+                with open(src, 'rb') as fsrc:
+                    with open(dst, 'wb') as fdst:
+                        while True:
+                            chunk = fsrc.read(chunk_size)
+                            if not chunk:
+                                break
+                            fdst.write(chunk)
+                            copied += len(chunk)
+                            
+                            # 报告进度（按字节）
+                            if progress_callback:
+                                progress_callback(copied, file_size, f"正在复制: {src.name}")
+                
+                # 复制元数据（修改时间等）
+                shutil.copystat(str(src), str(dst))
+                
+                if progress_callback:
+                    progress_callback(file_size, file_size, f"已复制: {src.name}")
             
             self._logger.info(f"Successfully copied file: {src} -> {dst}")
             return True

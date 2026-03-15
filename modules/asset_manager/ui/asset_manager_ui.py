@@ -752,7 +752,9 @@ class AssetManagerUI(BaseModuleWidget):
                     self.sort_combo.setCurrentIndex(idx)
                     self.sort_combo.blockSignals(False)
                     self.controller.set_sort_method(saved_sort)
-                    self._apply_filter_to_ui()
+            
+            # 应用筛选和排序（无论是否有保存的排序方式都要调用）
+            self._apply_filter_to_ui()
 
             # 恢复滚动位置（延迟等待布局完成）
             from PyQt6.QtCore import QTimer as QtTimer
