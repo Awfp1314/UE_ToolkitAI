@@ -195,11 +195,30 @@ class ProjectCard(QFrame):
         thumb_layout.addWidget(self.thumb)
         layout.addWidget(thumb_section)
 
-        # 版本标签
+        # 版本徽标 - 蓝色背景，右上角
         self.version_label = QLabel(f"UE {self.version}")
         self.version_label.setObjectName("MyProjectVersionLabel")
         self.version_label.setParent(self.thumb)
         self.version_label.setStyleSheet("""
+            QLabel {
+                color: #ffffff;
+                font-size: 11px;
+                font-weight: bold;
+                background-color: rgba(0, 122, 204, 0.85);
+                border-radius: 3px;
+                padding: 3px 6px;
+            }
+        """)
+        self.version_label.setTextInteractionFlags(Qt.TextInteractionFlag.NoTextInteraction)
+        self.version_label.setCursor(Qt.CursorShape.ArrowCursor)
+        self.version_label.setFixedSize(self.version_label.sizeHint())
+        self.version_label.move(172 - 8 - self.version_label.width(), 8)
+
+        # 分类徽标 - 黑色背景，左下角
+        self.category_label = QLabel(self.current_category)
+        self.category_label.setObjectName("MyCategoryLabel")
+        self.category_label.setParent(self.thumb)
+        self.category_label.setStyleSheet("""
             QLabel {
                 color: #b0b0b0;
                 font-size: 11px;
@@ -209,9 +228,10 @@ class ProjectCard(QFrame):
                 padding: 4px 10px;
             }
         """)
-        self.version_label.setTextInteractionFlags(Qt.TextInteractionFlag.NoTextInteraction)
-        self.version_label.setFixedSize(self.version_label.sizeHint())
-        self.version_label.move(6, 106 - 6 - self.version_label.height())
+        self.category_label.setTextInteractionFlags(Qt.TextInteractionFlag.NoTextInteraction)
+        self.category_label.setCursor(Qt.CursorShape.ArrowCursor)
+        self.category_label.setFixedSize(self.category_label.sizeHint())
+        self.category_label.move(8, 106 - 8 - self.category_label.height())
 
         # 信息区域
         info_widget = QWidget()
@@ -946,21 +966,22 @@ class MyProjectsUI(BaseModuleWidget):
         # 筛选区域
         filter_area = QWidget()
         filter_area.setObjectName("AssetFilterArea")
-        filter_area.setFixedHeight(60)
+        filter_area.setMinimumHeight(60)
         filter_layout = QHBoxLayout(filter_area)
         filter_layout.setContentsMargins(20, 10, 20, 20)
         filter_layout.setSpacing(15)
 
-        self.search_input = QLineEdit()
-        self.search_input.setObjectName("AssetSearchInput")
-        self.search_input.setPlaceholderText("搜索工程...")
-        self.search_input.setFixedHeight(36)
-        self.search_input.setMaximumWidth(200)
-        self.search_input.setFocusPolicy(Qt.FocusPolicy.ClickFocus)
-        self.search_input.textChanged.connect(self._on_filter_changed)
-        filter_layout.addWidget(self.search_input)
-
-        # 分类筛选
+        # 分类标签 + 选择框
+        category_container = QWidget()
+        category_layout = QHBoxLayout(category_container)
+        category_layout.setContentsMargins(0, 0, 0, 0)
+        category_layout.setSpacing(3)
+        
+        category_label = QLabel("分类：")
+        category_label.setObjectName("AssetFilterLabel")
+        category_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        category_layout.addWidget(category_label)
+        
         self.category_filter = QComboBox()
         self.category_filter.setObjectName("AssetCategoryFilter")
         self.category_filter.setFixedHeight(36)
@@ -970,9 +991,21 @@ class MyProjectsUI(BaseModuleWidget):
         self.category_filter.setCursor(Qt.CursorShape.PointingHandCursor)
         self.category_filter.addItem("全部分类")
         self.category_filter.currentTextChanged.connect(self._on_category_changed)
-        filter_layout.addWidget(self.category_filter)
+        category_layout.addWidget(self.category_filter)
+        
+        filter_layout.addWidget(category_container)
 
-        # 版本筛选
+        # 版本标签 + 选择框
+        version_container = QWidget()
+        version_layout = QHBoxLayout(version_container)
+        version_layout.setContentsMargins(0, 0, 0, 0)
+        version_layout.setSpacing(3)
+        
+        version_label = QLabel("版本：")
+        version_label.setObjectName("AssetFilterLabel")
+        version_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        version_layout.addWidget(version_label)
+        
         self.version_filter = QComboBox()
         self.version_filter.setObjectName("AssetCategoryFilter")
         self.version_filter.setFixedHeight(36)
@@ -982,8 +1015,21 @@ class MyProjectsUI(BaseModuleWidget):
         self.version_filter.setCursor(Qt.CursorShape.PointingHandCursor)
         self.version_filter.addItem("所有版本")
         self.version_filter.currentTextChanged.connect(self._on_filter_changed)
-        filter_layout.addWidget(self.version_filter)
+        version_layout.addWidget(self.version_filter)
+        
+        filter_layout.addWidget(version_container)
 
+        # 排序标签 + 选择框
+        sort_container = QWidget()
+        sort_layout = QHBoxLayout(sort_container)
+        sort_layout.setContentsMargins(0, 0, 0, 0)
+        sort_layout.setSpacing(3)
+        
+        sort_label = QLabel("排序：")
+        sort_label.setObjectName("AssetFilterLabel")
+        sort_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        sort_layout.addWidget(sort_label)
+        
         self.sort_combo = QComboBox()
         self.sort_combo.setObjectName("AssetSortCombo")
         self.sort_combo.setFixedHeight(36)
@@ -993,9 +1039,32 @@ class MyProjectsUI(BaseModuleWidget):
         self.sort_combo.setCursor(Qt.CursorShape.PointingHandCursor)
         self.sort_combo.addItems(["最近修改", "工程名称", "引擎版本"])
         self.sort_combo.currentTextChanged.connect(self._on_sort_changed)
-        filter_layout.addWidget(self.sort_combo)
+        sort_layout.addWidget(self.sort_combo)
+        
+        filter_layout.addWidget(sort_container)
 
+        # 添加弹性空间
         filter_layout.addStretch()
+        
+        # 搜索框
+        self.search_input = QLineEdit()
+        self.search_input.setObjectName("AssetSearchInput")
+        self.search_input.setPlaceholderText("搜索工程...")
+        self.search_input.setFixedHeight(36)
+        self.search_input.setMaximumWidth(200)
+        self.search_input.setFocusPolicy(Qt.FocusPolicy.ClickFocus)
+        self.search_input.textChanged.connect(self._on_filter_changed)
+        filter_layout.addWidget(self.search_input)
+
+        # 刷新按钮
+        self.refresh_btn = QPushButton("🔄 刷新")
+        self.refresh_btn.setObjectName("BrowseButton")
+        self.refresh_btn.setFixedHeight(36)
+        self.refresh_btn.setFixedWidth(100)
+        self.refresh_btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self.refresh_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.refresh_btn.clicked.connect(lambda: self.clear_cache_and_rescan())
+        filter_layout.addWidget(self.refresh_btn)
 
         # 创建工程按钮（点击弹出引擎版本下拉）
         self.add_project_btn = QPushButton("+ 创建工程")

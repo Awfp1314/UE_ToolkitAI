@@ -208,24 +208,6 @@ class AssetManagerUI(BaseModuleWidget):
         self.add_asset_btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.add_asset_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.add_asset_btn.setToolTip("添加资产到资产库")
-        # 设置蓝色样式
-        self.add_asset_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #2196F3;
-                color: white;
-                border: none;
-                border-radius: 4px;
-                padding: 8px 16px;
-                font-weight: bold;
-                font-size: 13px;
-            }
-            QPushButton:hover {
-                background-color: #1976D2;
-            }
-            QPushButton:pressed {
-                background-color: #1565C0;
-            }
-        """)
         self.add_asset_btn.clicked.connect(self._show_add_asset_dialog)
         filter_layout.addWidget(self.add_asset_btn)
 

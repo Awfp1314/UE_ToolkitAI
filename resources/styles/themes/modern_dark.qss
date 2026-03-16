@@ -3005,19 +3005,23 @@ QMenu#AssetCardMenu::separator {
 #AssetSearchInput {
     background-color: #303030;
     border: none;
-    border-radius: 6px;
-    padding: 8px 12px;
+    border-radius: 18px;
+    padding: 8px 16px;
     color: #ffffff;
     font-size: 14px;
 }
 
+#AssetSearchInput:hover {
+    background-color: #3a3a3a;
+}
+
 #AssetSearchInput:focus {
-    background-color: #323232;
-    border: none;
+    background-color: #3a3a3a;
+    outline: none;
 }
 
 #AssetSearchInput::placeholder {
-    color: rgba(255, 255, 255, 0.5);
+    color: rgba(255, 255, 255, 0.4);
 }
 
 /* ===== 视图切换按钮 ===== */
@@ -3324,21 +3328,21 @@ QMenu#AssetCardMenu::separator {
 
 /* ===== 添加资产按钮 ===== */
 #AddAssetButton {
-    background: #303030;
+    background-color: #2196F3;
     border: none;
     border-radius: 6px;
-    padding: 8px 12px;
+    padding: 8px 16px;
     color: #ffffff;
-    font-size: 14px;
-    font-weight: 500;
+    font-size: 13px;
+    font-weight: bold;
 }
 
 #AddAssetButton:hover {
-    background: #3d3d3d;
+    background-color: #1976D2;
 }
 
 #AddAssetButton:pressed {
-    background: rgba(255, 255, 255, 0.1);
+    background-color: #1565C0;
 }
 
 
