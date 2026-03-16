@@ -936,8 +936,7 @@ class ProjectSearchWindow(QWidget):
             exclude_paths = self._get_excluded_paths()
             exclude_paths_set = {str(Path(p).resolve()) for p in exclude_paths if p}
             
-            # 转换为 SimpleNamespace 对象
-            from types import SimpleNamespace
+            # 转换为字典对象（保持与扫描结果一致）
             converted_projects = []
             for proj in projects:
                 proj_path = Path(proj.get("path", ""))
@@ -954,11 +953,14 @@ class ProjectSearchWindow(QWidget):
                 if not uproject_files:
                     continue
                 
-                converted_projects.append(SimpleNamespace(
-                    project_path=uproject_files[0],
-                    name=proj.get("name", proj_path.name),
-                    pid=0
-                ))
+                converted_projects.append({
+                    'name': proj.get("name", proj_path.name),
+                    'path': str(proj_path),
+                    'project_path': str(uproject_files[0]),
+                    'version': proj.get("version", ""),
+                    'category': proj.get("category", "默认"),
+                    'pid': 0
+                })
             
             self.all = converted_projects
             self.projs = converted_projects
