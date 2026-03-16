@@ -589,6 +589,7 @@ class ProjectSearchWindow(QWidget):
         self.cards = []
         self.drag_pos = QPoint()
         self.scanner = None  # 扫描线程引用
+        self._projects_loaded = False  # 标志位：是否已加载工程
         self.asset_name = asset_name  # 要导入的资产名称
         self.logic = logic  # 资产管理逻辑层引用
         self.mode = mode  # 窗口模式
@@ -760,7 +761,7 @@ class ProjectSearchWindow(QWidget):
         # 窗口居中显示
         self._center_window()
         
-        self._scan()
+        # 不在初始化时扫描，等待 showEvent 触发优化加载
     
     def _center_window(self):
         """将窗口居中显示 - 优先相对于主窗口居中"""
@@ -890,10 +891,12 @@ class ProjectSearchWindow(QWidget):
         super().showEvent(event)
         # 延迟执行居中，确保窗口几何信息已经就绪
         QTimer.singleShot(0, self._center_window)
-        # 优先从注册表加载，如果失败再扫描
-        QTimer.singleShot(100, self._load_projects_from_registry_or_scan)
+        # 只在首次显示时加载工程
+        if not self._projects_loaded:
+            QTimer.singleShot(100, self._load_projects_from_registry_or_scan)
     
     def _scan(self):
+        self._projects_loaded = True  # 标记为已加载
         self.rl.setText("正在扫描...")
         for c in self.cards:
             c.deleteLater()
@@ -910,11 +913,20 @@ class ProjectSearchWindow(QWidget):
     
     def _load_projects_from_registry_or_scan(self):
         """优先从注册表加载工程，如果失败再扫描"""
+        if self._projects_loaded:
+            return
+        
+        self._projects_loaded = True
+        
         try:
             from modules.my_projects.logic.project_registry import ProjectRegistry
             from pathlib import Path
             
             registry = ProjectRegistry()
+            registry_path = registry._registry_path
+            logger.info(f"检查注册表路径: {registry_path}")
+            logger.info(f"注册表是否存在: {registry_path.exists()}")
+            
             if not registry.has_registry():
                 logger.info("注册表不存在，启动扫描")
                 self._scan()
