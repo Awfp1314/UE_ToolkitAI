@@ -98,7 +98,7 @@ class AssetManagerUI(BaseModuleWidget):
         filter_area.setMinimumHeight(60)  # 改为最小高度，允许下拉框展开
         filter_layout = QHBoxLayout(filter_area)
         filter_layout.setContentsMargins(20, 10, 20, 20)
-        filter_layout.setSpacing(8)
+        filter_layout.setSpacing(15)  # 增加下拉框之间的间距
 
         # 使用自定义delegate实现文本居中
         from PyQt6.QtWidgets import QStyledItemDelegate
@@ -176,12 +176,10 @@ class AssetManagerUI(BaseModuleWidget):
         self.sort_combo.setFocusPolicy(Qt.FocusPolicy.ClickFocus)
         self.sort_combo.setCursor(Qt.CursorShape.PointingHandCursor)
         self.sort_combo.addItems([
-            "添加时间（最新）",
-            "添加时间（最早）",
-            "名称（A-Z）",
-            "名称（Z-A）",
-            "分类（A-Z）",
-            "分类（Z-A）"
+            "🕒 最新添加",
+            "🕒 最早添加",
+            "🔤 A-Z",
+            "🔤 Z-A"
         ])
         # 使用 activated 信号而不是 currentTextChanged，这样用户每次主动选择都会触发
         self.sort_combo.activated.connect(lambda: self._on_sort_changed(self.sort_combo.currentText()))
@@ -327,13 +325,13 @@ class AssetManagerUI(BaseModuleWidget):
             for category in categories:
                 self.category_filter.addItem(category)
             
-            # 添加"+ 分类管理"选项
-            self.category_filter.addItem("+ 分类管理")
+            # 添加"⚙️ 分类管理"选项
+            self.category_filter.addItem("⚙️ 分类管理")
             
             # 优先恢复已保存的分类，否则恢复之前的选择
             saved_category = self.controller.load_ui_state("selected_category", "")
             restore_target = saved_category if saved_category else current_category
-            if restore_target and restore_target != "+ 分类管理":
+            if restore_target and restore_target != "⚙️ 分类管理":
                 index = self.category_filter.findText(restore_target)
                 if index >= 0:
                     self.category_filter.setCurrentIndex(index)
@@ -354,8 +352,8 @@ class AssetManagerUI(BaseModuleWidget):
         """分类选择改变事件"""
         logger.info(f"分类选择改变: '{category}'")
         
-        # 如果选中"+ 分类管理"，显示分类管理对话框
-        if category == "+ 分类管理":
+        # 如果选中"⚙️ 分类管理"，显示分类管理对话框
+        if category == "⚙️ 分类管理":
             self._show_add_category_dialog()
             # 恢复到"全部分类"
             self.category_filter.setCurrentIndex(0)
@@ -2447,7 +2445,7 @@ class AssetManagerUI(BaseModuleWidget):
             
             # 获取当前选中的分类
             current_category = self.category_filter.currentText()
-            if current_category == "全部分类" or current_category == "+ 分类管理":
+            if current_category == "全部分类" or current_category == "⚙️ 分类管理":
                 current_category = "默认分类"
             
             # 显示添加资产对话框，预填充路径和分类
