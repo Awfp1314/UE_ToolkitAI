@@ -720,7 +720,7 @@ class ProjectSearchWindow(QWidget):
         fl.addStretch()
         
         # 刷新按钮
-        rb = QPushButton("刷新")
+        rb = QPushButton("🔄 重新扫描")
         rb.setObjectName("ProjectSearchRefreshButton")
         rb.setFixedHeight(36)
         rb.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -890,6 +890,8 @@ class ProjectSearchWindow(QWidget):
         super().showEvent(event)
         # 延迟执行居中，确保窗口几何信息已经就绪
         QTimer.singleShot(0, self._center_window)
+        # 优先从注册表加载，如果失败再扫描
+        QTimer.singleShot(100, self._load_projects_from_registry_or_scan)
     
     def _scan(self):
         self.rl.setText("正在扫描...")
@@ -905,6 +907,78 @@ class ProjectSearchWindow(QWidget):
         s.prog.connect(self._prog)
         s.start()
         self.scanner = s
+    
+    def _load_projects_from_registry_or_scan(self):
+        """优先从注册表加载工程，如果失败再扫描"""
+        try:
+            from modules.my_projects.logic.project_registry import ProjectRegistry
+            from pathlib import Path
+            
+            registry = ProjectRegistry()
+            if not registry.has_registry():
+                logger.info("注册表不存在，启动扫描")
+                self._scan()
+                return
+            
+            data = registry.load_registry()
+            projects = data.get("projects", [])
+            
+            if not projects:
+                logger.info("注册表为空，启动扫描")
+                self._scan()
+                return
+            
+            # 转换注册表数据为工程列表
+            logger.info(f"从注册表加载了 {len(projects)} 个工程")
+            self.rl.setText(f"已加载 {len(projects)} 个工程")
+            
+            # 获取排除路径
+            exclude_paths = self._get_excluded_paths()
+            exclude_paths_set = {str(Path(p).resolve()) for p in exclude_paths if p}
+            
+            # 转换为 SimpleNamespace 对象
+            from types import SimpleNamespace
+            converted_projects = []
+            for proj in projects:
+                proj_path = Path(proj.get("path", ""))
+                if not proj_path.exists():
+                    continue
+                
+                # 检查是否在排除路径中
+                proj_path_resolved = str(proj_path.resolve())
+                if any(proj_path_resolved.startswith(excluded) for excluded in exclude_paths_set):
+                    continue
+                
+                # 查找 .uproject 文件
+                uproject_files = list(proj_path.glob("*.uproject"))
+                if not uproject_files:
+                    continue
+                
+                converted_projects.append(SimpleNamespace(
+                    project_path=uproject_files[0],
+                    name=proj.get("name", proj_path.name),
+                    pid=0
+                ))
+            
+            self.all = converted_projects
+            self.projs = converted_projects
+            self._load_categories_from_registry(data)
+            self._render()
+            
+        except Exception as e:
+            logger.error(f"从注册表加载工程失败: {e}", exc_info=True)
+            self._scan()
+    
+    def _load_categories_from_registry(self, data):
+        """从注册表加载分类列表"""
+        try:
+            categories = data.get("categories", ["默认"])
+            self.category_filter.clear()
+            self.category_filter.addItem("全部分类")
+            for cat in categories:
+                self.category_filter.addItem(cat)
+        except Exception as e:
+            logger.error(f"加载分类失败: {e}")
     
     def _get_excluded_paths(self):
         """获取需要排除的路径列表"""
