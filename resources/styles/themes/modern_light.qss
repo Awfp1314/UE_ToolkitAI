@@ -3952,3 +3952,184 @@ QCheckBox:disabled {
     font-size: 10px;
     line-height: 1.4;
 }
+
+
+/* ========================================
+   资产管理器工具栏样式
+   ======================================== */
+
+/* 筛选标签 */
+#AssetFilterLabel {
+    color: rgba(0, 0, 0, 0.7);
+    font-size: 13px;
+    font-weight: 500;
+    padding-right: 5px;
+}
+
+/* 分类筛选下拉框 */
+#AssetCategoryFilter {
+    background-color: #f5f5f5;
+    border: none;
+    border-radius: 6px;
+    padding: 0 12px;
+    color: #1a1a1a;
+    font-size: 13px;
+    text-align: center;
+}
+
+#AssetCategoryFilter:hover {
+    background-color: rgba(0, 0, 0, 0.08);
+}
+
+#AssetCategoryFilter:focus {
+    background-color: rgba(0, 0, 0, 0.12);
+    outline: none;
+}
+
+#AssetCategoryFilter::drop-down {
+    border: none;
+    width: 20px;
+}
+
+#AssetCategoryFilter::down-arrow {
+    image: none;
+    width: 0px;
+    height: 0px;
+}
+
+#AssetCategoryFilter QAbstractItemView {
+    background-color: #f5f5f5;
+    border: 1px solid rgba(0, 0, 0, 0.15);
+    border-radius: 4px;
+    padding: 4px;
+    outline: none;
+    selection-background-color: #4a9eff;
+    selection-color: #ffffff;
+}
+
+#AssetCategoryFilter QAbstractItemView::item {
+    padding: 8px 12px;
+    border-radius: 4px;
+    min-height: 28px;
+}
+
+#AssetCategoryFilter QAbstractItemView::item:hover {
+    background-color: rgba(0, 0, 0, 0.08);
+}
+
+#AssetCategoryFilter QAbstractItemView::item:selected {
+    background-color: #4a9eff;
+    color: #ffffff;
+}
+
+/* 类型筛选下拉框 */
+#AssetTypeFilter {
+    background-color: #f5f5f5;
+    border: none;
+    border-radius: 6px;
+    padding: 0 12px;
+    color: #1a1a1a;
+    font-size: 13px;
+    text-align: center;
+}
+
+#AssetTypeFilter:hover {
+    background-color: rgba(0, 0, 0, 0.08);
+}
+
+#AssetTypeFilter:focus {
+    background-color: rgba(0, 0, 0, 0.12);
+    outline: none;
+}
+
+#AssetTypeFilter::drop-down {
+    border: none;
+    width: 20px;
+}
+
+#AssetTypeFilter::down-arrow {
+    image: none;
+    width: 0px;
+    height: 0px;
+}
+
+#AssetTypeFilter QAbstractItemView {
+    background-color: #f5f5f5;
+    border: 1px solid rgba(0, 0, 0, 0.15);
+    border-radius: 4px;
+    padding: 4px;
+    outline: none;
+    selection-background-color: #4a9eff;
+    selection-color: #ffffff;
+}
+
+#AssetTypeFilter QAbstractItemView::item {
+    padding: 8px 12px;
+    border-radius: 4px;
+    min-height: 28px;
+}
+
+#AssetTypeFilter QAbstractItemView::item:hover {
+    background-color: rgba(0, 0, 0, 0.08);
+}
+
+#AssetTypeFilter QAbstractItemView::item:selected {
+    background-color: #4a9eff;
+    color: #ffffff;
+}
+
+/* 排序选择下拉框 */
+#AssetSortCombo {
+    background-color: #f5f5f5;
+    border: none;
+    border-radius: 6px;
+    padding: 0 12px;
+    color: #1a1a1a;
+    font-size: 13px;
+    text-align: center;
+}
+
+#AssetSortCombo:hover {
+    background-color: rgba(0, 0, 0, 0.08);
+}
+
+#AssetSortCombo:focus {
+    background-color: rgba(0, 0, 0, 0.12);
+    outline: none;
+}
+
+#AssetSortCombo::drop-down {
+    border: none;
+    width: 20px;
+}
+
+#AssetSortCombo::down-arrow {
+    image: none;
+    width: 0px;
+    height: 0px;
+}
+
+#AssetSortCombo QAbstractItemView {
+    background-color: #f5f5f5;
+    border: 1px solid rgba(0, 0, 0, 0.15);
+    border-radius: 4px;
+    padding: 4px;
+    outline: none;
+    selection-background-color: #4a9eff;
+    selection-color: #ffffff;
+}
+
+#AssetSortCombo QAbstractItemView::item {
+    padding: 8px 12px;
+    border-radius: 4px;
+    min-height: 28px;
+}
+
+#AssetSortCombo QAbstractItemView::item:hover {
+    background-color: rgba(0, 0, 0, 0.08);
+}
+
+#AssetSortCombo QAbstractItemView::item:selected {
+    background-color: #4a9eff;
+    color: #ffffff;
+}

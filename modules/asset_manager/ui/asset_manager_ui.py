@@ -95,22 +95,29 @@ class AssetManagerUI(BaseModuleWidget):
         # 搜索和筛选区域
         filter_area = QWidget()
         filter_area.setObjectName("AssetFilterArea")
-        filter_area.setFixedHeight(60)
+        filter_area.setMinimumHeight(60)  # 改为最小高度，允许下拉框展开
         filter_layout = QHBoxLayout(filter_area)
         filter_layout.setContentsMargins(20, 10, 20, 20)
-        filter_layout.setSpacing(15)
+        filter_layout.setSpacing(8)
 
-        # 搜索框
-        self.search_input = QLineEdit()
-        self.search_input.setObjectName("AssetSearchInput")
-        self.search_input.setPlaceholderText("输入资产名称或拼音...")
-        self.search_input.setFixedHeight(36)
-        self.search_input.setMaximumWidth(200)
-        self.search_input.setFocusPolicy(Qt.FocusPolicy.ClickFocus)  # 只有点击时才获得焦点
-        self.search_input.textChanged.connect(self._on_search_changed)
-        filter_layout.addWidget(self.search_input)
+        # 使用自定义delegate实现文本居中
+        from PyQt6.QtWidgets import QStyledItemDelegate
+        class CenterAlignDelegate(QStyledItemDelegate):
+            def initStyleOption(self, option, index):
+                super().initStyleOption(option, index)
+                option.displayAlignment = Qt.AlignmentFlag.AlignCenter
         
-        # 分类选择框
+        # 分类标签 + 选择框（使用 QHBoxLayout 控制间距）
+        category_container = QWidget()
+        category_layout = QHBoxLayout(category_container)
+        category_layout.setContentsMargins(0, 0, 0, 0)
+        category_layout.setSpacing(3)
+        
+        category_label = QLabel("分类：")
+        category_label.setObjectName("AssetFilterLabel")
+        category_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        category_layout.addWidget(category_label)
+        
         self.category_filter = QComboBox()
         self.category_filter.setObjectName("AssetCategoryFilter")
         self.category_filter.setFixedHeight(36)
@@ -120,18 +127,22 @@ class AssetManagerUI(BaseModuleWidget):
         self.category_filter.setCursor(Qt.CursorShape.PointingHandCursor)
         self.category_filter.addItem("全部分类")  # 默认选项
         self.category_filter.currentTextChanged.connect(self._on_category_changed)
-        
-        # 使用自定义delegate实现文本居中
-        from PyQt6.QtWidgets import QStyledItemDelegate
-        class CenterAlignDelegate(QStyledItemDelegate):
-            def initStyleOption(self, option, index):
-                super().initStyleOption(option, index)
-                option.displayAlignment = Qt.AlignmentFlag.AlignCenter
-        
         self.category_filter.setItemDelegate(CenterAlignDelegate(self.category_filter))
-        filter_layout.addWidget(self.category_filter)
+        category_layout.addWidget(self.category_filter)
         
-        # 类型筛选框
+        filter_layout.addWidget(category_container)
+        
+        # 类型标签 + 筛选框（使用 QHBoxLayout 控制间距）
+        type_container = QWidget()
+        type_layout = QHBoxLayout(type_container)
+        type_layout.setContentsMargins(0, 0, 0, 0)
+        type_layout.setSpacing(3)
+        
+        type_label = QLabel("类型：")
+        type_label.setObjectName("AssetFilterLabel")
+        type_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        type_layout.addWidget(type_label)
+        
         self.type_filter = QComboBox()
         self.type_filter.setObjectName("AssetTypeFilter")
         self.type_filter.setFixedHeight(36)
@@ -142,22 +153,21 @@ class AssetManagerUI(BaseModuleWidget):
         self.type_filter.addItems(["全部类型", "Content 资产包", "UE 项目", "UE 插件", "其他资源"])
         self.type_filter.currentTextChanged.connect(self._on_type_filter_changed)
         self.type_filter.setItemDelegate(CenterAlignDelegate(self.type_filter))
-        filter_layout.addWidget(self.type_filter)
+        type_layout.addWidget(self.type_filter)
         
-        # 版本筛选框
-        self.version_filter = QComboBox()
-        self.version_filter.setObjectName("AssetVersionFilter")
-        self.version_filter.setFixedHeight(36)
-        self.version_filter.setMinimumWidth(100)
-        self.version_filter.setMaximumWidth(140)
-        self.version_filter.setFocusPolicy(Qt.FocusPolicy.ClickFocus)
-        self.version_filter.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.version_filter.addItem("全部版本")
-        self.version_filter.currentTextChanged.connect(self._on_version_filter_changed)
-        self.version_filter.setItemDelegate(CenterAlignDelegate(self.version_filter))
-        filter_layout.addWidget(self.version_filter)
+        filter_layout.addWidget(type_container)
         
-        # 排序选择框
+        # 排序标签 + 选择框（使用 QHBoxLayout 控制间距）
+        sort_container = QWidget()
+        sort_layout = QHBoxLayout(sort_container)
+        sort_layout.setContentsMargins(0, 0, 0, 0)
+        sort_layout.setSpacing(3)
+        
+        sort_label = QLabel("排序：")
+        sort_label.setObjectName("AssetFilterLabel")
+        sort_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        sort_layout.addWidget(sort_label)
+        
         self.sort_combo = QComboBox()
         self.sort_combo.setObjectName("AssetSortCombo")
         self.sort_combo.setFixedHeight(36)
@@ -176,10 +186,22 @@ class AssetManagerUI(BaseModuleWidget):
         # 使用 activated 信号而不是 currentTextChanged，这样用户每次主动选择都会触发
         self.sort_combo.activated.connect(lambda: self._on_sort_changed(self.sort_combo.currentText()))
         self.sort_combo.setItemDelegate(CenterAlignDelegate(self.sort_combo))
-        filter_layout.addWidget(self.sort_combo)
+        sort_layout.addWidget(self.sort_combo)
+        
+        filter_layout.addWidget(sort_container)
 
         # 添加弹性空间
         filter_layout.addStretch()
+        
+        # 搜索框
+        self.search_input = QLineEdit()
+        self.search_input.setObjectName("AssetSearchInput")
+        self.search_input.setPlaceholderText("输入资产名称或拼音...")
+        self.search_input.setFixedHeight(36)
+        self.search_input.setMaximumWidth(200)
+        self.search_input.setFocusPolicy(Qt.FocusPolicy.ClickFocus)  # 只有点击时才获得焦点
+        self.search_input.textChanged.connect(self._on_search_changed)
+        filter_layout.addWidget(self.search_input)
         
         # 添加资产按钮
         self.add_asset_btn = QPushButton("+ 添加资产")
@@ -326,32 +348,7 @@ class AssetManagerUI(BaseModuleWidget):
             logger.error(f"加载分类失败: {e}", exc_info=True)
             self.category_filter.blockSignals(False)
     
-    def _load_version_filter(self):
-        """从已有资产中收集引擎版本号并填充版本筛选下拉框"""
-        try:
-            versions = self.controller.get_all_engine_versions()
-            
-            current_version = self.version_filter.currentText()
-            self.version_filter.blockSignals(True)
-            self.version_filter.clear()
-            self.version_filter.addItem("全部版本")
-            for v in versions:
-                self.version_filter.addItem(v)
-            
-            # 恢复上次选择
-            saved_version = self.controller.load_ui_state("selected_version", "")
-            restore_target = saved_version if saved_version else current_version
-            if restore_target:
-                index = self.version_filter.findText(restore_target)
-                if index >= 0:
-                    self.version_filter.setCurrentIndex(index)
-                    self.controller.set_version_filter(restore_target)
-            
-            self.version_filter.blockSignals(False)
-            logger.info(f"已加载 {len(versions)} 个引擎版本选项")
-        except Exception as e:
-            logger.error(f"加载版本筛选失败: {e}", exc_info=True)
-            self.version_filter.blockSignals(False)
+
     
     def _on_category_changed(self, category: str):
         """分类选择改变事件"""
@@ -411,12 +408,7 @@ class AssetManagerUI(BaseModuleWidget):
         logger.info(f"类型筛选改变: {type_name} -> {english_type}")
         self._apply_filter_to_ui()
     
-    def _on_version_filter_changed(self, version: str):
-        """版本筛选改变事件"""
-        self.controller.set_version_filter(version)
-        self.controller.save_ui_state("selected_version", version)
-        logger.info(f"版本筛选改变: {version}")
-        self._apply_filter_to_ui()
+
 
     def _on_sort_changed(self, sort_method: str):
         """排序方式改变事件"""
@@ -996,9 +988,6 @@ class AssetManagerUI(BaseModuleWidget):
             
             # 加载分类列表（内部会恢复已保存分类）
             self._load_categories()
-            
-            # 加载版本筛选列表
-            self._load_version_filter()
             
             # 恢复已保存的类型筛选
             saved_type = self.controller.load_ui_state("selected_type", "")
