@@ -1146,12 +1146,12 @@ class MyProjectsUI(BaseModuleWidget):
         self.category_filter.addItem("全部分类")
         for cat in categories:
             self.category_filter.addItem(cat)
-        self.category_filter.addItem("+ 分类管理")
+        self.category_filter.addItem("⚙️ 分类管理")
 
         # 优先恢复已保存的分类
         saved_category = self._load_ui_state("selected_category", "")
         restore_target = saved_category if saved_category else current
-        if restore_target and restore_target != "+ 分类管理":
+        if restore_target and restore_target != "⚙️ 分类管理":
             idx = self.category_filter.findText(restore_target)
             if idx >= 0:
                 self.category_filter.setCurrentIndex(idx)
@@ -1191,7 +1191,7 @@ class MyProjectsUI(BaseModuleWidget):
 
     def _on_category_changed(self, category: str):
         """分类选择改变"""
-        if category == "+ 分类管理":
+        if category == "⚙️ 分类管理":
             self._show_category_dialog()
             self.category_filter.setCurrentIndex(0)
             return
@@ -1231,7 +1231,7 @@ class MyProjectsUI(BaseModuleWidget):
                 continue
             if version != "所有版本" and p.get('version', '') not in version:
                 continue
-            if category not in ("全部分类", "+ 分类管理") and p.get('category', '默认') != category:
+            if category not in ("全部分类", "⚙️ 分类管理") and p.get('category', '默认') != category:
                 continue
             filtered.append(p)
 
