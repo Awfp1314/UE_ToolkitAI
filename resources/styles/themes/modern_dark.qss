@@ -3685,26 +3685,14 @@ QMenu#AssetCardMenu::separator {
 
 /* ===== 配置模板卡片 ===== */
 #ConfigTemplateCard {
-    background: qlineargradient(
-        x1:0, y1:0, x2:0, y2:1,
-        stop:0 #383838,
-        stop:0.3 #323232,
-        stop:0.7 #2c2c2c,
-        stop:1 #282828
-    );
-    border: 1px solid #454545;
-    border-radius: 8px;
+    background-color: #2a2a2a;
+    border: 1px solid #3a3a3a;
+    border-radius: 6px;
 }
 
 #ConfigTemplateCard:hover {
-    background: qlineargradient(
-        x1:0, y1:0, x2:0, y2:1,
-        stop:0 #424242,
-        stop:0.3 #3c3c3c,
-        stop:0.7 #363636,
-        stop:1 #323232
-    );
-    border: 1px solid rgba(74, 158, 255, 0.5);
+    background-color: #323232;
+    border: 1px solid #4a4a4a;
 }
 
 /* 卡片名称 */
@@ -3799,26 +3787,14 @@ QMenu#AssetCardMenu::separator {
 
 /* ===== 站点卡片 ===== */
 #SiteCard {
-    background: qlineargradient(
-        x1:0, y1:0, x2:0, y2:1,
-        stop:0 #383838,
-        stop:0.3 #323232,
-        stop:0.7 #2c2c2c,
-        stop:1 #282828
-    );
-    border: 1px solid #454545;
-    border-radius: 8px;
+    background-color: #2a2a2a;
+    border: 1px solid #3a3a3a;
+    border-radius: 6px;
 }
 
 #SiteCard:hover {
-    background: qlineargradient(
-        x1:0, y1:0, x2:0, y2:1,
-        stop:0 #424242,
-        stop:0.3 #3c3c3c,
-        stop:0.7 #363636,
-        stop:1 #323232
-    );
-    border: 1px solid rgba(74, 158, 255, 0.5);
+    background-color: #323232;
+    border: 1px solid #4a4a4a;
 }
 
 /* 卡片名称 */
