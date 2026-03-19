@@ -201,6 +201,81 @@ class EditProjectDialog(QDialog):
         source_dir = Path(self.project_path) / "Source"
         return source_dir.exists() and any(source_dir.glob("*.Target.cs"))
 
+    @staticmethod
+    def _detect_file_encoding(file_path: Path) -> str:
+        """检测文件编码，优先尝试 UE 常用编码"""
+        encodings = ['utf-16-le', 'utf-16', 'utf-8-sig', 'utf-8', 'gbk']
+        for encoding in encodings:
+            try:
+                file_path.read_text(encoding=encoding)
+                return encoding
+            except (UnicodeDecodeError, UnicodeError):
+                continue
+        return 'utf-8'
+
+    def _check_ue_running(self, project_path: Path) -> bool:
+        """检查 UE 编辑器是否正在运行该项目（轻量检测，避免崩溃）"""
+        import psutil
+        project_name = project_path.name
+        
+        try:
+            for proc in psutil.process_iter(['name']):
+                try:
+                    proc_name = proc.info.get('name', '')
+                    if proc_name not in ['UnrealEditor.exe', 'UE4Editor.exe', 'UnrealEditor-Win64-Debug.exe']:
+                        continue
+                    
+                    # 只检查进程名，不访问 cmdline（避免触发 UE 崩溃）
+                    # 如果有 UE 进程在运行，就假设可能在使用该项目
+                    return True
+                    
+                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                    continue
+        except Exception as e:
+            logger.warning(f"检测 UE 进程失败: {e}")
+            return False
+        
+        return False
+
+    def _find_and_kill_locking_processes(self, path: Path) -> tuple[bool, str]:
+        """查找并停止占用文件夹的非 UE 进程（轻量检测，避免崩溃）
+        
+        Returns:
+            (success, message)
+        """
+        import psutil
+        path_str = str(path).lower()
+        killed_processes = []
+        
+        try:
+            for proc in psutil.process_iter(['name', 'pid']):
+                try:
+                    proc_name = proc.info.get('name', '')
+                    
+                    # 跳过 UE 进程（不检测是否占用，避免崩溃）
+                    if proc_name in ['UnrealEditor.exe', 'UE4Editor.exe', 'UnrealEditor-Win64-Debug.exe']:
+                        continue
+                    
+                    # 只检查工作目录，不检查打开的文件（避免访问敏感信息）
+                    try:
+                        cwd = proc.cwd()
+                        if cwd and cwd.lower().startswith(path_str):
+                            proc.kill()
+                            killed_processes.append(proc_name)
+                            logger.info(f"已停止占用进程: {proc_name} (PID: {proc.info['pid']})")
+                    except (psutil.NoSuchProcess, psutil.AccessDenied):
+                        continue
+                        
+                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                    continue
+        except Exception as e:
+            logger.warning(f"查找占用进程失败: {e}")
+        
+        if killed_processes:
+            return True, f"已自动停止占用进程: {', '.join(set(killed_processes))}"
+        
+        return True, ""
+
     def _init_ui(self):
         self.setModal(True)
         self.setFixedSize(500, 420)
@@ -704,9 +779,12 @@ class EditProjectDialog(QDialog):
         config_dir.mkdir(parents=True, exist_ok=True)
         engine_ini = config_dir / "DefaultEngine.ini"
 
+        # 检测原始编码
         if engine_ini.exists():
-            content = engine_ini.read_text(encoding='utf-8')
+            encoding = self._detect_file_encoding(engine_ini)
+            content = engine_ini.read_text(encoding=encoding)
         else:
+            encoding = 'utf-8'
             content = ""
 
         # 1. 更新 [URL] GameName
@@ -774,8 +852,8 @@ class EditProjectDialog(QDialog):
             self._update_backup_meta(engine_ini_modified=True)
             logger.info("未检测到 /Script/ 引用，跳过 redirect")
 
-        engine_ini.write_text(content, encoding='utf-8')
-        logger.info(f"更新 DefaultEngine.ini: GameName={new_name}")
+        engine_ini.write_text(content, encoding=encoding)
+        logger.info(f"更新 DefaultEngine.ini: GameName={new_name} (编码: {encoding})")
 
     def _update_backup_meta(self, **kwargs):
         """更新备份 _meta.json 中的字段"""
@@ -898,16 +976,39 @@ class EditProjectDialog(QDialog):
                     self.project_path = str(final_path)
                     self.path_input.setText(str(final_path))
                 except PermissionError as e:
-                    self._rollback_blueprint_project()
-                    self._show_error(
-                        f"文件夹移动失败：{e}\n\n"
-                        f"可能原因：\n"
-                        f"• UE 编辑器正在使用该项目\n"
-                        f"• 文件管理器正在浏览该文件夹\n"
-                        f"• 杀毒软件正在扫描文件\n\n"
-                        f"建议：关闭占用进程后重试"
-                    )
-                    return False
+                    # 智能处理：检测 UE 进程或自动停止其他占用进程
+                    if self._check_ue_running(current_path):
+                        self._rollback_blueprint_project()
+                        self._show_error(
+                            f"UE 编辑器正在使用该项目\n\n"
+                            f"请先关闭 UE 编辑器，然后重试改名。"
+                        )
+                        return False
+                    
+                    # 尝试停止其他占用进程
+                    success, msg = self._find_and_kill_locking_processes(current_path)
+                    if not success:
+                        self._rollback_blueprint_project()
+                        self._show_error(msg)
+                        return False
+                    
+                    if msg:
+                        logger.info(msg)
+                    
+                    # 重试移动
+                    import time
+                    time.sleep(0.5)
+                    try:
+                        shutil.move(str(current_path), str(final_path))
+                        current_path = final_path
+                        self.project_path = str(final_path)
+                        self.path_input.setText(str(final_path))
+                    except PermissionError:
+                        self._rollback_blueprint_project()
+                        self._show_error(
+                            f"文件夹移动失败，请手动关闭占用进程后重试"
+                        )
+                        return False
             elif new_name != old_name:
                 # 同路径改名
                 new_folder = current_path.parent / new_name
@@ -950,16 +1051,39 @@ class EditProjectDialog(QDialog):
                             else:
                                 raise
                 except PermissionError as e:
-                    self._rollback_blueprint_project()
-                    self._show_error(
-                        f"文件夹重命名失败：{e}\n\n"
-                        f"可能原因：\n"
-                        f"• UE 编辑器正在使用该项目\n"
-                        f"• 文件管理器正在浏览该文件夹\n"
-                        f"• 杀毒软件正在扫描文件\n\n"
-                        f"建议：关闭占用进程后重试"
-                    )
-                    return False
+                    # 智能处理：检测 UE 进程或自动停止其他占用进程
+                    if self._check_ue_running(current_path):
+                        self._rollback_blueprint_project()
+                        self._show_error(
+                            f"UE 编辑器正在使用该项目\n\n"
+                            f"请先关闭 UE 编辑器，然后重试改名。"
+                        )
+                        return False
+                    
+                    # 尝试停止其他占用进程
+                    success, msg = self._find_and_kill_locking_processes(current_path)
+                    if not success:
+                        self._rollback_blueprint_project()
+                        self._show_error(msg)
+                        return False
+                    
+                    if msg:
+                        logger.info(msg)
+                    
+                    # 重试重命名
+                    import time
+                    time.sleep(0.5)
+                    try:
+                        current_path.rename(new_folder)
+                        current_path = new_folder
+                        self.project_path = str(new_folder)
+                        self.path_input.setText(str(new_folder))
+                    except PermissionError:
+                        self._rollback_blueprint_project()
+                        self._show_error(
+                            f"文件夹重命名失败，请手动关闭占用进程后重试"
+                        )
+                        return False
 
             # Step 3: 更新 Config 文件（在新路径下操作）
             if new_name != old_name:
@@ -1473,7 +1597,9 @@ class EditProjectDialog(QDialog):
     def _update_engine_ini(self, engine_ini: Path, old_name: str, new_name: str):
         """更新 DefaultEngine.ini：GameName + ActiveGameNameRedirects"""
         try:
-            content = engine_ini.read_text(encoding='utf-8')
+            # 检测原始编码
+            encoding = self._detect_file_encoding(engine_ini)
+            content = engine_ini.read_text(encoding=encoding)
 
             # 添加或更新 [URL] GameName
             if '[URL]' in content:
@@ -1512,15 +1638,22 @@ class EditProjectDialog(QDialog):
             else:
                 content += f"\n{redirect_section}\n{new_redirect}\n"
 
-            engine_ini.write_text(content, encoding='utf-8')
-            logger.info(f"更新 DefaultEngine.ini: GameName={new_name}, 添加 ActiveGameNameRedirects")
+            engine_ini.write_text(content, encoding=encoding)
+            logger.info(f"更新 DefaultEngine.ini: GameName={new_name}, 添加 ActiveGameNameRedirects (编码: {encoding})")
         except Exception as e:
             logger.warning(f"更新 DefaultEngine.ini 失败: {e}")
 
     def _update_game_ini(self, game_ini: Path, new_name: str):
         """更新 DefaultGame.ini：ProjectName"""
         try:
-            content = game_ini.read_text(encoding='utf-8')
+            # 检测原始编码
+            if game_ini.exists():
+                encoding = self._detect_file_encoding(game_ini)
+                content = game_ini.read_text(encoding=encoding)
+            else:
+                encoding = 'utf-8'
+                content = ""
+            
             section = "[/Script/EngineSettings.GeneralProjectSettings]"
 
             if section in content:
@@ -1532,8 +1665,8 @@ class EditProjectDialog(QDialog):
             else:
                 content += f"\n{section}\nProjectName={new_name}\n"
 
-            game_ini.write_text(content, encoding='utf-8')
-            logger.info(f"更新 DefaultGame.ini: ProjectName={new_name}")
+            game_ini.write_text(content, encoding=encoding)
+            logger.info(f"更新 DefaultGame.ini: ProjectName={new_name} (编码: {encoding})")
         except Exception as e:
             logger.warning(f"更新 DefaultGame.ini 失败: {e}")
 
@@ -1592,3 +1725,15 @@ class EditProjectDialog(QDialog):
             x = screen.x() + (screen.width() - self.width()) // 2
             y = screen.y() + (screen.height() - self.height()) // 2
             self.move(x, y)
+
+    @staticmethod
+    def _detect_file_encoding(file_path: Path) -> str:
+        """检测文件编码，优先尝试 UE 常用编码"""
+        encodings = ['utf-16-le', 'utf-16', 'utf-8-sig', 'utf-8', 'gbk']
+        for encoding in encodings:
+            try:
+                file_path.read_text(encoding=encoding)
+                return encoding
+            except (UnicodeDecodeError, UnicodeError):
+                continue
+        return 'utf-8'  # 默认回退
