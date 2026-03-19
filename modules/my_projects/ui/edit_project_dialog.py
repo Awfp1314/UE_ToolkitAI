@@ -575,8 +575,391 @@ class EditProjectDialog(QDialog):
 
         old_uproject = uproject_files[0]
 
+        if self.is_cpp_project:
+            return self._rename_cpp_project_flow(
+                new_name, new_path, old_path, old_name, old_uproject
+            )
+        else:
+            return self._rename_blueprint_project_flow(
+                new_name, new_path, old_path, old_name, old_uproject
+            )
+
+    # ── 蓝图项目改名流程 ──
+
+    def _backup_blueprint_project(
+        self, project_path: Path, old_name: str, new_name: str
+    ) -> Optional[Path]:
+        """蓝图项目轻量备份：.uproject + Config/ + Plugins/*/Config/"""
+        from datetime import datetime
+        try:
+            backup_dir = _get_backup_dir()
+            if backup_dir.exists():
+                shutil.rmtree(backup_dir)
+            backup_dir.mkdir(parents=True, exist_ok=True)
+
+            # 备份 .uproject
+            for up in project_path.glob("*.uproject"):
+                shutil.copy2(up, backup_dir / up.name)
+
+            # 备份 Config/
+            config_dir = project_path / "Config"
+            if config_dir.exists():
+                shutil.copytree(config_dir, backup_dir / "Config")
+
+            # 备份 Plugins/*/Config/
+            plugins_dir = project_path / "Plugins"
+            if plugins_dir.exists():
+                for plugin_config in plugins_dir.glob("*/Config"):
+                    if plugin_config.is_dir():
+                        rel = plugin_config.relative_to(project_path)
+                        dest = backup_dir / rel
+                        dest.parent.mkdir(parents=True, exist_ok=True)
+                        shutil.copytree(plugin_config, dest)
+
+            # 写入 _meta.json
+            meta = {
+                "original_name": old_name,
+                "new_name": new_name,
+                "original_path": str(project_path),
+                "original_folder": project_path.name,
+                "backup_time": datetime.now().isoformat(),
+                "engine_ini_modified": False,
+                "game_ini_modified": False,
+                "redirects_added": [],
+                "is_blueprint": True,
+            }
+            with open(backup_dir / "_meta.json", "w", encoding="utf-8") as f:
+                json.dump(meta, f, ensure_ascii=False, indent=2)
+
+            logger.info(f"蓝图项目已备份到: {backup_dir}")
+            return backup_dir
+        except Exception as e:
+            logger.error(f"蓝图项目备份失败: {e}", exc_info=True)
+            return None
+
+    def _scan_script_references(
+        self, project_path: Path, old_name: str
+    ) -> tuple[list, list]:
+        """扫描 Config/*.ini + Plugins/*/Config/*.ini 中的旧名引用
+
+        Returns:
+            (high_risk: ["/Script/OldName" 引用列表],
+             low_risk: [普通 OldName 引用列表])
+        """
+        import re
+        high_risk = []
+        low_risk = []
+        old_lower = old_name.lower()
+        script_pattern = re.compile(
+            rf'/Script/{re.escape(old_name)}', re.IGNORECASE
+        )
+
+        ini_files = []
+        config_dir = project_path / "Config"
+        if config_dir.exists():
+            ini_files.extend(config_dir.glob("*.ini"))
+        plugins_dir = project_path / "Plugins"
+        if plugins_dir.exists():
+            for pc in plugins_dir.glob("*/Config/*.ini"):
+                ini_files.append(pc)
+
+        for ini_file in ini_files:
+            try:
+                content = ini_file.read_text(encoding='utf-8')
+                for i, line in enumerate(content.splitlines(), 1):
+                    if script_pattern.search(line):
+                        high_risk.append(f"{ini_file.name}:{i} → {line.strip()}")
+                    elif old_lower in line.lower():
+                        # 排除已经是 redirect 目标的行
+                        if 'NewName=' not in line and 'NewGameName=' not in line:
+                            low_risk.append(f"{ini_file.name}:{i} → {line.strip()}")
+            except Exception as e:
+                logger.warning(f"扫描文件失败 {ini_file}: {e}")
+
+        return high_risk, low_risk
+
+    def _has_existing_redirects(self, project_path: Path, old_name: str) -> bool:
+        """检查是否已有指向 old_name 的历史 redirect"""
+        import re
+        config_dir = project_path / "Config"
+        engine_ini = config_dir / "DefaultEngine.ini"
+        if not engine_ini.exists():
+            return False
+        try:
+            content = engine_ini.read_text(encoding='utf-8')
+            pattern = re.compile(
+                rf'OldName="/Script/{re.escape(old_name)}"', re.IGNORECASE
+            )
+            return bool(pattern.search(content))
+        except Exception:
+            return False
+
+    def _update_engine_ini_blueprint(
+        self, project_path: Path, old_name: str, new_name: str
+    ):
+        """蓝图项目专用：更新 DefaultEngine.ini（GameName + Redirects）"""
+        import re
+        config_dir = project_path / "Config"
+        config_dir.mkdir(parents=True, exist_ok=True)
+        engine_ini = config_dir / "DefaultEngine.ini"
+
+        if engine_ini.exists():
+            content = engine_ini.read_text(encoding='utf-8')
+        else:
+            content = ""
+
+        # 1. 更新 [URL] GameName
+        if '[URL]' in content:
+            if re.search(r'GameName=', content):
+                content = re.sub(r'GameName=.*', f'GameName={new_name}', content)
+            else:
+                content = content.replace('[URL]', f'[URL]\nGameName={new_name}')
+        else:
+            content = f"[URL]\nGameName={new_name}\n\n" + content
+
+        # 2. 检测是否需要 redirect
+        high_risk, _ = self._scan_script_references(project_path, old_name)
+        has_history = self._has_existing_redirects(project_path, old_name)
+
+        if high_risk or has_history:
+            # 写入 CoreRedirects（官方推荐 UE5）
+            core_redirect = (
+                f'+PackageRedirects=(OldName="/Script/{old_name}",'
+                f'NewName="/Script/{new_name}")'
+            )
+            if '[CoreRedirects]' in content:
+                # 更新已有的：把指向旧名的都改为指向新名
+                content = re.sub(
+                    rf'NewName="/Script/{re.escape(old_name)}"',
+                    f'NewName="/Script/{new_name}"',
+                    content, flags=re.IGNORECASE
+                )
+                # 检查是否已有从 old_name 到 new_name 的 redirect
+                if f'OldName="/Script/{old_name}"' not in content:
+                    content = content.replace(
+                        '[CoreRedirects]',
+                        f'[CoreRedirects]\n{core_redirect}'
+                    )
+            else:
+                content += f"\n[CoreRedirects]\n{core_redirect}\n"
+
+            # 兼容写法（旧引擎）
+            compat_redirect = (
+                f'+ActiveGameNameRedirects=(OldGameName="/Script/{old_name}",'
+                f'NewGameName="/Script/{new_name}")'
+            )
+            engine_section = "[/Script/Engine.Engine]"
+            if engine_section in content:
+                content = re.sub(
+                    rf'NewGameName="/Script/{re.escape(old_name)}"',
+                    f'NewGameName="/Script/{new_name}"',
+                    content, flags=re.IGNORECASE
+                )
+                if f'OldGameName="/Script/{old_name}"' not in content:
+                    content = content.replace(
+                        engine_section,
+                        f"{engine_section}\n{compat_redirect}"
+                    )
+            else:
+                content += f"\n{engine_section}\n{compat_redirect}\n"
+
+            # 更新 _meta.json
+            self._update_backup_meta(
+                redirects_added=[f"/Script/{old_name}"],
+                engine_ini_modified=True
+            )
+            logger.info(f"已添加 redirect: /Script/{old_name} → /Script/{new_name}")
+        else:
+            self._update_backup_meta(engine_ini_modified=True)
+            logger.info("未检测到 /Script/ 引用，跳过 redirect")
+
+        engine_ini.write_text(content, encoding='utf-8')
+        logger.info(f"更新 DefaultEngine.ini: GameName={new_name}")
+
+    def _update_backup_meta(self, **kwargs):
+        """更新备份 _meta.json 中的字段"""
+        backup_dir = _get_backup_dir()
+        meta_file = backup_dir / "_meta.json"
+        if not meta_file.exists():
+            return
+        try:
+            with open(meta_file, "r", encoding="utf-8") as f:
+                meta = json.load(f)
+            meta.update(kwargs)
+            with open(meta_file, "w", encoding="utf-8") as f:
+                json.dump(meta, f, ensure_ascii=False, indent=2)
+        except Exception as e:
+            logger.warning(f"更新 _meta.json 失败: {e}")
+
+    def _rollback_blueprint_project(self):
+        """蓝图项目回滚：从备份还原"""
+        backup_dir = _get_backup_dir()
+        if not backup_dir.exists():
+            logger.warning("没有找到备份，无法回滚")
+            return False
+
+        try:
+            meta_file = backup_dir / "_meta.json"
+            if not meta_file.exists():
+                return False
+
+            with open(meta_file, "r", encoding="utf-8") as f:
+                meta = json.load(f)
+
+            original_path = Path(meta["original_path"])
+            original_name = meta["original_name"]
+            current_path = Path(self.project_path)
+
+            # 1. 如果文件夹已改名，先改回去
+            if current_path.name != original_path.name and current_path.exists():
+                restored_path = current_path.parent / original_path.name
+                if not restored_path.exists():
+                    current_path.rename(restored_path)
+                    current_path = restored_path
+                    self.project_path = str(restored_path)
+                    logger.info(f"文件夹已回滚: {current_path.name} → {original_path.name}")
+
+            # 2. 还原 Config/
+            backup_config = backup_dir / "Config"
+            if backup_config.exists():
+                current_config = current_path / "Config"
+                if current_config.exists():
+                    shutil.rmtree(current_config)
+                shutil.copytree(backup_config, current_config)
+
+            # 3. 还原 Plugins/*/Config/
+            backup_plugins = backup_dir / "Plugins"
+            if backup_plugins.exists():
+                for plugin_config_backup in backup_plugins.glob("*/Config"):
+                    rel = plugin_config_backup.relative_to(backup_dir)
+                    target = current_path / rel
+                    if target.exists():
+                        shutil.rmtree(target)
+                    target.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copytree(plugin_config_backup, target)
+
+            # 4. 还原 .uproject
+            for up_backup in backup_dir.glob("*.uproject"):
+                # 删除当前的 .uproject
+                for up_current in current_path.glob("*.uproject"):
+                    up_current.unlink()
+                shutil.copy2(up_backup, current_path / up_backup.name)
+
+            self.project_name = original_name
+
+            # 5. 清理备份
+            shutil.rmtree(backup_dir, ignore_errors=True)
+
+            logger.info("蓝图项目已回滚到原始状态")
+            return True
+        except Exception as e:
+            logger.error(f"蓝图项目回滚失败: {e}", exc_info=True)
+            return False
+
+    def _verify_rename(self, project_path: Path, old_name: str) -> list:
+        """改名后验证，返回警告列表"""
+        warnings = []
+        high_risk, low_risk = self._scan_script_references(project_path, old_name)
+
+        for ref in high_risk:
+            warnings.append(f"⚠️ 高风险残留: {ref}")
+        for ref in low_risk[:5]:  # 普通残留最多显示5条
+            warnings.append(f"ℹ️ 普通残留: {ref}")
+        if len(low_risk) > 5:
+            warnings.append(f"ℹ️ ...还有 {len(low_risk) - 5} 处普通残留")
+
+        return warnings
+
+    def _rename_blueprint_project_flow(
+        self, new_name: str, new_path: str,
+        old_path: Path, old_name: str, old_uproject: Path
+    ) -> bool:
+        """蓝图项目改名完整流程"""
+        try:
+            # Step 1: 轻量备份
+            backup_dir = self._backup_blueprint_project(old_path, old_name, new_name)
+            if not backup_dir:
+                self._show_error("备份失败，取消重命名")
+                return False
+
+            # Step 2a: 更新 Config/DefaultEngine.ini
+            if new_name != old_name:
+                self._update_engine_ini_blueprint(old_path, old_name, new_name)
+
+                # Step 2b: 更新 Config/DefaultGame.ini
+                config_dir = old_path / "Config"
+                config_dir.mkdir(parents=True, exist_ok=True)
+                self._update_game_ini(config_dir / "DefaultGame.ini", new_name)
+                self._update_backup_meta(game_ini_modified=True)
+
+            # Step 3: 重命名 .uproject
+            if new_name != old_name:
+                new_uproject = old_path / f"{new_name}.uproject"
+                if new_uproject.exists() and new_uproject != old_uproject:
+                    self._rollback_blueprint_project()
+                    self._show_error(f"文件 {new_name}.uproject 已存在")
+                    return False
+                old_uproject.rename(new_uproject)
+                logger.info(f"重命名 .uproject: {old_uproject.name} → {new_uproject.name}")
+
+            # Step 4: 重命名项目根目录
+            if new_path != self.project_path:
+                final_path = Path(new_path) / (new_name if new_name != old_name else old_path.name)
+                if final_path.exists():
+                    self._rollback_blueprint_project()
+                    self._show_error(f"目标路径已存在: {final_path}")
+                    return False
+                shutil.move(str(old_path), str(final_path))
+                self.project_path = str(final_path)
+                self.path_input.setText(str(final_path))
+            elif new_name != old_name:
+                new_folder = old_path.parent / new_name
+                if new_folder.exists():
+                    self._rollback_blueprint_project()
+                    self._show_error(f"文件夹已存在: {new_folder}")
+                    return False
+                old_path.rename(new_folder)
+                self.project_path = str(new_folder)
+                self.path_input.setText(str(new_folder))
+
+            self.project_name = new_name
+
+            # Step 5: 验证
+            final_project_path = Path(self.project_path)
+            warnings = self._verify_rename(final_project_path, old_name)
+            if warnings:
+                warning_msg = "\n".join(warnings)
+                QMessageBox.warning(
+                    self, "改名完成 - 请检查",
+                    f"项目已成功改名，但检测到以下残留引用：\n\n"
+                    f"{warning_msg}\n\n"
+                    f"建议打开项目检查：\n"
+                    f"• GameMode / PlayerController / HUD 是否正常\n"
+                    f"• Project Settings 里名称显示是否正确"
+                )
+            else:
+                logger.info("改名验证通过，未发现残留引用")
+
+            # 清理备份
+            if backup_dir.exists():
+                shutil.rmtree(backup_dir, ignore_errors=True)
+            return True
+
+        except Exception as e:
+            logger.error(f"蓝图项目重命名失败: {e}", exc_info=True)
+            self._rollback_blueprint_project()
+            self._show_error(f"重命名失败: {e}")
+            return False
+
+    # ── C++ 项目改名流程 ──
+
+    def _rename_cpp_project_flow(
+        self, new_name: str, new_path: str,
+        old_path: Path, old_name: str, old_uproject: Path
+    ) -> bool:
+        """C++ 项目改名流程（保留原有逻辑）"""
         # C++ 项目：先备份
-        if self.is_cpp_project and new_name != old_name:
+        if new_name != old_name:
             backup = self._backup_project(old_path)
             if not backup:
                 self._show_error("备份失败，取消重命名")
@@ -593,19 +976,15 @@ class EditProjectDialog(QDialog):
                 old_uproject.rename(new_uproject)
                 logger.info(f"重命名 .uproject: {old_uproject.name} → {new_uproject.name}")
 
-                if self.is_cpp_project:
-                    self._rename_cpp_project(old_path, old_name, new_name)
+                self._rename_cpp_project(old_path, old_name, new_name)
 
-            # 2. 清理缓存（编译前必须清理，否则旧的 Intermediate 会干扰）
+            # 2. 清理缓存（C++ 项目需要，但不清理 Saved）
             self._clean_cache(old_path)
 
-            # 3. C++ 项目：先编译验证，再改文件夹名
-            #    这样编译失败时回滚不需要处理文件夹名变更
-            if self.is_cpp_project and new_name != old_name:
-                # 检查项目命名是否规范
+            # 3. 编译验证
+            if new_name != old_name:
                 is_consistent, error_msg = self._check_project_naming_consistency(old_path)
                 if not is_consistent:
-                    # 项目命名不规范，询问用户是否跳过编译验证
                     ret = QMessageBox.warning(
                         self, "项目命名不规范",
                         f"检测到项目命名不一致，可能导致编译失败：\n\n{error_msg}\n\n"
@@ -617,18 +996,14 @@ class EditProjectDialog(QDialog):
                         QMessageBox.StandardButton.Yes
                     )
                     if ret == QMessageBox.StandardButton.No:
-                        # 用户选择取消改名
                         return False
-                    # 用户选择跳过编译验证，继续改名但不编译
                     logger.info("用户选择跳过编译验证")
                 else:
-                    # 项目命名规范，执行编译验证
                     compile_ok = self._compile_and_verify(new_name)
                     if not compile_ok:
-                        # 编译失败，已经回滚，关闭编辑对话框
                         return False
 
-            # 4. 移动或重命名文件夹（编译通过后才执行）
+            # 4. 移动或重命名文件夹
             if new_path != self.project_path:
                 final_path = Path(new_path) / (new_name if new_name != old_name else old_path.name)
                 if final_path.exists():
@@ -647,7 +1022,6 @@ class EditProjectDialog(QDialog):
                 self.path_input.setText(str(new_folder))
 
             self.project_name = new_name
-            # 清理备份（编译成功）
             backup_dir = _get_backup_dir()
             if backup_dir.exists():
                 shutil.rmtree(backup_dir, ignore_errors=True)
@@ -657,6 +1031,7 @@ class EditProjectDialog(QDialog):
             logger.error(f"重命名项目失败: {e}", exc_info=True)
             self._show_error(f"重命名失败: {e}")
             return False
+
 
     def _get_real_module_name(self, project_path: Path) -> Optional[str]:
         """从 .uproject 文件读取真实的模块名"""
@@ -1083,34 +1458,8 @@ class EditProjectDialog(QDialog):
             logger.warning(f"更新 DefaultGame.ini 失败: {e}")
 
     def _clean_cache(self, project_path: Path):
-        """清理缓存，但保留 Saved 文件夹中的图片文件"""
-        # 先备份 Saved 文件夹中的图片
-        saved_dir = project_path / "Saved"
-        backup_images = []
-        if saved_dir.exists():
-            try:
-                # 收集所有图片文件
-                for ext in ['*.png', '*.jpg', '*.jpeg']:
-                    backup_images.extend(list(saved_dir.glob(ext)))
-                
-                # 读取图片内容到内存
-                image_data = []
-                for img in backup_images:
-                    try:
-                        with open(img, 'rb') as f:
-                            image_data.append((img.name, f.read()))
-                    except Exception as e:
-                        logger.warning(f"备份图片失败 {img}: {e}")
-                
-                logger.info(f"已备份 {len(image_data)} 个图片文件")
-            except Exception as e:
-                logger.warning(f"备份 Saved 图片失败: {e}")
-                image_data = []
-        else:
-            image_data = []
-        
-        # 清理缓存文件夹
-        for d in ['Intermediate', 'Binaries', '.vs', 'DerivedDataCache', 'Saved']:
+        """清理 C++ 编译缓存（不清理 Saved 目录）"""
+        for d in ['Intermediate', 'Binaries', '.vs', 'DerivedDataCache']:
             p = project_path / d
             if p.exists():
                 try:
@@ -1118,18 +1467,6 @@ class EditProjectDialog(QDialog):
                     logger.info(f"已清理缓存: {p}")
                 except Exception as e:
                     logger.warning(f"清理缓存失败 {p}: {e}")
-        
-        # 恢复图片文件
-        if image_data:
-            try:
-                saved_dir.mkdir(parents=True, exist_ok=True)
-                for img_name, img_content in image_data:
-                    img_path = saved_dir / img_name
-                    with open(img_path, 'wb') as f:
-                        f.write(img_content)
-                logger.info(f"已恢复 {len(image_data)} 个图片文件")
-            except Exception as e:
-                logger.warning(f"恢复图片文件失败: {e}")
 
     # ── 公共接口 ──
 
