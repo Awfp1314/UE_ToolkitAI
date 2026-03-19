@@ -965,19 +965,32 @@ class ProjectSearchWindow(QWidget):
                 if not uproject_files:
                     continue
                 
+                # 获取缩略图（内联实现）
+                thumbnail = None
+                try:
+                    saved_dir = proj_path / "Saved"
+                    if saved_dir.exists():
+                        imgs = list(saved_dir.glob("*.png")) + list(saved_dir.glob("*.jpg")) + list(saved_dir.glob("*.jpeg"))
+                        if imgs:
+                            latest = max(imgs, key=lambda p: p.stat().st_mtime)
+                            thumbnail = str(latest)
+                except Exception as e:
+                    logger.warning(f"获取缩略图失败 {proj_path}: {e}")
+                
                 converted_projects.append({
                     'name': proj.get("name", proj_path.name),
                     'path': str(proj_path),
                     'project_path': str(uproject_files[0]),
                     'version': proj.get("version", ""),
                     'category': proj.get("category", "默认"),
+                    'thumbnail': thumbnail,
                     'pid': 0
                 })
             
             self.all = converted_projects
             self.projs = converted_projects
             self._load_categories_from_registry(data)
-            self._render()
+            self._refresh()
             
         except Exception as e:
             logger.error(f"从注册表加载工程失败: {e}", exc_info=True)
