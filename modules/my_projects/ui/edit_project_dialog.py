@@ -909,18 +909,42 @@ class EditProjectDialog(QDialog):
                     self._rollback_blueprint_project()
                     self._show_error(f"目标路径已存在: {final_path}")
                     return False
-                shutil.move(str(old_path), str(final_path))
-                self.project_path = str(final_path)
-                self.path_input.setText(str(final_path))
+                try:
+                    shutil.move(str(old_path), str(final_path))
+                    self.project_path = str(final_path)
+                    self.path_input.setText(str(final_path))
+                except PermissionError as e:
+                    self._rollback_blueprint_project()
+                    self._show_error(
+                        f"文件夹重命名失败：{e}\n\n"
+                        f"可能原因：\n"
+                        f"• UE 编辑器正在使用该项目\n"
+                        f"• 文件管理器正在浏览该文件夹\n"
+                        f"• 杀毒软件正在扫描文件\n\n"
+                        f"建议：关闭占用进程后重试"
+                    )
+                    return False
             elif new_name != old_name:
                 new_folder = old_path.parent / new_name
                 if new_folder.exists():
                     self._rollback_blueprint_project()
                     self._show_error(f"文件夹已存在: {new_folder}")
                     return False
-                old_path.rename(new_folder)
-                self.project_path = str(new_folder)
-                self.path_input.setText(str(new_folder))
+                try:
+                    old_path.rename(new_folder)
+                    self.project_path = str(new_folder)
+                    self.path_input.setText(str(new_folder))
+                except PermissionError as e:
+                    self._rollback_blueprint_project()
+                    self._show_error(
+                        f"文件夹重命名失败：{e}\n\n"
+                        f"可能原因：\n"
+                        f"• UE 编辑器正在使用该项目\n"
+                        f"• 文件管理器正在浏览该文件夹\n"
+                        f"• 杀毒软件正在扫描文件\n\n"
+                        f"建议：关闭占用进程后重试"
+                    )
+                    return False
 
             self.project_name = new_name
 
@@ -1009,17 +1033,39 @@ class EditProjectDialog(QDialog):
                 if final_path.exists():
                     self._show_error(f"目标路径已存在: {final_path}")
                     return False
-                shutil.move(str(old_path), str(final_path))
-                self.project_path = str(final_path)
-                self.path_input.setText(str(final_path))
+                try:
+                    shutil.move(str(old_path), str(final_path))
+                    self.project_path = str(final_path)
+                    self.path_input.setText(str(final_path))
+                except PermissionError as e:
+                    self._show_error(
+                        f"文件夹移动失败：{e}\n\n"
+                        f"可能原因：\n"
+                        f"• UE 编辑器正在使用该项目\n"
+                        f"• 文件管理器正在浏览该文件夹\n"
+                        f"• 杀毒软件正在扫描文件\n\n"
+                        f"建议：关闭占用进程后重试"
+                    )
+                    return False
             elif new_name != old_name:
                 new_folder = old_path.parent / new_name
                 if new_folder.exists():
                     self._show_error(f"文件夹已存在: {new_folder}")
                     return False
-                old_path.rename(new_folder)
-                self.project_path = str(new_folder)
-                self.path_input.setText(str(new_folder))
+                try:
+                    old_path.rename(new_folder)
+                    self.project_path = str(new_folder)
+                    self.path_input.setText(str(new_folder))
+                except PermissionError as e:
+                    self._show_error(
+                        f"文件夹重命名失败：{e}\n\n"
+                        f"可能原因：\n"
+                        f"• UE 编辑器正在使用该项目\n"
+                        f"• 文件管理器正在浏览该文件夹\n"
+                        f"• 杀毒软件正在扫描文件\n\n"
+                        f"建议：关闭占用进程后重试"
+                    )
+                    return False
 
             self.project_name = new_name
             backup_dir = _get_backup_dir()
