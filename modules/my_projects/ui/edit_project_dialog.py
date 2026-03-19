@@ -172,6 +172,7 @@ class EditProjectDialog(QDialog):
     """编辑工程信息对话框"""
 
     project_updated = pyqtSignal(str, str, str, str)
+    request_stop_watching = pyqtSignal(str)  # 新增：请求停止监听项目
 
     def __init__(
         self,
@@ -882,41 +883,24 @@ class EditProjectDialog(QDialog):
                 self._show_error("备份失败，取消重命名")
                 return False
 
-            # Step 2a: 更新 Config/DefaultEngine.ini
-            if new_name != old_name:
-                self._update_engine_ini_blueprint(old_path, old_name, new_name)
-
-                # Step 2b: 更新 Config/DefaultGame.ini
-                config_dir = old_path / "Config"
-                config_dir.mkdir(parents=True, exist_ok=True)
-                self._update_game_ini(config_dir / "DefaultGame.ini", new_name)
-                self._update_backup_meta(game_ini_modified=True)
-
-            # Step 3: 重命名 .uproject
-            if new_name != old_name:
-                new_uproject = old_path / f"{new_name}.uproject"
-                if new_uproject.exists() and new_uproject != old_uproject:
-                    self._rollback_blueprint_project()
-                    self._show_error(f"文件 {new_name}.uproject 已存在")
-                    return False
-                old_uproject.rename(new_uproject)
-                logger.info(f"重命名 .uproject: {old_uproject.name} → {new_uproject.name}")
-
-            # Step 4: 重命名项目根目录
+            # Step 2: 重命名项目根目录（先改文件夹）
+            current_path = old_path
             if new_path != self.project_path:
+                # 跨路径移动
                 final_path = Path(new_path) / (new_name if new_name != old_name else old_path.name)
                 if final_path.exists():
                     self._rollback_blueprint_project()
                     self._show_error(f"目标路径已存在: {final_path}")
                     return False
                 try:
-                    shutil.move(str(old_path), str(final_path))
+                    shutil.move(str(current_path), str(final_path))
+                    current_path = final_path
                     self.project_path = str(final_path)
                     self.path_input.setText(str(final_path))
                 except PermissionError as e:
                     self._rollback_blueprint_project()
                     self._show_error(
-                        f"文件夹重命名失败：{e}\n\n"
+                        f"文件夹移动失败：{e}\n\n"
                         f"可能原因：\n"
                         f"• UE 编辑器正在使用该项目\n"
                         f"• 文件管理器正在浏览该文件夹\n"
@@ -925,15 +909,46 @@ class EditProjectDialog(QDialog):
                     )
                     return False
             elif new_name != old_name:
-                new_folder = old_path.parent / new_name
+                # 同路径改名
+                new_folder = current_path.parent / new_name
                 if new_folder.exists():
-                    self._rollback_blueprint_project()
-                    self._show_error(f"文件夹已存在: {new_folder}")
-                    return False
+                    # 提示用户目标文件夹已存在
+                    ret = QMessageBox.question(
+                        self, "目标文件夹已存在",
+                        f"目标文件夹已存在：{new_folder}\n\n"
+                        f"可能是上次改名失败的残留。\n"
+                        f"是否删除旧文件夹并继续？",
+                        QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                        QMessageBox.StandardButton.No
+                    )
+                    if ret == QMessageBox.StandardButton.Yes:
+                        try:
+                            shutil.rmtree(new_folder)
+                            logger.info(f"已删除旧文件夹: {new_folder}")
+                        except Exception as e:
+                            self._rollback_blueprint_project()
+                            self._show_error(f"删除旧文件夹失败：{e}\n\n请手动删除后重试")
+                            return False
+                    else:
+                        self._rollback_blueprint_project()
+                        return False
                 try:
-                    old_path.rename(new_folder)
-                    self.project_path = str(new_folder)
-                    self.path_input.setText(str(new_folder))
+                    # 尝试重命名，如果失败则重试
+                    import time
+                    max_retries = 3
+                    for attempt in range(max_retries):
+                        try:
+                            current_path.rename(new_folder)
+                            current_path = new_folder
+                            self.project_path = str(new_folder)
+                            self.path_input.setText(str(new_folder))
+                            break
+                        except PermissionError as e:
+                            if attempt < max_retries - 1:
+                                logger.warning(f"重命名失败，1秒后重试 ({attempt + 1}/{max_retries}): {e}")
+                                time.sleep(1)
+                            else:
+                                raise
                 except PermissionError as e:
                     self._rollback_blueprint_project()
                     self._show_error(
@@ -946,11 +961,37 @@ class EditProjectDialog(QDialog):
                     )
                     return False
 
+            # Step 3: 更新 Config 文件（在新路径下操作）
+            if new_name != old_name:
+                self._update_engine_ini_blueprint(current_path, old_name, new_name)
+                
+                config_dir = current_path / "Config"
+                config_dir.mkdir(parents=True, exist_ok=True)
+                self._update_game_ini(config_dir / "DefaultGame.ini", new_name)
+                self._update_backup_meta(game_ini_modified=True)
+
+            # Step 4: 重命名 .uproject 文件（在新路径下操作）
+            if new_name != old_name:
+                old_uproject_in_new_path = current_path / f"{old_name}.uproject"
+                new_uproject = current_path / f"{new_name}.uproject"
+                
+                if not old_uproject_in_new_path.exists():
+                    self._rollback_blueprint_project()
+                    self._show_error(f"找不到 .uproject 文件: {old_uproject_in_new_path}")
+                    return False
+                    
+                if new_uproject.exists() and new_uproject != old_uproject_in_new_path:
+                    self._rollback_blueprint_project()
+                    self._show_error(f"文件 {new_name}.uproject 已存在")
+                    return False
+                    
+                old_uproject_in_new_path.rename(new_uproject)
+                logger.info(f"重命名 .uproject: {old_name}.uproject → {new_name}.uproject")
+
             self.project_name = new_name
 
             # Step 5: 验证
-            final_project_path = Path(self.project_path)
-            warnings = self._verify_rename(final_project_path, old_name)
+            warnings = self._verify_rename(current_path, old_name)
             if warnings:
                 warning_msg = "\n".join(warnings)
                 QMessageBox.warning(
@@ -1524,6 +1565,8 @@ class EditProjectDialog(QDialog):
         }
 
     def _show_error(self, message: str):
+        """显示错误对话框"""
+        QMessageBox.critical(self, "错误", message)
         self.error_label.setText(f"⚠ {message}")
 
     def _title_bar_mouse_press(self, event):

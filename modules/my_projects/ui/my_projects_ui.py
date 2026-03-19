@@ -344,6 +344,7 @@ class ProjectCard(QFrame):
     def _show_edit_dialog(self):
         """显示编辑工程对话框"""
         from .edit_project_dialog import EditProjectDialog
+        
         dialog = EditProjectDialog(
             project_name=self.name,
             project_path=self.path,
@@ -352,6 +353,7 @@ class ProjectCard(QFrame):
             categories=self.categories,
             parent=self
         )
+        
         if dialog.exec() == EditProjectDialog.DialogCode.Accepted:
             info = dialog.get_project_info()
             # 发送更新信号
@@ -635,8 +637,6 @@ class MyProjectsUI(BaseModuleWidget):
         self.scanner = None
         self._assets_loaded = False
         self.registry = ProjectRegistry()
-        self._thumb_watcher = None  # 缩略图文件监听器
-        self._watched_dirs = {}     # {dir_path: card} 映射
 
         self._init_ui()
 
@@ -780,113 +780,8 @@ class MyProjectsUI(BaseModuleWidget):
         except Exception as e:
             logger.warning(f"检查排除路径变更失败: {e}")
 
-    def _setup_thumb_watcher(self):
-        """为当前显示的卡片设置缩略图目录监听"""
-        # 清理旧 watcher
-        if self._thumb_watcher:
-            try:
-                dirs = self._thumb_watcher.directories()
-                if dirs:
-                    self._thumb_watcher.removePaths(dirs)
-            except Exception:
-                pass
-            self._thumb_watcher.deleteLater()
-            self._thumb_watcher = None
-        self._watched_dirs.clear()
 
-        if not self.cards:
-            return
-
-        self._thumb_watcher = QFileSystemWatcher(self)
-        self._thumb_watcher.directoryChanged.connect(self._on_thumb_dir_changed)
-
-        dirs_to_watch = []
-        for card in self.cards:
-            saved_dir = Path(card.path) / "Saved"
-            # 确保目录存在且可访问
-            if not saved_dir.exists():
-                try:
-                    saved_dir.mkdir(parents=True, exist_ok=True)
-                    logger.debug(f"创建 Saved 目录: {saved_dir}")
-                except Exception as e:
-                    logger.warning(f"无法创建 Saved 目录 {saved_dir}: {e}")
-                    continue
-            
-            dir_str = str(saved_dir)
-            self._watched_dirs[dir_str] = card
-            dirs_to_watch.append(dir_str)
-
-        if dirs_to_watch:
-            try:
-                # 批量添加监听路径，捕获可能的权限错误
-                failed_paths = self._thumb_watcher.addPaths(dirs_to_watch)
-                if failed_paths:
-                    logger.warning(f"以下目录监听失败（可能权限不足）: {failed_paths}")
-                    # 从监听列表中移除失败的路径
-                    for failed in failed_paths:
-                        self._watched_dirs.pop(failed, None)
-                
-                success_count = len(dirs_to_watch) - len(failed_paths)
-                if success_count > 0:
-                    logger.debug(f"缩略图监听: {success_count}/{len(dirs_to_watch)} 个目录")
-            except Exception as e:
-                logger.warning(f"添加文件监听失败: {e}")
-                self._watched_dirs.clear()
-
-    def _on_thumb_dir_changed(self, dir_path: str):
-        """某个项目的 Saved/ 目录发生变化，更新对应卡片缩略图和时间"""
-        try:
-            card = self._watched_dirs.get(dir_path)
-            if not card:
-                return
-            
-            proj_path = Path(card.path)
-            
-            # 延迟 500ms 更新，确保文件写入完成
-            QTimer.singleShot(500, lambda: self._update_project_thumbnail_and_time(card.path))
-        except Exception as e:
-            logger.warning(f"处理缩略图变化失败: {e}")
     
-    def _update_project_thumbnail_and_time(self, project_path: str):
-        """更新项目的缩略图和最后使用时间"""
-        try:
-            pp = Path(project_path)
-            ufs = list(pp.glob("*.uproject"))
-            if not ufs:
-                return
-            
-            # 重新获取缩略图和时间
-            new_thumb = ProjectScanner._get_thumbnail(pp)
-            new_time = ProjectScanner._get_last_used_time(pp, ufs[0])
-            new_modified = new_time.strftime("%Y-%m-%d")
-            
-            # 更新注册表
-            data = self.registry.load_registry()
-            for proj in data.get("projects", []):
-                if proj["path"] == project_path:
-                    proj["modified"] = new_modified
-                    if new_thumb:
-                        proj["thumbnail"] = new_thumb
-                    break
-            self.registry.save_registry(data)
-            
-            # 更新内存数据
-            for proj in self.all_projects:
-                if proj["path"] == project_path:
-                    proj["modified"] = new_modified
-                    if new_thumb:
-                        proj["thumbnail"] = new_thumb
-                    break
-            
-            # 更新对应卡片的缩略图
-            for card in self.cards:
-                if card.path == project_path:
-                    if new_thumb:
-                        card.update_thumbnail(new_thumb)
-                    logger.info(f"项目缩略图已更新: {project_path}")
-                    break
-        except Exception as e:
-            logger.warning(f"更新项目缩略图和时间失败: {e}")
 
     def _load_projects(self):
         """加载工程：有注册表则秒加载 + 增量扫描，否则全量扫描"""
@@ -1292,20 +1187,7 @@ class MyProjectsUI(BaseModuleWidget):
 
         self.status_label.setText(f"当前共有 {len(self.filtered_projects)} 个项目")
 
-        # 设置缩略图文件监听
-        self._setup_thumb_watcher()
-
     def _clear_cards(self):
-        # 先清理 watcher（卡片即将销毁，引用会失效）
-        if self._thumb_watcher:
-            try:
-                dirs = self._thumb_watcher.directories()
-                if dirs:
-                    self._thumb_watcher.removePaths(dirs)
-            except Exception:
-                pass
-        self._watched_dirs.clear()
-
         for c in self.cards:
             c.setParent(None)
             c.deleteLater()
@@ -1323,53 +1205,9 @@ class MyProjectsUI(BaseModuleWidget):
                 else:
                     subprocess.Popen([str(ufs[0])], shell=False)
                 logger.info(f"打开工程: {pp}")
-                
-                # 为该项目的 Saved 目录设置实时监听
-                self._watch_project_saved_dir(project_path)
             except Exception as e:
                 logger.error(f"打开工程失败: {e}")
 
-    def _watch_project_saved_dir(self, project_path: str):
-        """为打开的项目设置 Saved 目录监听，实时更新缩略图"""
-        try:
-            saved_dir = Path(project_path) / "Saved"
-            if not saved_dir.exists():
-                # 如果 Saved 目录不存在，创建它并监听（虚幻引擎会在这里生成文件）
-                try:
-                    saved_dir.mkdir(parents=True, exist_ok=True)
-                    logger.debug(f"创建 Saved 目录: {saved_dir}")
-                except Exception as e:
-                    logger.warning(f"无法创建 Saved 目录 {saved_dir}: {e}")
-                    return
-            
-            dir_str = str(saved_dir)
-            
-            # 如果还没有全局监听器，创建一个
-            if not self._thumb_watcher:
-                self._thumb_watcher = QFileSystemWatcher(self)
-                self._thumb_watcher.directoryChanged.connect(self._on_thumb_dir_changed)
-            
-            # 找到对应的卡片
-            card = None
-            for c in self.cards:
-                if c.path == project_path:
-                    card = c
-                    break
-            
-            if card:
-                # 添加到监听列表
-                if dir_str not in self._watched_dirs:
-                    self._watched_dirs[dir_str] = card
-                    try:
-                        success = self._thumb_watcher.addPath(dir_str)
-                        if success:
-                            logger.info(f"开始监听项目缩略图: {project_path}")
-                        else:
-                            logger.warning(f"监听项目缩略图失败（可能权限不足）: {project_path}")
-                    except Exception as e:
-                        logger.warning(f"添加缩略图监听失败: {e}")
-        except Exception as e:
-            logger.warning(f"设置项目监听失败: {e}")
 
     def _on_create_project_clicked(self):
         """点击创建工程 → 后台扫描引擎 → 弹出版本下拉"""
@@ -1546,6 +1384,7 @@ class MyProjectsUI(BaseModuleWidget):
 
         self._apply_filter()
         logger.info(f"工程 {project_path} 分类改为: {new_category}")
+
 
     def _on_project_edited(self, old_path: str, new_path: str, new_name: str, new_category: str):
         """工程编辑完成"""
