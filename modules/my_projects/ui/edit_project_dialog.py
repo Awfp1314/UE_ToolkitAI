@@ -990,18 +990,11 @@ class EditProjectDialog(QDialog):
 
             self.project_name = new_name
 
-            # Step 5: 验证
+            # Step 5: 验证（仅记录日志，不弹窗）
             warnings = self._verify_rename(current_path, old_name)
             if warnings:
                 warning_msg = "\n".join(warnings)
-                QMessageBox.warning(
-                    self, "改名完成 - 请检查",
-                    f"项目已成功改名，但检测到以下残留引用：\n\n"
-                    f"{warning_msg}\n\n"
-                    f"建议打开项目检查：\n"
-                    f"• GameMode / PlayerController / HUD 是否正常\n"
-                    f"• Project Settings 里名称显示是否正确"
-                )
+                logger.info(f"改名完成，检测到残留引用（正常）：\n{warning_msg}")
             else:
                 logger.info("改名验证通过，未发现残留引用")
 
