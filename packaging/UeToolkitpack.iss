@@ -159,13 +159,10 @@ begin
   Result := False;
   Url := 'https://www.7-zip.org/a/7z2408-x64.msi';
   
-  // PowerShell 下载脚本
-  PSScript := Format(
-    '[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; ' +
-    '$ProgressPreference = ''SilentlyContinue''; ' +
-    'Invoke-WebRequest -Uri ''%s'' -OutFile ''%s'' -UseBasicParsing',
-    [Url, DestPath]
-  );
+  // PowerShell 下载脚本（使用双引号避免转义问题）
+  PSScript := '[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; ' +
+              '$ProgressPreference = "SilentlyContinue"; ' +
+              'Invoke-WebRequest -Uri "' + Url + '" -OutFile "' + DestPath + '" -UseBasicParsing';
   
   // 执行 PowerShell 下载
   if Exec('powershell.exe', 
