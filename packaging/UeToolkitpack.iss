@@ -274,6 +274,22 @@ begin
            mbInformation, MB_OK);
   end;
 end;
+    begin
+      Result := False;
+      Exit;
+    end;
+
+    UninstallOldVersion();
+    if (OldDir <> '') and FileExists(OldDir + '\{#MyAppExeName}') then
+      DeleteFile(OldDir + '\{#MyAppExeName}');
+    if OldDir <> '' then
+      RemoveDir(OldDir);
+
+    MsgBox('旧版本已卸载完成。' + #13#10#13#10 +
+           '点击确定继续安装新版本。',
+           mbInformation, MB_OK);
+  end;
+end;
 
 // 页面切换事件
 procedure CurPageChanged(CurPageID: Integer);
@@ -420,56 +436,5 @@ begin
       Result := False;
 
     Sleep(1000);
-  end;
-end;
-
-// 检测旧版本，先卸载再进入安装向导
-function InitializeSetup(): Boolean;
-var
-  OldVersion: String;
-  OldDir: String;
-begin
-  Result := True;
-
-  KillRunningApp();
-
-  OldVersion := GetOldVersion();
-
-  if OldVersion <> '' then
-  begin
-    OldDir := GetOldInstallDir();
-
-    if MsgBox('检测到已安装版本 ' + OldVersion + #13#10 +
-              '安装路径: ' + OldDir + #13#10#13#10 +
-              '即将升级到版本 {#MyAppVersion}' + #13#10#13#10 +
-              '是否卸载旧版本并继续安装？' + #13#10 +
-              '（用户数据和配置会保留）',
-              mbConfirmation, MB_YESNO) = IDNO then
-    begin
-      Result := False;
-      Exit;
-    end;
-
-    // 用户确认后，立即卸载旧版本
-    UninstallOldVersion();
-
-    // 手动清理残留文件
-    if (OldDir <> '') and FileExists(OldDir + '\{#MyAppExeName}') then
-      DeleteFile(OldDir + '\{#MyAppExeName}');
-    if OldDir <> '' then
-      RemoveDir(OldDir);
-
-    MsgBox('旧版本已卸载完成。' + #13#10#13#10 +
-           '点击确定继续安装新版本。',
-           mbInformation, MB_OK);
-  end;
-end;
-
-// 安装完成后的操作
-procedure CurStepChanged(CurStep: TSetupStep);
-begin
-  if CurStep = ssPostInstall then
-  begin
-    // 可以在这里添加安装后的操作
   end;
 end;
