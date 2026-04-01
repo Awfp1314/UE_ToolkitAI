@@ -415,6 +415,9 @@ class AssetManagerUI(BaseModuleWidget):
     
     # 定义一个信号用于在主线程中重置按钮
     _reset_button_signal = pyqtSignal(str)  # 参数是资产名称
+    # 定义信号用于更新预览按钮进度
+    _update_preview_progress_signal = pyqtSignal(str, float)  # 资产名称, 进度(0.0-1.0)
+    _update_preview_text_signal = pyqtSignal(str, str)  # 资产名称, 文本
     
     def __init__(self, logic, theme="dark", parent=None):
         super().__init__(parent)
@@ -444,6 +447,9 @@ class AssetManagerUI(BaseModuleWidget):
 
         # 连接重置按钮信号
         self._reset_button_signal.connect(self._handle_reset_button)
+        # 连接预览按钮更新信号
+        self._update_preview_progress_signal.connect(self._handle_update_preview_progress)
+        self._update_preview_text_signal.connect(self._handle_update_preview_text)
 
         # 初始化时主动加载主题样式（仅更新样式，不重新加载资产）
         self._apply_theme_styles(theme)
@@ -1903,18 +1909,11 @@ class AssetManagerUI(BaseModuleWidget):
         # - 符号链接模式：仅显示启动状态
         # - 复制模式：显示复制进度和百分比
         def update_progress(current, total, message):
-            """进度回调 - 使用 QMetaObject.invokeMethod 确保在主线程中更新 UI"""
-            from PyQt6.QtCore import QMetaObject, Qt
-            
+            """进度回调 - 使用信号确保在主线程中更新 UI"""
             if use_symlink_preview:
                 # 符号链接模式很快，只显示启动引擎相关状态
                 if "启动" in message or "引擎" in message:
-                    QMetaObject.invokeMethod(
-                        preview_btn,
-                        "update_button_text",
-                        Qt.ConnectionType.QueuedConnection,
-                        "启动中..."
-                    )
+                    self._update_preview_text_signal.emit(name, "启动中...")
                     schedule_button_reset()
                 elif current >= total and total > 0:
                     logger.info(f"资产预览准备完成: {name}")
@@ -1924,43 +1923,18 @@ class AssetManagerUI(BaseModuleWidget):
             # 复制模式：显示进度提示
             if total > 0:
                 progress = max(0.0, min(1.0, current / total))
-                QMetaObject.invokeMethod(
-                    preview_btn,
-                    "set_progress",
-                    Qt.ConnectionType.QueuedConnection,
-                    progress
-                )
+                self._update_preview_progress_signal.emit(name, progress)
 
             if "启动" in message or "引擎" in message:
-                QMetaObject.invokeMethod(
-                    preview_btn,
-                    "set_progress",
-                    Qt.ConnectionType.QueuedConnection,
-                    1.0
-                )
-                QMetaObject.invokeMethod(
-                    preview_btn,
-                    "update_button_text",
-                    Qt.ConnectionType.QueuedConnection,
-                    "启动中..."
-                )
+                self._update_preview_progress_signal.emit(name, 1.0)
+                self._update_preview_text_signal.emit(name, "启动中...")
                 schedule_button_reset()
             elif total > 0 and current < total:
                 percent = int((current / total) * 100)
-                QMetaObject.invokeMethod(
-                    preview_btn,
-                    "update_button_text",
-                    Qt.ConnectionType.QueuedConnection,
-                    f"{percent}%"
-                )
+                self._update_preview_text_signal.emit(name, f"{percent}%")
             elif current >= total and total > 0:
                 logger.info(f"资产复制完成，准备启动引擎: {name}")
-                QMetaObject.invokeMethod(
-                    preview_btn,
-                    "update_button_text",
-                    Qt.ConnectionType.QueuedConnection,
-                    "启动中..."
-                )
+                self._update_preview_text_signal.emit(name, "启动中...")
                 schedule_button_reset()
 
         # 直接调用logic层的预览功能（不显示初始进度）
@@ -1995,6 +1969,20 @@ class AssetManagerUI(BaseModuleWidget):
                     preview_btn.update_button_text("▶  预览资产")
                 ))
                 logger.info(f"已设置定时器重置按钮: {asset_name}")
+                break
+    
+    def _handle_update_preview_progress(self, asset_name: str, progress: float):
+        """处理更新预览进度信号（在主线程中执行）"""
+        for aid, card in self.asset_cards.items():
+            if hasattr(card, 'name') and card.name == asset_name:
+                card.preview_btn.set_progress(progress)
+                break
+    
+    def _handle_update_preview_text(self, asset_name: str, text: str):
+        """处理更新预览文本信号（在主线程中执行）"""
+        for aid, card in self.asset_cards.items():
+            if hasattr(card, 'name') and card.name == asset_name:
+                card.preview_btn.update_button_text(text)
                 break
     
     def _preview_project_asset(self, asset_id: str, name: str):
@@ -2160,31 +2148,13 @@ class AssetManagerUI(BaseModuleWidget):
             preview_btn.update_button_text("▶  预览资产")
 
         def update_progress(current, total, message):
-            """进度回调 - 使用 QMetaObject.invokeMethod 确保在主线程中更新 UI"""
-            from PyQt6.QtCore import QMetaObject, Qt
-            
+            """进度回调 - 使用信号确保在主线程中更新 UI"""
             if total > 0:
                 pct = current / total
-                # 使用 QMetaObject.invokeMethod 在主线程中更新 UI
-                QMetaObject.invokeMethod(
-                    preview_btn,
-                    "set_progress",
-                    Qt.ConnectionType.QueuedConnection,
-                    pct
-                )
-                QMetaObject.invokeMethod(
-                    preview_btn,
-                    "update_button_text",
-                    Qt.ConnectionType.QueuedConnection,
-                    f"{int(pct * 100)}%"
-                )
+                self._update_preview_progress_signal.emit(name, pct)
+                self._update_preview_text_signal.emit(name, f"{int(pct * 100)}%")
             if "启动" in message or "引擎" in message:
-                QMetaObject.invokeMethod(
-                    preview_btn,
-                    "update_button_text",
-                    Qt.ConnectionType.QueuedConnection,
-                    "启动中..."
-                )
+                self._update_preview_text_signal.emit(name, "启动中...")
                 self._reset_button_signal.emit(name)
 
         result = self.logic.preview_asset(
