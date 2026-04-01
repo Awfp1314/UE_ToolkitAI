@@ -485,13 +485,13 @@ class AssetManagerLogic(QObject):
                          original_filename: str = "",
                          progress_callback: Optional[Callable] = None) -> Optional[Asset]:
         """添加资产的统一实现
-        
+
         根据 package_type 创建不同的包装结构：
         - CONTENT:  名称/Content/...
         - PROJECT:  名称/Project/...
         - PLUGIN:   名称/Plugins/插件原名/...
         - OTHERS:   名称/Others/...
-        
+
         Args:
             plugin_folder_name: 插件类型时，插件的原始文件夹名称
             original_filename: 原始文件名（用于压缩包，避免使用临时目录名）
@@ -500,7 +500,13 @@ class AssetManagerLogic(QObject):
         import time
         perf_start = time.time()
         perf_steps = {}
-        
+
+        def record_step(step_name: str, step_start_time: float):
+            """记录步骤耗时"""
+            elapsed = time.time() - step_start_time
+            perf_steps[step_name] = elapsed
+            logger.info(f"⏱️ [{step_name}] 耗时: {elapsed:.3f}秒")
+
         # 暂时禁用自动检测器，避免在添加资产期间触发重复检测
         auto_detector_was_enabled = False
         if hasattr(self, '_auto_detector') and self._auto_detector:
@@ -513,6 +519,8 @@ class AssetManagerLogic(QObject):
             if progress_callback:
                 progress_callback(0, 100, "准备添加资产...")
 
+            # 步骤 1: 路径验证
+            step_start = time.time()
             if not asset_path.exists():
                 error_msg = f"资产路径不存在: {asset_path}"
                 logger.error(error_msg)
@@ -525,28 +533,26 @@ class AssetManagerLogic(QObject):
                 logger.error(error_msg)
                 self.error_occurred.emit(error_msg)
                 return None
+            record_step('01-路径验证', step_start)
 
             if progress_callback:
                 progress_callback(5, 100, "创建资产目录...")
 
-            # 性能监控：记录目录创建开始
+            # 步骤 2: 创建目录结构
             step_start = time.time()
-            
+
             # 确保分类文件夹存在
             category_folder = library_path / category
             if not category_folder.exists():
                 category_folder.mkdir(parents=True, exist_ok=True)
-            
-            perf_steps['创建目录'] = time.time() - step_start
 
-            # 确定资产包装文件夹名称（用户命名，处理重名）
+            # 确定资产包装文件夹名称
             asset_wrapper_name = name if name else asset_path.name
 
-            # CONTENT 类型兜底：若名称仍是 content/Content，自动取真实资产目录名
+            # CONTENT 类型兜底
             if package_type == PackageType.CONTENT and asset_wrapper_name.lower() == "content":
                 inferred_name = ""
                 try:
-                    # 若当前路径是 Content，优先取其下第一个非 Content 子目录
                     if asset_path.is_dir() and asset_path.name.lower() == "content":
                         sub_dirs = [
                             d for d in asset_path.iterdir()
@@ -554,7 +560,6 @@ class AssetManagerLogic(QObject):
                         ]
                         if sub_dirs:
                             inferred_name = sub_dirs[0].name
-                    # 否则使用路径名（避免空名）
                     if not inferred_name and asset_path.name.lower() != "content":
                         inferred_name = asset_path.name
                 except Exception:
@@ -572,18 +577,20 @@ class AssetManagerLogic(QObject):
                     counter += 1
                 asset_wrapper_name = wrapper_path.name
 
-            # 创建包装结构：用户命名/<wrapper_folder>/
+            # 创建包装结构
             wrapper_path.mkdir(parents=True, exist_ok=True)
-            wrapper_folder_name = package_type.wrapper_folder  # Content / Project / Plugins / Others
+            wrapper_folder_name = package_type.wrapper_folder
             inner_folder = wrapper_path / wrapper_folder_name
             inner_folder.mkdir(parents=True, exist_ok=True)
+
+            record_step('02-创建目录', step_start)
 
             if progress_callback:
                 progress_callback(10, 100, "移动资产文件...")
 
-            # 性能监控：记录文件复制开始
+            # 步骤 3: 文件复制/移动
             step_start = time.time()
-            
+
             def move_progress(current, total, message):
                 if progress_callback and total > 0:
                     move_pct = (current / total) * 70
@@ -591,21 +598,14 @@ class AssetManagerLogic(QObject):
                 else:
                     self.progress_updated.emit(current, total, message)
 
-            project_file_rel = ""  # 仅 PROJECT 类型使用
+            project_file_rel = ""
 
             if package_type == PackageType.CONTENT:
-                # Content 类型：兼容多种输入路径，避免出现 Content/Content 嵌套
-                # 支持：
-                # - Content/资产包
-                # - content/content/资产包
-                # - xxx/.../content/资产包
-                # - 无 Content 的隐式资产包（由分析器给出）
                 content_source = asset_path
                 is_source_content = False
 
                 def _single_content_child(path):
                     try:
-                        # 直接使用外部作用域的 Path 或通过 path 对象的类型判断
                         content_dirs = [
                             d for d in path.iterdir()
                             if d.is_dir() and d.name.lower() == "content"
@@ -617,7 +617,6 @@ class AssetManagerLogic(QObject):
                 if asset_path.is_dir():
                     current = asset_path
                     depth = 0
-                    # 连续下钻 content 链（最多 5 层）
                     while depth < 5 and current.name.lower() == "content":
                         inner = _single_content_child(current)
                         if not inner:
@@ -626,7 +625,6 @@ class AssetManagerLogic(QObject):
                         current = inner
                         depth += 1
 
-                    # 若传入的是外层目录且内部只有一个 Content，自动下钻一层
                     if current == asset_path:
                         inner = _single_content_child(current)
                         if inner:
@@ -641,13 +639,11 @@ class AssetManagerLogic(QObject):
                     progress_callback=progress_callback
                 )
             elif package_type == PackageType.PROJECT:
-                # Project 类型：复制整个项目到 Project/ 下
                 target_path = inner_folder / asset_path.name
                 logger.info(f"导入 UE 项目: {asset_path} -> {target_path}")
                 success = self._file_ops.safe_copytree(
                     asset_path, target_path, progress_callback=move_progress
                 )
-                # 查找 .uproject 文件并记录相对路径
                 if success is not False:
                     for uproject in target_path.rglob("*.uproject"):
                         try:
@@ -657,8 +653,6 @@ class AssetManagerLogic(QObject):
                             project_file_rel = str(uproject)
                         break
             elif package_type == PackageType.PLUGIN:
-                # Plugin 类型：复制整个插件到 Plugins/<插件原名>/ 下
-                # 使用插件原始文件夹名，如果未提供则使用源路径的文件夹名
                 actual_plugin_name = plugin_folder_name if plugin_folder_name else asset_path.name
                 target_path = inner_folder / actual_plugin_name
                 logger.info(f"导入 UE 插件: {asset_path} -> {target_path} (插件名: {actual_plugin_name})")
@@ -667,245 +661,11 @@ class AssetManagerLogic(QObject):
                 )
             else:
                 # Others 类型：智能提取并分类整理
-                # 结构：自定义名称/Others/资产名/Models|Textures|...
                 logger.info(f"导入其他资源（智能整理模式）: {asset_path}")
-                
-                import zipfile
-                import tempfile
-                from ..utils.archive_extractor import is_ad_file
-                
-                # 创建资产名称子文件夹（在 Others/ 下）
-                # 优先使用原始文件名，避免使用临时目录名，并清理常见尾部噪声
-                import re
-                
-                def _normalize_others_folder_name(raw_name: str) -> str:
-                    name = (raw_name or "").strip()
-                    if not name:
-                        return "NewAsset"
-                    
-                    # 1. 去掉文件扩展名（如果是 .zip 等）
-                    if '.' in name:
-                        name = name.rsplit('.', 1)[0]
-
-                    # 2. 处理非法字符
-                    name = re.sub(r'[<>:"/\\|?*]', ' ', name)
-                    
-                    # 3. 递归清理后缀：版本号、日期、序号、副本标识
-                    # 使用循环确保处理 JapaneseStreet_v1.2_20250326 这种多重后缀
-                    while True:
-                        old_name = name
-                        # 匹配 (1), - 副本, _copy
-                        name = re.sub(r'\s*[\(（]\s*\d+\s*[\)）]\s*$', '', name, flags=re.IGNORECASE)
-                        name = re.sub(r'\s*[-_ ]\s*(copy|副本|最终版|final|备份)\s*$', '', name, flags=re.IGNORECASE)
-                        # 匹配日期 _20250326, _2025-03-26, _2025_03_26 (包含结尾可能的时间戳)
-                        name = re.sub(r'[-_ ]\d{4}[-_ ]?\d{2}[-_ ]?\d{2}(?:[-_ ]?\d{2,6})?\s*$', '', name)
-                        # 匹配版本号 _v1.2, -V5, _v1.0.3
-                        name = re.sub(r'\s*[-_ ]\s*v?\d+(?:\.\d+){0,3}\s*$', '', name, flags=re.IGNORECASE)
-                        
-                        if name == old_name:
-                            break
-
-                    # 4. 最后清理首尾空格和特殊连字符
-                    name = re.sub(r'\s+', ' ', name).strip(' ._-')
-                    return name or "NewAsset"
-                
-                raw_subfolder_name = original_filename if original_filename else asset_path.name
-                subfolder_name = _normalize_others_folder_name(raw_subfolder_name)
-                asset_subfolder = inner_folder / subfolder_name
-                asset_subfolder.mkdir(parents=True, exist_ok=True)
-                logger.info(f"OTHERS 类型子文件夹名称: {subfolder_name} (原始: {raw_subfolder_name}, 路径: {asset_path.name})")
-                
-                # 按类型分类文件
-                model_extensions = {'.fbx', '.obj', '.gltf', '.glb', '.abc', '.usd', '.usda', '.usdc'}
-                texture_extensions = {'.png', '.jpg', '.jpeg', '.tga', '.bmp', '.exr', '.hdr', '.tif', '.tiff'}
-                
-                # 收集文件（按类型分类，同时记录文件大小）
-                models = {}  # {文件名: (文件路径, 文件大小)}
-                textures = {}
-                temp_dirs = []
-                
-                try:
-                    def scan_and_extract(directory):
-                        """递归扫描目录，自动解压嵌套 zip，收集文件（过滤广告）"""
-                        for item in directory.iterdir():
-                            if item.is_file():
-                                # 检查是否为广告文件
-                                if is_ad_file(item):
-                                    logger.info(f"🚫 跳过广告文件: {item.name}")
-                                    continue
-                                
-                                ext = item.suffix.lower()
-                                if ext == '.zip':
-                                    # 自动解压嵌套 zip 到另一个临时目录，然后继续扫描
-                                    try:
-                                        nested_temp = Path(tempfile.mkdtemp(prefix='ue_toolkit_nested_'))
-                                        temp_dirs.append(nested_temp)
-                                        logger.info(f"检测到嵌套压缩包，开始递归解压: {item.name}")
-                                        
-                                        with zipfile.ZipFile(item, 'r') as zip_ref:
-                                            # 手动提取每个文件，清理文件名中的尾随空格和非法字符（Windows 兼容）
-                                            for z_info in zip_ref.infolist():
-                                                # 跳过目录条目
-                                                if z_info.is_dir():
-                                                    continue
-                                                
-                                                # 处理编码问题（GBK 兼容）
-                                                try:
-                                                    original_name = z_info.filename.encode('cp437').decode('gbk')
-                                                except:
-                                                    original_name = z_info.filename
-                                                
-                                                # 清理文件名中的尾随空格和点（Windows 不允许）
-                                                parts = original_name.split('/')
-                                                cleaned_parts = []
-                                                for part in parts:
-                                                    # 移除尾随空格和点
-                                                    cleaned = part.rstrip(' .')
-                                                    # 如果清理后为空（原本只有空格/点），使用下划线
-                                                    if not cleaned and part:
-                                                        cleaned = '_'
-                                                    cleaned_parts.append(cleaned)
-                                                cleaned_name = '/'.join(cleaned_parts)
-                                                
-                                                # 创建目标路径
-                                                target_path = nested_temp / cleaned_name
-                                                target_path.parent.mkdir(parents=True, exist_ok=True)
-                                                
-                                                # 提取文件内容并写入
-                                                with zip_ref.open(z_info) as source:
-                                                    with open(target_path, 'wb') as target:
-                                                        target.write(source.read())
-                                        
-                                        # 递归扫描解压后的目录
-                                        scan_and_extract(nested_temp)
-                                    except Exception as e:
-                                        logger.warning(f"解压嵌套 zip 失败: {item}, {e}")
-                                elif ext in model_extensions:
-                                    # 模型文件：即使路径不同，同名文件也只取一个（通常是不同阶段的备份）
-                                    if item.name not in models:
-                                        models[item.name] = (item, item.stat().st_size)
-                                elif ext in texture_extensions:
-                                    # 贴图文件：同名去重（优先保留大文件，应对重复贴图）
-                                    current_size = item.stat().st_size
-                                    if item.name not in textures or current_size > textures[item.name][1]:
-                                        textures[item.name] = (item, current_size)
-                            elif item.is_dir():
-                                # 跳过一些明显的无用目录
-                                if item.name.lower() in ['__macosx', '.git']:
-                                    continue
-                                scan_and_extract(item)
-                    
-                    # 开始扫描
-                    scan_and_extract(asset_path)
-                    
-                    # 统计文件数量和总大小
-                    total_files = len(models) + len(textures)
-                    total_bytes = sum(size for _, size in models.values()) + \
-                                  sum(size for _, size in textures.values())
-                    
-                    if total_files == 0:
-                        logger.error("未找到任何有用的文件")
-                        success = False
-                    else:
-                        success = True
-                        logger.info(f"📊 找到文件: 模型 {len(models)}, 贴图 {len(textures)}")
-                        logger.info(f"📊 总大小: {self._file_ops.format_size(total_bytes)}, 总文件数: {total_files}")
-                        
-                        copied_bytes = 0
-                        
-                        def copy_file_with_progress(source_file, target_file, file_size, file_type):
-                            """复制文件并报告进度（基于字节数）"""
-                            nonlocal copied_bytes
-                            
-                            logger.debug(f"📄 开始复制 {file_type}: {source_file.name} ({self._file_ops.format_size(file_size)})")
-                            
-                            # 小文件（< 1MB）：直接复制
-                            if file_size < 1024 * 1024:
-                                import shutil
-                                shutil.copy2(source_file, target_file)
-                                copied_bytes += file_size
-                                
-                                if progress_callback:
-                                    progress = 10 + int(copied_bytes / total_bytes * 70)
-                                    progress_callback(progress, 100, f"复制{file_type}: {source_file.name}")
-                            else:
-                                # 大文件（≥ 1MB）：分块复制并实时报告进度
-                                chunk_size = 1024 * 1024  # 1MB per chunk
-                                
-                                with open(source_file, 'rb') as fsrc:
-                                    with open(target_file, 'wb') as fdst:
-                                        while True:
-                                            chunk = fsrc.read(chunk_size)
-                                            if not chunk:
-                                                break
-                                            fdst.write(chunk)
-                                            copied_bytes += len(chunk)
-                                            
-                                            if progress_callback:
-                                                progress = 10 + int(copied_bytes / total_bytes * 70)
-                                                progress_callback(progress, 100, f"复制{file_type}: {source_file.name}")
-                                
-                                # 复制元数据
-                                import shutil
-                                shutil.copystat(str(source_file), str(target_file))
-                        
-                        # 复制模型文件到 Mesh/
-                        if models:
-                            mesh_folder = asset_subfolder / "Mesh"
-                            mesh_folder.mkdir(parents=True, exist_ok=True)
-                            for filename, (source_file, file_size) in models.items():
-                                target_file = mesh_folder / filename
-                                try:
-                                    copy_file_with_progress(source_file, target_file, file_size, "模型")
-                                except Exception as e:
-                                    logger.error(f"复制模型失败: {source_file} -> {target_file}, {e}")
-                                    success = False
-                                    break
-                        
-                        # 复制贴图文件到 Textures/
-                        if success and textures:
-                            textures_folder = asset_subfolder / "Textures"
-                            textures_folder.mkdir(parents=True, exist_ok=True)
-                            for filename, (source_file, file_size) in textures.items():
-                                target_file = textures_folder / filename
-                                try:
-                                    copy_file_with_progress(source_file, target_file, file_size, "贴图")
-                                except Exception as e:
-                                    logger.error(f"复制贴图失败: {source_file} -> {target_file}, {e}")
-                                    success = False
-                                    break
-                
-                finally:
-                    # 清理临时目录（延迟删除，避免文件占用）
-                    import time
-                    import gc
-                    
-                    # 强制垃圾回收，释放文件句柄
-                    gc.collect()
-                    
-                    # 等待一小段时间，让 Windows 释放文件句柄
-                    time.sleep(0.5)
-                    
-                    for temp_dir in temp_dirs:
-                        try:
-                            import shutil
-                            # 重试机制：最多尝试 3 次
-                            for attempt in range(3):
-                                try:
-                                    shutil.rmtree(temp_dir)
-                                    logger.info(f"成功清理临时目录: {temp_dir}")
-                                    break
-                                except PermissionError as pe:
-                                    if attempt < 2:
-                                        logger.warning(f"临时目录被占用，等待后重试 ({attempt + 1}/3): {temp_dir}")
-                                        time.sleep(1)
-                                    else:
-                                        logger.warning(f"临时目录清理失败（文件被占用），将在程序退出时由系统清理: {temp_dir}")
-                                except Exception as e:
-                                    logger.warning(f"清理临时目录失败: {temp_dir}, {e}")
-                                    break
-                        except Exception as e:
-                            logger.warning(f"清理临时目录时出错: {temp_dir}, {e}")
+                success = self._process_others_asset(
+                    asset_path, inner_folder, original_filename, 
+                    progress_callback, perf_steps
+                )
 
             if success is False:
                 error_msg = f"复制资产失败: {asset_path}"
@@ -913,19 +673,15 @@ class AssetManagerLogic(QObject):
                 self.error_occurred.emit(error_msg)
                 return None
 
-            # 性能监控：记录文件复制耗时
-            perf_steps['复制文件'] = time.time() - step_start
-            
-            # 记录复制位置
+            record_step('03-复制文件', step_start)
             logger.info(f"资产已复制到: {inner_folder} (类型: {package_type.display_name})")
 
             if progress_callback:
                 progress_callback(80, 100, "创建资产记录...")
 
-            # 性能监控：记录资产记录创建开始
+            # 步骤 4: 创建资产记录
             step_start = time.time()
-            
-            # 创建资产对象（指向包装文件夹，而不是内部子文件夹）
+
             asset_id = str(uuid.uuid4())
             asset_name = asset_wrapper_name
             size = self._file_ops.calculate_size(wrapper_path)
@@ -944,29 +700,25 @@ class AssetManagerLogic(QObject):
             )
 
             self.assets.append(asset)
-
-            # 更新搜索引擎的拼音缓存
             self._search_engine.build_pinyin_cache([asset])
-            
-            # 如果是插件类型，设置默认缩略图（在保存配置之前）
+
             if package_type == PackageType.PLUGIN:
                 self._set_plugin_default_thumbnail(asset)
-            # 如果是 OTHERS 类型，根据内容设置默认缩略图
             elif package_type == PackageType.OTHERS:
                 self._set_others_default_thumbnail(asset, wrapper_path)
-            
-            perf_steps['创建记录'] = time.time() - step_start
+
+            record_step('04-创建记录', step_start)
 
             if progress_callback:
                 progress_callback(90, 100, "保存配置...")
             else:
                 self.progress_updated.emit(0, 1, "正在保存配置...")
 
-            # 性能监控：记录保存配置开始
+            # 步骤 5: 保存配置
             step_start = time.time()
             self._save_config()
-            perf_steps['保存配置'] = time.time() - step_start
-            logger.info(f"添加资产成功: {asset_name} ({asset_type.value}), 插件类型: {package_type == PackageType.PLUGIN}")
+            record_step('05-保存配置', step_start)
+            logger.info(f"添加资产成功: {asset_name} ({asset_type.value})")
 
             self.asset_added.emit(asset)
 
@@ -975,12 +727,12 @@ class AssetManagerLogic(QObject):
                     progress_callback(95, 100, "创建文档...")
                 else:
                     self.progress_updated.emit(0, 1, "正在创建文档...")
-                
-                # 性能监控：记录文档创建开始
+
+                # 步骤 6: 创建文档
                 step_start = time.time()
                 self._create_asset_markdown(asset)
-                perf_steps['创建文档'] = time.time() - step_start
-                
+                record_step('06-创建文档', step_start)
+
                 if not progress_callback:
                     self.progress_updated.emit(1, 1, "文档创建完成")
 
@@ -992,7 +744,7 @@ class AssetManagerLogic(QObject):
             # 性能监控：记录总耗时并输出到日志文件
             total_time = time.time() - perf_start
             self._log_performance(asset_name, package_type, size, perf_steps, total_time, wrapper_path)
-            
+
             return asset
 
         except Exception as e:
@@ -1000,6 +752,11 @@ class AssetManagerLogic(QObject):
             logger.error(error_msg, exc_info=True)
             self.error_occurred.emit(error_msg)
             return None
+        finally:
+            # 恢复自动检测器
+            if auto_detector_was_enabled and hasattr(self, '_auto_detector') and self._auto_detector:
+                logger.info("恢复自动检测器")
+                self._auto_detector.start()
 
 
     def _move_contents_to_folder(self, source_path: Path, target_folder: Path,
@@ -1466,6 +1223,277 @@ class AssetManagerLogic(QObject):
             
         except Exception as e:
             logger.warning(f"设置 OTHERS 默认缩略图失败: {e}", exc_info=True)
+    def _process_others_asset(self, asset_path: Path, inner_folder: Path,
+                              original_filename: str, progress_callback: Optional[Callable],
+                              perf_steps: dict) -> bool:
+        """处理 OTHERS 类型资产：智能提取并分类整理
+
+        Args:
+            asset_path: 资产源路径
+            inner_folder: 目标文件夹（Others/）
+            original_filename: 原始文件名
+            progress_callback: 进度回调
+            perf_steps: 性能监控字典
+
+        Returns:
+            bool: 是否成功
+        """
+        import zipfile
+        import tempfile
+        import time
+        import re
+        from ..utils.archive_extractor import is_ad_file
+
+        # 子步骤 1: 文件名规范化
+        sub_step_start = time.time()
+
+        def _normalize_others_folder_name(raw_name: str) -> str:
+            name = (raw_name or "").strip()
+            if not name:
+                return "NewAsset"
+
+            # 去掉文件扩展名
+            if '.' in name:
+                name = name.rsplit('.', 1)[0]
+
+            # 处理非法字符
+            name = re.sub(r'[<>:"/\\|?*]', ' ', name)
+
+            # 递归清理后缀
+            while True:
+                old_name = name
+                name = re.sub(r'\s*[\(（]\s*\d+\s*[\)）]\s*$', '', name, flags=re.IGNORECASE)
+                name = re.sub(r'\s*[-_ ]\s*(copy|副本|最终版|final|备份)\s*$', '', name, flags=re.IGNORECASE)
+                name = re.sub(r'[-_ ]\d{4}[-_ ]?\d{2}[-_ ]?\d{2}(?:[-_ ]?\d{2,6})?\s*$', '', name)
+                name = re.sub(r'\s*[-_ ]\s*v?\d+(?:\.\d+){0,3}\s*$', '', name, flags=re.IGNORECASE)
+
+                if name == old_name:
+                    break
+
+            # 清理首尾空格和特殊连字符
+            name = re.sub(r'\s+', ' ', name).strip(' ._-')
+            return name or "NewAsset"
+
+        raw_subfolder_name = original_filename if original_filename else asset_path.name
+        subfolder_name = _normalize_others_folder_name(raw_subfolder_name)
+        asset_subfolder = inner_folder / subfolder_name
+        asset_subfolder.mkdir(parents=True, exist_ok=True)
+        logger.info(f"OTHERS 类型子文件夹: {subfolder_name} (原始: {raw_subfolder_name})")
+        perf_steps['OTHERS-01-文件名规范化'] = time.time() - sub_step_start
+
+        # 子步骤 2: 文件扫描和解压
+        sub_step_start = time.time()
+        model_extensions = {'.fbx', '.obj', '.gltf', '.glb', '.abc', '.usd', '.usda', '.usdc'}
+        texture_extensions = {'.png', '.jpg', '.jpeg', '.tga', '.bmp', '.exr', '.hdr', '.tif', '.tiff'}
+
+        models = {}
+        textures = {}
+        temp_dirs = []
+        nested_zip_count = 0
+        scanned_files = 0
+        skipped_ad_files = 0
+
+        try:
+            def scan_and_extract(directory):
+                """递归扫描目录，自动解压嵌套 zip"""
+                nonlocal nested_zip_count, scanned_files, skipped_ad_files
+                for item in directory.iterdir():
+                    scanned_files += 1
+                    if item.is_file():
+                        if is_ad_file(item):
+                            skipped_ad_files += 1
+                            logger.debug(f"🚫 跳过广告文件: {item.name}")
+                            continue
+
+                        ext = item.suffix.lower()
+                        if ext == '.zip':
+                            nested_zip_count += 1
+                            zip_extract_start = time.time()
+                            try:
+                                nested_temp = Path(tempfile.mkdtemp(prefix='ue_toolkit_nested_'))
+                                temp_dirs.append(nested_temp)
+                                logger.info(f"📦 解压嵌套压缩包 #{nested_zip_count}: {item.name}")
+
+                                with zipfile.ZipFile(item, 'r') as zip_ref:
+                                    file_count = 0
+                                    for z_info in zip_ref.infolist():
+                                        if z_info.is_dir():
+                                            continue
+
+                                        try:
+                                            original_name = z_info.filename.encode('cp437').decode('gbk')
+                                        except:
+                                            original_name = z_info.filename
+
+                                        # 清理文件名中的尾随空格和点
+                                        parts = original_name.split('/')
+                                        cleaned_parts = []
+                                        for part in parts:
+                                            cleaned = part.rstrip(' .')
+                                            if not cleaned and part:
+                                                cleaned = '_'
+                                            cleaned_parts.append(cleaned)
+                                        cleaned_name = '/'.join(cleaned_parts)
+
+                                        target_path = nested_temp / cleaned_name
+                                        target_path.parent.mkdir(parents=True, exist_ok=True)
+
+                                        with zip_ref.open(z_info) as source:
+                                            with open(target_path, 'wb') as target:
+                                                target.write(source.read())
+                                        file_count += 1
+
+                                zip_extract_time = time.time() - zip_extract_start
+                                logger.info(f"  ✓ 解压完成: {file_count} 个文件, 耗时 {zip_extract_time:.2f}秒")
+                                perf_steps[f'OTHERS-02-解压ZIP#{nested_zip_count}'] = zip_extract_time
+
+                                scan_and_extract(nested_temp)
+                            except Exception as e:
+                                logger.warning(f"解压嵌套 zip 失败: {item}, {e}")
+                        elif ext in model_extensions:
+                            if item.name not in models:
+                                models[item.name] = (item, item.stat().st_size)
+                        elif ext in texture_extensions:
+                            current_size = item.stat().st_size
+                            if item.name not in textures or current_size > textures[item.name][1]:
+                                textures[item.name] = (item, current_size)
+                    elif item.is_dir():
+                        if item.name.lower() in ['__macosx', '.git']:
+                            continue
+                        scan_and_extract(item)
+
+            scan_and_extract(asset_path)
+            scan_time = time.time() - sub_step_start
+            perf_steps['OTHERS-02-文件扫描'] = scan_time
+
+            logger.info(f"📊 扫描完成: 扫描 {scanned_files} 个项目, 跳过广告 {skipped_ad_files} 个")
+            logger.info(f"📊 发现: 嵌套ZIP {nested_zip_count} 个, 模型 {len(models)} 个, 贴图 {len(textures)} 个")
+            logger.info(f"📊 扫描耗时: {scan_time:.2f}秒")
+
+            # 子步骤 3: 文件复制
+            sub_step_start = time.time()
+            total_files = len(models) + len(textures)
+            total_bytes = sum(size for _, size in models.values()) + \
+                          sum(size for _, size in textures.values())
+
+            if total_files == 0:
+                logger.error("❌ 未找到任何有用的文件")
+                return False
+
+            logger.info(f"📊 准备复制: {total_files} 个文件, 总大小 {self._file_ops.format_size(total_bytes)}")
+
+            copied_bytes = 0
+            copied_files = 0
+
+            def copy_file_with_progress(source_file, target_file, file_size, file_type):
+                nonlocal copied_bytes, copied_files
+
+                file_copy_start = time.time()
+                logger.debug(f"📄 复制 {file_type}: {source_file.name} ({self._file_ops.format_size(file_size)})")
+
+                if file_size < 1024 * 1024:
+                    import shutil
+                    shutil.copy2(source_file, target_file)
+                    copied_bytes += file_size
+
+                    if progress_callback:
+                        progress = 10 + int(copied_bytes / total_bytes * 70)
+                        progress_callback(progress, 100, f"复制{file_type}: {source_file.name}")
+                else:
+                    chunk_size = 1024 * 1024
+
+                    with open(source_file, 'rb') as fsrc:
+                        with open(target_file, 'wb') as fdst:
+                            while True:
+                                chunk = fsrc.read(chunk_size)
+                                if not chunk:
+                                    break
+                                fdst.write(chunk)
+                                copied_bytes += len(chunk)
+
+                                if progress_callback:
+                                    progress = 10 + int(copied_bytes / total_bytes * 70)
+                                    progress_callback(progress, 100, f"复制{file_type}: {source_file.name}")
+
+                    import shutil
+                    shutil.copystat(str(source_file), str(target_file))
+
+                copied_files += 1
+                file_copy_time = time.time() - file_copy_start
+                logger.debug(f"  ✓ 复制完成: {file_copy_time:.2f}秒")
+
+            # 复制模型文件
+            if models:
+                mesh_folder = asset_subfolder / "Mesh"
+                mesh_folder.mkdir(parents=True, exist_ok=True)
+                logger.info(f"📁 复制模型文件到: {mesh_folder}")
+                for filename, (source_file, file_size) in models.items():
+                    target_file = mesh_folder / filename
+                    try:
+                        copy_file_with_progress(source_file, target_file, file_size, "模型")
+                    except Exception as e:
+                        logger.error(f"❌ 复制模型失败: {source_file} -> {target_file}, {e}")
+                        return False
+
+            # 复制贴图文件
+            if textures:
+                textures_folder = asset_subfolder / "Textures"
+                textures_folder.mkdir(parents=True, exist_ok=True)
+                logger.info(f"📁 复制贴图文件到: {textures_folder}")
+                for filename, (source_file, file_size) in textures.items():
+                    target_file = textures_folder / filename
+                    try:
+                        copy_file_with_progress(source_file, target_file, file_size, "贴图")
+                    except Exception as e:
+                        logger.error(f"❌ 复制贴图失败: {source_file} -> {target_file}, {e}")
+                        return False
+
+            copy_time = time.time() - sub_step_start
+            perf_steps['OTHERS-03-文件复制'] = copy_time
+            logger.info(f"✅ 复制完成: {copied_files}/{total_files} 个文件, 耗时 {copy_time:.2f}秒")
+            logger.info(f"📊 平均速度: {self._file_ops.format_size(total_bytes / copy_time)}/s")
+
+        finally:
+            # 子步骤 4: 临时目录清理
+            sub_step_start = time.time()
+            import time as time_module
+            import gc
+
+            gc.collect()
+            time_module.sleep(0.5)
+
+            cleaned_count = 0
+            failed_count = 0
+            for temp_dir in temp_dirs:
+                try:
+                    import shutil
+                    for attempt in range(3):
+                        try:
+                            shutil.rmtree(temp_dir)
+                            cleaned_count += 1
+                            break
+                        except PermissionError:
+                            if attempt < 2:
+                                logger.debug(f"临时目录被占用，重试 ({attempt + 1}/3): {temp_dir}")
+                                time_module.sleep(1)
+                            else:
+                                failed_count += 1
+                                logger.warning(f"临时目录清理失败（文件被占用）: {temp_dir}")
+                        except Exception as e:
+                            failed_count += 1
+                            logger.warning(f"清理临时目录失败: {temp_dir}, {e}")
+                            break
+                except Exception as e:
+                    failed_count += 1
+                    logger.warning(f"清理临时目录时出错: {temp_dir}, {e}")
+
+            cleanup_time = time.time() - sub_step_start
+            perf_steps['OTHERS-04-临时清理'] = cleanup_time
+            logger.info(f"🧹 清理完成: {cleaned_count}/{len(temp_dirs)} 个临时目录, 失败 {failed_count} 个, 耗时 {cleanup_time:.2f}秒")
+
+        return True
+
+
 
     def remove_asset(self, asset_id: str, delete_physical: bool = False) -> bool:
         """删除资产"""
