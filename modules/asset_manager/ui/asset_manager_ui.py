@@ -1903,10 +1903,18 @@ class AssetManagerUI(BaseModuleWidget):
         # - 符号链接模式：仅显示启动状态
         # - 复制模式：显示复制进度和百分比
         def update_progress(current, total, message):
+            """进度回调 - 使用 QMetaObject.invokeMethod 确保在主线程中更新 UI"""
+            from PyQt6.QtCore import QMetaObject, Qt
+            
             if use_symlink_preview:
                 # 符号链接模式很快，只显示启动引擎相关状态
                 if "启动" in message or "引擎" in message:
-                    preview_btn.update_button_text("启动中...")
+                    QMetaObject.invokeMethod(
+                        preview_btn,
+                        "update_button_text",
+                        Qt.ConnectionType.QueuedConnection,
+                        "启动中..."
+                    )
                     schedule_button_reset()
                 elif current >= total and total > 0:
                     logger.info(f"资产预览准备完成: {name}")
@@ -1916,18 +1924,43 @@ class AssetManagerUI(BaseModuleWidget):
             # 复制模式：显示进度提示
             if total > 0:
                 progress = max(0.0, min(1.0, current / total))
-                preview_btn.set_progress(progress)
+                QMetaObject.invokeMethod(
+                    preview_btn,
+                    "set_progress",
+                    Qt.ConnectionType.QueuedConnection,
+                    progress
+                )
 
             if "启动" in message or "引擎" in message:
-                preview_btn.set_progress(1.0)
-                preview_btn.update_button_text("启动中...")
+                QMetaObject.invokeMethod(
+                    preview_btn,
+                    "set_progress",
+                    Qt.ConnectionType.QueuedConnection,
+                    1.0
+                )
+                QMetaObject.invokeMethod(
+                    preview_btn,
+                    "update_button_text",
+                    Qt.ConnectionType.QueuedConnection,
+                    "启动中..."
+                )
                 schedule_button_reset()
             elif total > 0 and current < total:
                 percent = int((current / total) * 100)
-                preview_btn.update_button_text(f"{percent}%")
+                QMetaObject.invokeMethod(
+                    preview_btn,
+                    "update_button_text",
+                    Qt.ConnectionType.QueuedConnection,
+                    f"{percent}%"
+                )
             elif current >= total and total > 0:
                 logger.info(f"资产复制完成，准备启动引擎: {name}")
-                preview_btn.update_button_text("启动中...")
+                QMetaObject.invokeMethod(
+                    preview_btn,
+                    "update_button_text",
+                    Qt.ConnectionType.QueuedConnection,
+                    "启动中..."
+                )
                 schedule_button_reset()
 
         # 直接调用logic层的预览功能（不显示初始进度）
@@ -2127,12 +2160,31 @@ class AssetManagerUI(BaseModuleWidget):
             preview_btn.update_button_text("▶  预览资产")
 
         def update_progress(current, total, message):
+            """进度回调 - 使用 QMetaObject.invokeMethod 确保在主线程中更新 UI"""
+            from PyQt6.QtCore import QMetaObject, Qt
+            
             if total > 0:
                 pct = current / total
-                preview_btn.set_progress(pct)
-                preview_btn.update_button_text(f"{int(pct * 100)}%")
+                # 使用 QMetaObject.invokeMethod 在主线程中更新 UI
+                QMetaObject.invokeMethod(
+                    preview_btn,
+                    "set_progress",
+                    Qt.ConnectionType.QueuedConnection,
+                    pct
+                )
+                QMetaObject.invokeMethod(
+                    preview_btn,
+                    "update_button_text",
+                    Qt.ConnectionType.QueuedConnection,
+                    f"{int(pct * 100)}%"
+                )
             if "启动" in message or "引擎" in message:
-                preview_btn.update_button_text("启动中...")
+                QMetaObject.invokeMethod(
+                    preview_btn,
+                    "update_button_text",
+                    Qt.ConnectionType.QueuedConnection,
+                    "启动中..."
+                )
                 self._reset_button_signal.emit(name)
 
         result = self.logic.preview_asset(
@@ -2206,6 +2258,14 @@ class AssetManagerUI(BaseModuleWidget):
                             if card.name == name:
                                 card.name = new_name
                                 card.name_label.setText(new_name)
+                                # 更新分类标签（即使分类没变，也确保显示正确）
+                                if hasattr(card, 'category_label'):
+                                    card.category = new_category
+                                    card.category_label.setText(new_category)
+                                    card.category_label.setFixedSize(card.category_label.sizeHint())
+                                    # 重新定位分类标签（确保位置正确）
+                                    if hasattr(card, 'thumb'):
+                                        card.category_label.move(10, 153 - 10 - card.category_label.height())
                                 if updated_asset and getattr(updated_asset, 'path', None):
                                     card.asset_path = str(updated_asset.path)
                                 logger.info(f"已更新卡片显示与路径: {name} -> {new_name}")
