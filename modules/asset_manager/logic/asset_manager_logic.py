@@ -743,14 +743,38 @@ class AssetManagerLogic(QObject):
                                         logger.info(f"检测到嵌套压缩包，开始递归解压: {item.name}")
                                         
                                         with zipfile.ZipFile(item, 'r') as zip_ref:
-                                            # 处理 Zip 内部文件名编码问题（GBK 兼容）
+                                            # 手动提取每个文件，清理文件名中的尾随空格和非法字符（Windows 兼容）
                                             for z_info in zip_ref.infolist():
+                                                # 跳过目录条目
+                                                if z_info.is_dir():
+                                                    continue
+                                                
+                                                # 处理编码问题（GBK 兼容）
                                                 try:
-                                                    # 尝试按照 cp437 编码重新解码并转为 gbk
-                                                    z_info.filename = z_info.filename.encode('cp437').decode('gbk')
+                                                    original_name = z_info.filename.encode('cp437').decode('gbk')
                                                 except:
-                                                    pass
-                                            zip_ref.extractall(nested_temp)
+                                                    original_name = z_info.filename
+                                                
+                                                # 清理文件名中的尾随空格和点（Windows 不允许）
+                                                parts = original_name.split('/')
+                                                cleaned_parts = []
+                                                for part in parts:
+                                                    # 移除尾随空格和点
+                                                    cleaned = part.rstrip(' .')
+                                                    # 如果清理后为空（原本只有空格/点），使用下划线
+                                                    if not cleaned and part:
+                                                        cleaned = '_'
+                                                    cleaned_parts.append(cleaned)
+                                                cleaned_name = '/'.join(cleaned_parts)
+                                                
+                                                # 创建目标路径
+                                                target_path = nested_temp / cleaned_name
+                                                target_path.parent.mkdir(parents=True, exist_ok=True)
+                                                
+                                                # 提取文件内容并写入
+                                                with zip_ref.open(z_info) as source:
+                                                    with open(target_path, 'wb') as target:
+                                                        target.write(source.read())
                                         
                                         # 递归扫描解压后的目录
                                         scan_and_extract(nested_temp)
