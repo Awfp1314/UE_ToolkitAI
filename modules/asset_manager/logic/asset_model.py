@@ -35,6 +35,7 @@ class PackageType(Enum):
     CONTENT = "content"    # UE 资产包：名称/Content/...
     PROJECT = "project"    # UE 项目：名称/Project/...
     PLUGIN = "plugin"      # UE 插件：名称/Plugins/...
+    MODEL = "model"        # 3D 模型资源：名称/Models/...
     OTHERS = "others"      # 其他资源：名称/Others/...
 
     @property
@@ -44,6 +45,7 @@ class PackageType(Enum):
             PackageType.CONTENT: "资产包",
             PackageType.PROJECT: "UE 项目",
             PackageType.PLUGIN: "UE 插件",
+            PackageType.MODEL: "3D 模型",
             PackageType.OTHERS: "其他资源",
         }.get(self, self.value)
 
@@ -54,6 +56,7 @@ class PackageType(Enum):
             PackageType.CONTENT: "Content",
             PackageType.PROJECT: "Project",
             PackageType.PLUGIN: "Plugins",
+            PackageType.MODEL: "Models",
             PackageType.OTHERS: "Others",
         }.get(self, "Others")
 

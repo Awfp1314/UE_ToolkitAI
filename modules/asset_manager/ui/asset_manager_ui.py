@@ -175,8 +175,8 @@ class AddAssetAnalysisThread(QThread):
             StructureType.CONTENT_PACKAGE.value: PackageType.CONTENT,
             StructureType.UE_PROJECT.value: PackageType.PROJECT,
             StructureType.UE_PLUGIN.value: PackageType.PLUGIN,
+            StructureType.MODEL_FILES.value: PackageType.MODEL,
             StructureType.LOOSE_ASSETS.value: PackageType.OTHERS,
-            StructureType.RAW_3D_FILES.value: PackageType.OTHERS,
             StructureType.MIXED_FILES.value: PackageType.OTHERS,
             StructureType.UNKNOWN.value: PackageType.OTHERS,
         }
@@ -538,7 +538,7 @@ class AssetManagerUI(BaseModuleWidget):
         self.type_filter.setMaximumWidth(140)
         self.type_filter.setFocusPolicy(Qt.FocusPolicy.ClickFocus)
         self.type_filter.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.type_filter.addItems(["全部类型", "Content 资产包", "UE 项目", "UE 插件", "其他资源"])
+        self.type_filter.addItems(["全部类型", "Content 资产包", "UE 项目", "UE 插件", "3D 模型", "其他资源"])
         self.type_filter.currentTextChanged.connect(self._on_type_filter_changed)
         self.type_filter.setItemDelegate(CenterAlignDelegate(self.type_filter))
         type_layout.addWidget(self.type_filter)
@@ -767,6 +767,7 @@ class AssetManagerUI(BaseModuleWidget):
             "Content 资产包": "Content",
             "UE 项目": "Project",
             "UE 插件": "Plugin",
+            "3D 模型": "Model",
             "其他资源": "Others"
         }
         # 转换为英文类型名
@@ -1800,6 +1801,12 @@ class AssetManagerUI(BaseModuleWidget):
             self._preview_project_asset(asset_id, name)
             return
         
+        if pkg_type == 'model':
+            # 3D 模型：禁用预览，提示使用导入功能
+            preview_card.set_error("3D 模型资产无法预览，请使用导入功能")
+            preview_card.reset_state()
+            return
+        
         if pkg_type == 'others':
             # 其他资源：检测内容类型，分别处理
             self._preview_others_asset(asset_id, name, preview_card)
@@ -2786,7 +2793,7 @@ class AssetManagerUI(BaseModuleWidget):
             self._add_asset_async(asset_info)
     
     def _add_asset_async(self, asset_info):
-        """异步添加资产（带进度显示，支持压缩包预分析路径）"""
+        """异步添加资产（使用主窗口状态栏显示进度）"""
         from PyQt6.QtCore import QThread, pyqtSignal
         
         class AddAssetThread(QThread):
@@ -2857,10 +2864,8 @@ class AssetManagerUI(BaseModuleWidget):
         self._pending_archive_temp_dir = asset_info.get('archive_temp_dir')
         self._last_add_error = ""
         
-        # 创建进度对话框
-        from .add_asset_progress_dialog import AddAssetProgressDialog
-        progress_dialog = AddAssetProgressDialog(asset_info['name'], self)
-        progress_dialog.setModal(True)
+        # 获取主窗口
+        main_window = self._get_main_window()
         
         # 创建并启动线程
         self.add_asset_thread = AddAssetThread(self.logic, asset_info)
@@ -2868,15 +2873,63 @@ class AssetManagerUI(BaseModuleWidget):
         def _on_error_message(msg):
             self._last_add_error = msg
         
-        # 连接信号
-        self.add_asset_thread.progress_update.connect(progress_dialog.update_progress)
-        self.add_asset_thread.error_message.connect(_on_error_message)
-        self.add_asset_thread.finished.connect(self._on_add_asset_finished)
-        self.add_asset_thread.finished.connect(progress_dialog.close)
+        def _on_progress_update(current, total, message):
+            """更新主窗口状态栏进度"""
+            if main_window:
+                # 计算进度百分比
+                if total > 0:
+                    progress = int((current / total) * 100)
+                    # 使用平滑动画更新进度
+                    main_window._status_label.setText(f"正在添加资产: {asset_info['name']}")
+                    main_window._status_detail.setText(message)
+                    main_window.animate_status_progress(progress, 200)
+                else:
+                    # 不确定进度，使用循环动画
+                    main_window.show_status(
+                        f"正在添加资产: {asset_info['name']}",
+                        message,
+                        -1
+                    )
         
-        # 启动线程和对话框
+        def _on_finished(success, asset):
+            """添加完成，隐藏状态栏"""
+            if main_window:
+                if success:
+                    # 显示完成状态 1 秒后隐藏
+                    main_window.show_status(
+                        f"✅ 资产添加成功: {asset_info['name']}",
+                        "已保存到资产库",
+                        100
+                    )
+                    QTimer.singleShot(1500, main_window.hide_status)
+                else:
+                    # 显示错误状态 3 秒后隐藏
+                    error_msg = self._last_add_error or "未知错误"
+                    main_window.show_status(
+                        f"❌ 资产添加失败: {asset_info['name']}",
+                        error_msg,
+                        0
+                    )
+                    QTimer.singleShot(3000, main_window.hide_status)
+            
+            # 调用原有的完成处理
+            self._on_add_asset_finished(success, asset)
+        
+        # 连接信号
+        self.add_asset_thread.progress_update.connect(_on_progress_update)
+        self.add_asset_thread.error_message.connect(_on_error_message)
+        self.add_asset_thread.finished.connect(_on_finished)
+        
+        # 显示初始状态
+        if main_window:
+            main_window.show_status(
+                f"正在添加资产: {asset_info['name']}",
+                "准备中...",
+                0
+            )
+        
+        # 启动线程
         self.add_asset_thread.start()
-        progress_dialog.show()
     
     def _on_add_asset_finished(self, success, asset):
         """添加资产完成回调"""

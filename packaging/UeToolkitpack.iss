@@ -64,6 +64,15 @@ CloseApplicationsFilter=*.exe
 [Languages]
 Name: "chinesesimplified"; MessagesFile: "compiler:Languages\ChineseSimplified.isl"
 
+[Types]
+Name: "full"; Description: "完整安装"
+Name: "compact"; Description: "精简安装"
+Name: "custom"; Description: "自定义安装"; Flags: iscustom
+
+[Components]
+Name: "main"; Description: "UE Toolkit 主程序"; Types: full compact custom; Flags: fixed
+Name: "7zip"; Description: "7-Zip 高速解压组件（推荐）"; Types: full; ExtraDiskSpaceRequired: 2457600
+
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
 Name: "startmenuicon"; Description: "创建开始菜单快捷方式"; GroupDescription: "{cm:AdditionalIcons}"
@@ -71,7 +80,10 @@ Name: "startmenuicon"; Description: "创建开始菜单快捷方式"; GroupDescr
 [Files]
 ; 单文件模式：EXE直接在dist目录下
 ; ignoreversion: 总是覆盖旧版本文件，不检查版本号
-Source: "..\dist\{#MyAppExeName}"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\dist\{#MyAppExeName}"; DestDir: "{app}"; Flags: ignoreversion; Components: main
+; 7-Zip 组件（可选）
+Source: "..\resources\tools\7z.exe"; DestDir: "{app}\resources\tools"; Flags: ignoreversion; Components: 7zip
+Source: "..\resources\tools\7z.dll"; DestDir: "{app}\resources\tools"; Flags: ignoreversion; Components: 7zip
 ; NOTE: Don't use "Flags: ignoreversion" on any shared system files
 
 [InstallDelete]

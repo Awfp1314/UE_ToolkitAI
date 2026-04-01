@@ -87,6 +87,16 @@ class ExportWorker(QThread):
                 source_content_path = content_path
                 target_wrapper = "Content"
                 
+            elif self.package_type == "model":
+                # 3D 模型：导出 Models 文件夹内容到 自定义名称/Models/
+                models_path = self.source_path / "Models"
+                if models_path.exists() and models_path.is_dir():
+                    source_content_path = models_path
+                else:
+                    # 兼容：直接从根目录导出
+                    source_content_path = self.source_path
+                target_wrapper = "Models"
+                
             elif self.package_type == "others":
                 # 其他资源：导出 Others 文件夹内容到 自定义名称/Others/
                 others_path = self.source_path / "Others"

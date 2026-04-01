@@ -299,7 +299,11 @@ class ArchiveExtractor:
         progress_callback: Optional[Callable[[int, int, str], None]] = None,
         password: Optional[str] = None
     ) -> Optional[Path]:
-        """解压 .zip 文件（使用内置 zipfile）
+        """解压 .zip 文件
+        
+        性能优化：
+        - 优先使用 7z.exe（多线程，3-5倍提速）
+        - 降级到 Python zipfile（兼容性）
         
         Args:
             archive_path: zip 文件路径
@@ -312,6 +316,30 @@ class ArchiveExtractor:
         Raises:
             RuntimeError: 需要密码或密码错误时抛出
         """
+        # 尝试使用高性能解压（7z.exe）
+        try:
+            from core.utils.fast_file_ops import FastFileOperations
+            from core.logger import get_logger
+            
+            fast_ops = FastFileOperations(get_logger(__name__))
+            temp_dir = self._create_temp_dir()
+            
+            # 使用 7z 高速解压
+            success = fast_ops.extract_archive_fast(
+                archive_path, temp_dir, password or "", progress_callback
+            )
+            
+            if success:
+                # 解压成功后，清理广告文件
+                self._cleanup_ad_files(temp_dir)
+                logger.info(f"✅ ZIP 高速解压完成: {archive_path.name}")
+                return temp_dir
+            else:
+                logger.warning("⚠️ 高速解压失败，降级到 Python zipfile")
+        except Exception as e:
+            logger.warning(f"⚠️ 高速解压异常，降级到 Python zipfile: {e}")
+        
+        # 降级到 Python zipfile
         try:
             temp_dir = self._create_temp_dir()
             pwd_bytes = password.encode('utf-8') if password else None
@@ -351,7 +379,35 @@ class ArchiveExtractor:
                         continue
                     
                     try:
-                        zf.extract(member, str(temp_dir), pwd=pwd_bytes)
+                        # Windows 路径修复：清理路径中每个部分的尾随空格
+                        # 例如：'Tactical Flashlight /file.fbx' -> 'Tactical Flashlight/file.fbx'
+                        original_filename = member.filename
+                        cleaned_parts = [part.rstrip() for part in original_filename.split('/')]
+                        cleaned_filename = '/'.join(cleaned_parts)
+                        
+                        if cleaned_filename != original_filename:
+                            logger.info(f"修复路径空格: '{original_filename}' -> '{cleaned_filename}'")
+                            # 创建新的 ZipInfo 对象，使用清理后的文件名
+                            new_member = zipfile.ZipInfo(cleaned_filename)
+                            new_member.compress_type = member.compress_type
+                            new_member.compress_size = member.compress_size
+                            new_member.file_size = member.file_size
+                            new_member.CRC = member.CRC
+                            new_member.external_attr = member.external_attr
+                            
+                            # 手动解压：读取内容并写入清理后的路径
+                            target_path = temp_dir / cleaned_filename
+                            target_path.parent.mkdir(parents=True, exist_ok=True)
+                            
+                            if member.is_dir():
+                                target_path.mkdir(parents=True, exist_ok=True)
+                            else:
+                                with zf.open(member, pwd=pwd_bytes) as source:
+                                    with open(target_path, 'wb') as target:
+                                        target.write(source.read())
+                        else:
+                            # 正常解压
+                            zf.extract(member, str(temp_dir), pwd=pwd_bytes)
                     except RuntimeError as e:
                         if 'Bad password' in str(e) or 'password' in str(e).lower():
                             logger.error("ZIP 密码错误")

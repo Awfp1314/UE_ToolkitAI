@@ -387,13 +387,14 @@ class AssetLocalConfigManager:
 
         assets_data = []
         for asset in assets:
+            pkg_type_value = asset.package_type.value if hasattr(asset.package_type, 'value') else "content"
             assets_data.append({
                 "id": asset.id,
                 "name": asset.name,
                 "asset_type": asset.asset_type.value,
                 "path": str(asset.path),
                 "category": asset.category,
-                "package_type": asset.package_type.value if hasattr(asset.package_type, 'value') else "content",
+                "package_type": pkg_type_value,
                 "file_extension": asset.file_extension,
                 "thumbnail_path": str(asset.thumbnail_path) if asset.thumbnail_path else None,
                 "thumbnail_source": asset.thumbnail_source,
@@ -403,6 +404,10 @@ class AssetLocalConfigManager:
                 "engine_min_version": getattr(asset, 'engine_min_version', ''),
                 "project_file": getattr(asset, 'project_file', '')
             })
+            
+            # 调试：打印保存的 package_type
+            if "tactical" in asset.name.lower():
+                self._logger.info(f"[保存配置] {asset.name}: package_type={asset.package_type}, value={pkg_type_value}")
 
         lib_config["assets"] = assets_data
 

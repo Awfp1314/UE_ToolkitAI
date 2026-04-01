@@ -659,8 +659,15 @@ class AssetManagerLogic(QObject):
                 success = self._file_ops.safe_copytree(
                     asset_path, target_path, progress_callback=move_progress
                 )
+            elif package_type == PackageType.MODEL:
+                # MODEL 类型：智能提取并分类整理到 Models 文件夹
+                logger.info(f"导入 3D 模型资源（智能整理模式）: {asset_path}")
+                success = self._process_others_asset(
+                    asset_path, inner_folder, original_filename, 
+                    progress_callback, perf_steps
+                )
             else:
-                # Others 类型：智能提取并分类整理
+                # Others 类型：智能提取并分类整理到 Others 文件夹
                 logger.info(f"导入其他资源（智能整理模式）: {asset_path}")
                 success = self._process_others_asset(
                     asset_path, inner_folder, original_filename, 
@@ -698,12 +705,16 @@ class AssetManagerLogic(QObject):
                 engine_min_version=engine_version,
                 project_file=project_file_rel
             )
+            
+            logger.info(f"[创建资产] name={asset_name}, package_type={package_type}, display_name={package_type.display_name}")
 
             self.assets.append(asset)
             self._search_engine.build_pinyin_cache([asset])
 
             if package_type == PackageType.PLUGIN:
                 self._set_plugin_default_thumbnail(asset)
+            elif package_type == PackageType.MODEL:
+                self._set_model_default_thumbnail(asset, wrapper_path)
             elif package_type == PackageType.OTHERS:
                 self._set_others_default_thumbnail(asset, wrapper_path)
 
@@ -976,8 +987,19 @@ class AssetManagerLogic(QObject):
         try:
             from datetime import datetime
 
-            # 性能日志文件路径
-            perf_log_path = Path("project-logs/PERFORMANCE.md")
+            # 性能日志文件路径（使用绝对路径）
+            import sys
+            if getattr(sys, 'frozen', False):
+                # 打包环境
+                base_dir = Path(sys._MEIPASS).parent
+            else:
+                # 开发环境
+                base_dir = Path(__file__).parent.parent.parent.parent
+            
+            perf_log_path = base_dir / "project-logs" / "PERFORMANCE.md"
+            
+            # 确保目录存在
+            perf_log_path.parent.mkdir(parents=True, exist_ok=True)
 
             # 格式化时间戳
             timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -1223,6 +1245,46 @@ class AssetManagerLogic(QObject):
             
         except Exception as e:
             logger.warning(f"设置 OTHERS 默认缩略图失败: {e}", exc_info=True)
+    
+    def _set_model_default_thumbnail(self, asset: Asset, wrapper_path: Path) -> None:
+        """为 MODEL 类型资产设置默认缩略图
+        
+        使用 3D 模型默认图标作为缩略图
+        
+        Args:
+            asset: 资产对象
+            wrapper_path: 资产包装文件夹路径
+        """
+        try:
+            # 确保缩略图目录存在
+            thumbnails_dir = self.thumbnails_dir
+            if not thumbnails_dir.exists():
+                thumbnails_dir.mkdir(parents=True, exist_ok=True)
+            
+            thumbnail_filename = f"{asset.id}.png"
+            thumbnail_path = thumbnails_dir / thumbnail_filename
+            
+            # 获取默认 3D 模型图标路径
+            if getattr(sys, 'frozen', False):
+                base_path = Path(sys._MEIPASS)
+            else:
+                base_path = Path(__file__).parent.parent.parent.parent
+            
+            default_icon_path = base_path / "resources" / "icons" / "model_default.png"
+            
+            if not default_icon_path.exists():
+                logger.warning(f"默认 3D 模型图标不存在: {default_icon_path}")
+                return
+            
+            # 复制默认图标作为缩略图
+            import shutil
+            shutil.copy2(default_icon_path, thumbnail_path)
+            asset.thumbnail_path = thumbnail_path
+            logger.info(f"已为 3D 模型资产设置默认缩略图: {asset.name}")
+            
+        except Exception as e:
+            logger.warning(f"设置 MODEL 默认缩略图失败: {e}", exc_info=True)
+    
     def _process_others_asset(self, asset_path: Path, inner_folder: Path,
                               original_filename: str, progress_callback: Optional[Callable],
                               perf_steps: dict) -> bool:

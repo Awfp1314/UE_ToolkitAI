@@ -181,8 +181,12 @@ class BatchAddThread(QThread):
                                 package_type = PackageType.PLUGIN
                             elif analysis.structure_type == StructureType.CONTENT_PACKAGE:
                                 package_type = PackageType.CONTENT
+                            elif analysis.structure_type == StructureType.MODEL_FILES:
+                                package_type = PackageType.MODEL
                             else:
                                 package_type = PackageType.OTHERS
+                            
+                            logger.info(f"[批量添加] 分析结果: structure_type={analysis.structure_type}, package_type={package_type}, display_name={package_type.display_name}")
                             
                             # 获取引擎版本
                             if analysis.engine_version:
@@ -222,6 +226,8 @@ class BatchAddThread(QThread):
                             package_type = PackageType.PLUGIN
                         elif analysis.structure_type == StructureType.CONTENT_PACKAGE:
                             package_type = PackageType.CONTENT
+                        elif analysis.structure_type == StructureType.MODEL_FILES:
+                            package_type = PackageType.MODEL
                         else:
                             package_type = PackageType.OTHERS
                         
@@ -552,7 +558,7 @@ class AddAssetDialog(QDialog):
         self.type_combo = QComboBox()
         self.type_combo.setObjectName("AddAssetDialogCombo")
         self.type_combo.setMinimumHeight(38)
-        self.type_combo.addItems(["资产包", "UE 项目", "UE 插件", "其他资源"])
+        self.type_combo.addItems(["资产包", "UE 项目", "UE 插件", "3D 模型", "其他资源"])
         self.type_combo.setEditable(False)
         self.type_combo.setCurrentIndex(0)
         content_layout.addWidget(self.type_combo)
@@ -855,7 +861,7 @@ class AddAssetDialog(QDialog):
                     'ue_project': PackageType.PROJECT,
                     'ue_plugin': PackageType.PLUGIN,
                     'loose_assets': PackageType.OTHERS,
-                    'raw_3d_files': PackageType.OTHERS,
+                    'model_files': PackageType.MODEL,
                     'mixed_files': PackageType.OTHERS,
                     'unknown': PackageType.OTHERS,
                 }
@@ -1006,7 +1012,7 @@ class AddAssetDialog(QDialog):
             'ue_project': PackageType.PROJECT,
             'ue_plugin': PackageType.PLUGIN,
             'loose_assets': PackageType.OTHERS,
-            'raw_3d_files': PackageType.OTHERS,
+            'model_files': PackageType.MODEL,
             'mixed_files': PackageType.OTHERS,
             'unknown': PackageType.OTHERS,
         }
@@ -1122,7 +1128,7 @@ class AddAssetDialog(QDialog):
                     'ue_project': PackageType.PROJECT,
                     'ue_plugin': PackageType.PLUGIN,
                     'loose_assets': PackageType.OTHERS,
-                    'raw_3d_files': PackageType.OTHERS,
+                    'model_files': PackageType.MODEL,
                     'mixed_files': PackageType.OTHERS,
                     'unknown': PackageType.OTHERS,
                 }
@@ -1208,7 +1214,8 @@ class AddAssetDialog(QDialog):
             PackageType.CONTENT: 0,
             PackageType.PROJECT: 1,
             PackageType.PLUGIN: 2,
-            PackageType.OTHERS: 3,
+            PackageType.MODEL: 3,
+            PackageType.OTHERS: 4,
         }
         index = type_index_map.get(pkg_type, 0)
         self.type_combo.setCurrentIndex(index)
@@ -1371,7 +1378,8 @@ class AddAssetDialog(QDialog):
             0: PackageType.CONTENT,  # "资产包"
             1: PackageType.PROJECT,  # "UE 项目"
             2: PackageType.PLUGIN,   # "UE 插件"
-            3: PackageType.OTHERS,   # "其他资源"
+            3: PackageType.MODEL,    # "3D 模型"
+            4: PackageType.OTHERS,   # "其他资源"
         }
         selected_package_type = index_to_type.get(
             self.type_combo.currentIndex(),

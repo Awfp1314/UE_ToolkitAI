@@ -3,6 +3,10 @@
 
 提供安全的文件操作功能，包括复制、移动、大小计算等。
 所有操作都有完善的错误处理和日志记录。
+
+性能优化：
+- 大文件复制使用 robocopy（多线程，3-10倍提速）
+- 自动降级到 Python 实现以保证兼容性
 """
 
 import os
@@ -16,7 +20,7 @@ class FileOperations:
     """文件操作工具类
     
     提供安全的文件和目录操作，包括：
-    - 复制目录/文件
+    - 复制目录/文件（自动使用高性能工具）
     - 移动目录/文件
     - 计算大小
     - 格式化大小显示
@@ -32,6 +36,15 @@ class FileOperations:
         """
         self._logger = logger
         self._mock_mode = os.environ.get('ASSET_MANAGER_MOCK_MODE') == '1'
+        
+        # 初始化高性能文件操作（可选）
+        self._fast_ops = None
+        try:
+            from core.utils.fast_file_ops import FastFileOperations
+            self._fast_ops = FastFileOperations(logger)
+            self._logger.info("✅ 高性能文件操作已启用")
+        except Exception as e:
+            self._logger.warning(f"⚠️ 高性能文件操作初始化失败，使用标准模式: {e}")
         
         if self._mock_mode:
             self._logger.info("FileOperations: Mock mode enabled")
@@ -72,6 +85,11 @@ class FileOperations:
     ) -> bool:
         """安全地复制目录树（支持进度报告、增量复制和符号链接）
 
+        性能优化：
+        - 大目录（>1GB）自动使用 robocopy（多线程，3-10倍提速）
+        - 小目录使用 Python 实现（避免进程开销）
+        - 失败时自动降级
+
         Args:
             src: 源目录路径
             dst: 目标目录路径
@@ -98,6 +116,33 @@ class FileOperations:
         if use_symlink:
             self._logger.warning(f"⚠️ 符号链接功能已废除，强制使用复制模式")
             use_symlink = False  # 强制改为复制模式
+        
+        # 尝试使用高性能复制（大文件优先）
+        if self._fast_ops and not incremental:
+            # 快速估算大小（只检查前 100 个文件）
+            try:
+                file_count = 0
+                total_size = 0
+                for item in src.rglob('*'):
+                    if item.is_file():
+                        file_count += 1
+                        total_size += item.stat().st_size
+                        if file_count >= 100:
+                            # 估算总大小
+                            all_files = sum(1 for _ in src.rglob('*') if _.is_file())
+                            total_size = total_size * all_files // file_count
+                            break
+                
+                # 大于 1GB 使用高性能复制
+                if total_size > 1024 * 1024 * 1024:
+                    self._logger.info(f"🚀 检测到大目录 ({self.format_size(total_size)})，使用高性能复制")
+                    success = self._fast_ops.copy_tree_fast(src, dst, progress_callback)
+                    if success:
+                        return True
+                    else:
+                        self._logger.warning("⚠️ 高性能复制失败，降级到标准模式")
+            except Exception as e:
+                self._logger.warning(f"⚠️ 高性能复制异常，降级到标准模式: {e}")
 
         # 如果使用增量复制且目标存在，使用增量模式
         if incremental and dst.exists():

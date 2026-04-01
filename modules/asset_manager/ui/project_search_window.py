@@ -1097,8 +1097,8 @@ class ProjectSearchWindow(QWidget):
 
         pkg_type_str = self.package_type.value if hasattr(self.package_type, 'value') else str(self.package_type)
 
-            # 修正版本过滤逻辑：插件模式下 engine_version 不能为空且需匹配
-            if pkg_type_str.lower() == 'plugin':
+        # 修正版本过滤逻辑：插件模式下 engine_version 不能为空且需匹配
+        if pkg_type_str.lower() == 'plugin':
                 if not self.engine_version:
                     self.projs = projects
                     logger.warning("插件版本筛选: 资产引擎版本为空，显示所有工程")

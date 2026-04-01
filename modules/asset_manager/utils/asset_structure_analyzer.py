@@ -32,7 +32,7 @@ class StructureType(Enum):
     UE_PROJECT = "ue_project"              # 完整的 UE 项目（有 .uproject）
     UE_PLUGIN = "ue_plugin"                # UE 插件（有 .uplugin）
     LOOSE_ASSETS = "loose_assets"          # 散装 .uasset/.umap 文件
-    RAW_3D_FILES = "raw_3d_files"          # 原始 3D 文件（FBX/OBJ 等）
+    MODEL_FILES = "model_files"            # 3D 模型文件（FBX/OBJ 等）
     MIXED_FILES = "mixed_files"            # 混合文件类型
     UNKNOWN = "unknown"                    # 无法识别
 
@@ -82,6 +82,19 @@ class AssetStructureAnalyzer:
         total_files = list(extracted_dir.rglob('*'))
         total_file_count = sum(1 for f in total_files if f.is_file())
         
+        # 诊断：列出所有文件及其扩展名
+        logger.info(f"[诊断] 解压目录包含 {total_file_count} 个文件")
+        file_extensions = {}
+        sample_files = []
+        for f in total_files:
+            if f.is_file():
+                ext = f.suffix.lower()
+                file_extensions[ext] = file_extensions.get(ext, 0) + 1
+                if len(sample_files) < 20:  # 只记录前20个文件作为样本
+                    sample_files.append(f"{f.relative_to(extracted_dir)} ({ext})")
+        logger.info(f"[诊断] 文件扩展名统计: {file_extensions}")
+        logger.info(f"[诊断] 文件样本（前20个）: {sample_files}")
+        
         # Step 1: 优先查找 .uproject（完整 UE 项目）
         result = self._find_ue_project(extracted_dir)
         if result:
@@ -107,10 +120,14 @@ class AssetStructureAnalyzer:
             return result
         
         # Step 5: 查找原始 3D 文件
+        logger.info("[analyze] Step 5: 开始查找 3D 模型文件")
         result = self._find_raw_3d_files(extracted_dir)
         if result:
+            logger.info(f"[analyze] Step 5 成功: 找到 MODEL_FILES 类型")
             result.total_file_count = total_file_count
             return result
+        else:
+            logger.info("[analyze] Step 5 失败: 未找到 3D 模型文件")
         
         # Step 6: 无法识别
         logger.warning(f"无法识别资产结构: {extracted_dir}")
@@ -129,6 +146,9 @@ class AssetStructureAnalyzer:
         - Type C: ProjectName/Content/（带 .uproject）
         - Type D: 多层嵌套/.../Content/
         - Type E: 用户直接选择了 Content 文件夹本身
+        
+        注意：如果 Content 文件夹里只有 3D 模型文件（无 .uasset/.umap），
+        返回 None，让后续的 _find_raw_3d_files 处理。
         
         Args:
             root: 搜索根目录
@@ -169,6 +189,12 @@ class AssetStructureAnalyzer:
             for ext in ('.uasset', '.umap'):
                 ue_assets.extend(effective_content.rglob(f'*{ext}'))
             
+            # 检查是否有 3D 模型文件
+            raw_3d_files = []
+            for item in effective_content.rglob('*'):
+                if item.is_file() and item.suffix.lower() in RAW_3D_EXTENSIONS:
+                    raw_3d_files.append(item)
+            
             if ue_assets:
                 asset_count = len(ue_assets)
                 logger.info(f"Content 文件夹包含 {asset_count} 个 UE 资产")
@@ -200,6 +226,11 @@ class AssetStructureAnalyzer:
                     description=f"UE 资产包，包含 {asset_count} 个资产文件",
                     warnings=[]
                 )
+            elif raw_3d_files:
+                # Content 文件夹里只有 3D 模型文件，没有 UE 资产
+                # 返回 None，让 _find_raw_3d_files 处理
+                logger.info(f"Content 文件夹只包含 {len(raw_3d_files)} 个 3D 模型文件，无 UE 资产，交由 MODEL_FILES 处理")
+                return None
         
         # 特殊情况 2：检查 root 的父目录是否是 Content
         if root.parent and root.parent.name.lower() == 'content':
@@ -207,6 +238,12 @@ class AssetStructureAnalyzer:
             ue_assets = []
             for ext in ('.uasset', '.umap'):
                 ue_assets.extend(root.rglob(f'*{ext}'))
+            
+            # 检查是否有 3D 模型文件
+            raw_3d_files = []
+            for item in root.rglob('*'):
+                if item.is_file() and item.suffix.lower() in RAW_3D_EXTENSIONS:
+                    raw_3d_files.append(item)
             
             if ue_assets:
                 asset_count = len(ue_assets)
@@ -220,6 +257,10 @@ class AssetStructureAnalyzer:
                     description=f"UE 资产包（Content 子文件夹），包含 {asset_count} 个资产文件",
                     warnings=[]
                 )
+            elif raw_3d_files:
+                # Content 子文件夹只有 3D 模型文件
+                logger.info(f"Content 子文件夹只包含 {len(raw_3d_files)} 个 3D 模型文件，交由 MODEL_FILES 处理")
+                return None
         
         # 诊断日志：列出根目录下的顶层内容
         try:
@@ -247,15 +288,32 @@ class AssetStructureAnalyzer:
         
         # 过滤：只保留包含 UE 资产的 Content 文件夹
         valid_contents = []
+        model_only_contents = []  # 只有 3D 模型文件的 Content 文件夹
+        
         for content_dir in content_dirs:
             ue_assets = []
             for ext in ('.uasset', '.umap'):
                 ue_assets.extend(content_dir.rglob(f'*{ext}'))
+            
+            # 检查是否有 3D 模型文件
+            raw_3d_files = []
+            for item in content_dir.rglob('*'):
+                if item.is_file() and item.suffix.lower() in RAW_3D_EXTENSIONS:
+                    raw_3d_files.append(item)
+            
             if ue_assets:
                 valid_contents.append((content_dir, len(ue_assets)))
                 logger.info(f"  有效 Content: {content_dir} ({len(ue_assets)} 个 UE 资产)")
+            elif raw_3d_files:
+                model_only_contents.append((content_dir, len(raw_3d_files)))
+                logger.info(f"  Content 只有 3D 模型: {content_dir} ({len(raw_3d_files)} 个模型文件)")
             else:
                 logger.info(f"  空 Content（无 UE 资产）: {content_dir}")
+        
+        # 如果只找到 3D 模型文件的 Content，返回 None 让 _find_raw_3d_files 处理
+        if not valid_contents and model_only_contents:
+            logger.info(f"所有 Content 文件夹都只包含 3D 模型文件，交由 MODEL_FILES 处理")
+            return None
         
         if not valid_contents:
             return self._find_implicit_content_package(root)
@@ -528,7 +586,7 @@ class AssetStructureAnalyzer:
         )
     
     def _find_raw_3d_files(self, root: Path) -> Optional[AnalysisResult]:
-        """查找原始 3D 文件
+        """查找 3D 模型文件
         
         Args:
             root: 搜索根目录
@@ -537,9 +595,16 @@ class AssetStructureAnalyzer:
             AnalysisResult 或 None
         """
         raw_files = []
-        for ext in RAW_3D_EXTENSIONS:
-            raw_files.extend(root.rglob(f'*{ext}'))
+        # 大小写不敏感匹配
+        logger.info(f"[MODEL_FILES] 开始搜索 3D 模型文件，支持的扩展名: {RAW_3D_EXTENSIONS}")
+        for item in root.rglob('*'):
+            if item.is_file():
+                logger.debug(f"[MODEL_FILES] 检查文件: {item.name}, 扩展名: {item.suffix.lower()}")
+                if item.suffix.lower() in RAW_3D_EXTENSIONS:
+                    logger.info(f"[MODEL_FILES] 找到 3D 模型文件: {item}")
+                    raw_files.append(item)
         
+        logger.info(f"[MODEL_FILES] 搜索完成，找到 {len(raw_files)} 个 3D 模型文件")
         if not raw_files:
             return None
         
@@ -554,16 +619,16 @@ class AssetStructureAnalyzer:
         file_types = set(f.suffix.lower() for f in raw_files)
         type_str = ', '.join(sorted(ext.upper().lstrip('.') for ext in file_types))
         
-        logger.info(f"找到原始 3D 文件: {type_str} ({len(raw_files)} 个)")
+        logger.info(f"找到 3D 模型文件: {type_str} ({len(raw_files)} 个)")
         
         return AnalysisResult(
-            structure_type=StructureType.RAW_3D_FILES,
+            structure_type=StructureType.MODEL_FILES,
             content_root=None,
             asset_root=asset_root,
             suggested_name=suggested_name,
             total_file_count=len(raw_files),
-            description=f"原始 3D 文件（{type_str}），共 {len(raw_files)} 个",
-            warnings=["非 UE 原生资产，需要在 UE 中手动导入"]
+            description=f"3D 模型文件（{type_str}），共 {len(raw_files)} 个",
+            warnings=["3D 模型资源，需要在 UE 中手动导入"]
         )
     
     def _infer_name_from_content(self, content_dir: Path, root: Path) -> str:
