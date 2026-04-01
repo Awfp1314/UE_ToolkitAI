@@ -108,6 +108,16 @@ var
   Is7ZipInstalled: Boolean;
   Need7ZipDownload: Boolean;
 
+// 强制结束正在运行的程序
+function KillRunningApp(): Boolean;
+var
+  ResultCode: Integer;
+begin
+  Exec('taskkill', '/F /IM {#MyAppExeName}', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  Sleep(1000);
+  Result := True;
+end;
+
 // 检测系统是否已安装 7-Zip
 function Check7ZipInstalled(): Boolean;
 var
@@ -345,16 +355,6 @@ function GetUninstallRegKey(): String;
 begin
   Result := 'Software\Microsoft\Windows\CurrentVersion\Uninstall\' +
             Chr(123) + '218B94E0-0429-4AFF-9FA3-49A1100AD90F' + Chr(125) + '_is1';
-end;
-
-// 强制结束正在运行的程序
-function KillRunningApp(): Boolean;
-var
-  ResultCode: Integer;
-begin
-  Exec('taskkill', '/F /IM {#MyAppExeName}', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
-  Sleep(1000);
-  Result := True;
 end;
 
 // 获取旧版本的卸载程序路径
