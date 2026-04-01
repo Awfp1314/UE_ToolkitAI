@@ -71,7 +71,7 @@ Name: "custom"; Description: "自定义安装"; Flags: iscustom
 
 [Components]
 Name: "main"; Description: "UE Toolkit 主程序"; Types: full compact custom; Flags: fixed
-Name: "7zip"; Description: "7-Zip 高速解压组件（推荐，提升解压速度 3-5 倍）"; Types: full; ExtraDiskSpaceRequired: 2457600
+Name: "sevenzip"; Description: "7-Zip 高速解压组件（推荐，提升解压速度 3-5 倍）"; Types: full; ExtraDiskSpaceRequired: 2457600
 
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
@@ -285,10 +285,10 @@ var
   DownloadSuccess: Boolean;
   InstallSuccess: Boolean;
 begin
-  if CurStep = ssPostInstall then
+  if CurStep == ssPostInstall then
   begin
     // 检查用户是否选择了 7-Zip 组件
-    if IsComponentSelected('7zip') and not Is7ZipInstalled then
+    if IsComponentSelected('sevenzip') and not Is7ZipInstalled then
     begin
       // 用户选择了 7-Zip 且系统未安装
       if MsgBox('即将下载并安装 7-Zip（约 1.5 MB）。' + #13#10#13#10 +
