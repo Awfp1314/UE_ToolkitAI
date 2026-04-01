@@ -71,7 +71,7 @@ Name: "custom"; Description: "自定义安装"; Flags: iscustom
 
 [Components]
 Name: "main"; Description: "UE Toolkit 主程序"; Types: full compact custom; Flags: fixed
-Name: "7zip"; Description: "7-Zip 高速解压组件（推荐）"; Types: full; ExtraDiskSpaceRequired: 2457600
+Name: "7zip"; Description: "7-Zip 高速解压组件（推荐，提升解压速度 3-5 倍）"; Types: full; ExtraDiskSpaceRequired: 2457600
 
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
@@ -81,9 +81,6 @@ Name: "startmenuicon"; Description: "创建开始菜单快捷方式"; GroupDescr
 ; 单文件模式：EXE直接在dist目录下
 ; ignoreversion: 总是覆盖旧版本文件，不检查版本号
 Source: "..\dist\{#MyAppExeName}"; DestDir: "{app}"; Flags: ignoreversion; Components: main
-; 7-Zip 组件（可选）
-Source: "..\resources\tools\7z.exe"; DestDir: "{app}\resources\tools"; Flags: ignoreversion; Components: 7zip
-Source: "..\resources\tools\7z.dll"; DestDir: "{app}\resources\tools"; Flags: ignoreversion; Components: 7zip
 ; NOTE: Don't use "Flags: ignoreversion" on any shared system files
 
 [InstallDelete]
@@ -105,6 +102,246 @@ Name: "{group}\卸载 {#MyAppName}"; Filename: "{uninstallexe}"; Tasks: startmen
 Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
 
 [Code]
+
+// ========== 7-Zip 检测和下载 ==========
+var
+  Is7ZipInstalled: Boolean;
+  Need7ZipDownload: Boolean;
+
+// 检测系统是否已安装 7-Zip
+function Check7ZipInstalled(): Boolean;
+var
+  RegValue: String;
+begin
+  Result := False;
+  
+  // 检查注册表（64位）
+  if RegQueryStringValue(HKLM64, 'SOFTWARE\7-Zip', 'Path', RegValue) then
+  begin
+    if FileExists(RegValue + '7z.exe') then
+    begin
+      Result := True;
+      Exit;
+    end;
+  end;
+  
+  // 检查注册表（32位）
+  if RegQueryStringValue(HKLM32, 'SOFTWARE\7-Zip', 'Path', RegValue) then
+  begin
+    if FileExists(RegValue + '7z.exe') then
+    begin
+      Result := True;
+      Exit;
+    end;
+  end;
+  
+  // 检查默认安装路径
+  if FileExists(ExpandConstant('{pf}\7-Zip\7z.exe')) then
+  begin
+    Result := True;
+    Exit;
+  end;
+  
+  if FileExists(ExpandConstant('{pf32}\7-Zip\7z.exe')) then
+  begin
+    Result := True;
+    Exit;
+  end;
+end;
+
+// 使用 PowerShell 下载 7-Zip
+function Download7ZipWithPowerShell(DestPath: String): Boolean;
+var
+  ResultCode: Integer;
+  Url: String;
+  PSScript: String;
+begin
+  Result := False;
+  Url := 'https://www.7-zip.org/a/7z2408-x64.msi';
+  
+  // PowerShell 下载脚本
+  PSScript := Format(
+    '[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; ' +
+    '$ProgressPreference = ''SilentlyContinue''; ' +
+    'Invoke-WebRequest -Uri ''%s'' -OutFile ''%s'' -UseBasicParsing',
+    [Url, DestPath]
+  );
+  
+  // 执行 PowerShell 下载
+  if Exec('powershell.exe', 
+          '-NoProfile -ExecutionPolicy Bypass -Command "' + PSScript + '"',
+          '', SW_HIDE, ewWaitUntilTerminated, ResultCode) then
+  begin
+    if (ResultCode = 0) and FileExists(DestPath) then
+      Result := True;
+  end;
+end;
+
+// 安装 7-Zip
+function Install7Zip(MsiPath: String): Boolean;
+var
+  ResultCode: Integer;
+begin
+  Result := False;
+  
+  if not FileExists(MsiPath) then
+    Exit;
+  
+  // 静默安装 7-Zip
+  if Exec('msiexec.exe', 
+          '/i "' + MsiPath + '" /qn /norestart', 
+          '', SW_HIDE, ewWaitUntilTerminated, ResultCode) then
+  begin
+    Result := (ResultCode = 0);
+  end;
+end;
+
+// 在组件选择页面显示 7-Zip 状态
+procedure UpdateComponentsList(Sender: TWizardPage);
+var
+  CompIndex: Integer;
+begin
+  // 查找 7zip 组件
+  for CompIndex := 0 to WizardForm.ComponentsList.Items.Count - 1 do
+  begin
+    if Pos('7-Zip', WizardForm.ComponentsList.ItemCaption[CompIndex]) > 0 then
+    begin
+      if Is7ZipInstalled then
+      begin
+        // 已安装，显示状态并禁用勾选
+        WizardForm.ComponentsList.ItemCaption[CompIndex] := 
+          '7-Zip 高速解压组件（✓ 已安装）';
+        WizardForm.ComponentsList.Checked[CompIndex] := False;
+        WizardForm.ComponentsList.ItemEnabled[CompIndex] := False;
+      end
+      else
+      begin
+        // 未安装，显示下载提示
+        WizardForm.ComponentsList.ItemCaption[CompIndex] := 
+          '7-Zip 高速解压组件（推荐，将联网下载 ~1.5MB）';
+      end;
+      Break;
+    end;
+  end;
+end;
+
+// 初始化安装向导
+function InitializeSetup(): Boolean;
+var
+  OldVersion: String;
+  OldDir: String;
+begin
+  Result := True;
+  
+  // 检测 7-Zip 是否已安装
+  Is7ZipInstalled := Check7ZipInstalled();
+  Need7ZipDownload := False;
+  
+  // 强制结束正在运行的程序
+  KillRunningApp();
+
+  // 检测旧版本
+  OldVersion := GetOldVersion();
+  if OldVersion <> '' then
+  begin
+    OldDir := GetOldInstallDir();
+    if MsgBox('检测到已安装版本 ' + OldVersion + #13#10 +
+              '安装路径: ' + OldDir + #13#10#13#10 +
+              '即将升级到版本 {#MyAppVersion}' + #13#10#13#10 +
+              '是否卸载旧版本并继续安装？' + #13#10 +
+              '（用户数据和配置会保留）',
+              mbConfirmation, MB_YESNO) = IDNO then
+    begin
+      Result := False;
+      Exit;
+    end;
+
+    UninstallOldVersion();
+    if (OldDir <> '') and FileExists(OldDir + '\{#MyAppExeName}') then
+      DeleteFile(OldDir + '\{#MyAppExeName}');
+    if OldDir <> '' then
+      RemoveDir(OldDir);
+
+    MsgBox('旧版本已卸载完成。' + #13#10#13#10 +
+           '点击确定继续安装新版本。',
+           mbInformation, MB_OK);
+  end;
+end;
+
+// 页面切换事件
+procedure CurPageChanged(CurPageID: Integer);
+begin
+  // 在组件选择页面更新 7-Zip 状态
+  if CurPageID = wpSelectComponents then
+  begin
+    UpdateComponentsList(nil);
+  end;
+end;
+
+// 安装完成后的操作
+procedure CurStepChanged(CurStep: TSetupStep);
+var
+  MsiPath: String;
+  DownloadSuccess: Boolean;
+  InstallSuccess: Boolean;
+begin
+  if CurStep = ssPostInstall then
+  begin
+    // 检查用户是否选择了 7-Zip 组件
+    if IsComponentSelected('7zip') and not Is7ZipInstalled then
+    begin
+      // 用户选择了 7-Zip 且系统未安装
+      if MsgBox('即将下载并安装 7-Zip（约 1.5 MB）。' + #13#10#13#10 +
+                '7-Zip 可将资产解压速度提升 3-5 倍。' + #13#10#13#10 +
+                '是否继续？',
+                mbConfirmation, MB_YESNO) = IDYES then
+      begin
+        MsiPath := ExpandConstant('{tmp}\7z-setup.msi');
+        
+        // 显示下载进度
+        WizardForm.StatusLabel.Caption := '正在下载 7-Zip...';
+        WizardForm.ProgressGauge.Style := npbstMarquee;
+        
+        DownloadSuccess := Download7ZipWithPowerShell(MsiPath);
+        
+        if DownloadSuccess then
+        begin
+          WizardForm.StatusLabel.Caption := '正在安装 7-Zip...';
+          InstallSuccess := Install7Zip(MsiPath);
+          
+          if InstallSuccess then
+          begin
+            MsgBox('7-Zip 安装成功！' + #13#10#13#10 +
+                   'UE Toolkit 将自动使用 7-Zip 加速资产解压。',
+                   mbInformation, MB_OK);
+          end
+          else
+          begin
+            MsgBox('7-Zip 安装失败。' + #13#10#13#10 +
+                   'UE Toolkit 将使用内置解压（速度较慢）。' + #13#10 +
+                   '您可以稍后手动安装 7-Zip: https://www.7-zip.org/',
+                   mbError, MB_OK);
+          end;
+          
+          // 清理临时文件
+          DeleteFile(MsiPath);
+        end
+        else
+        begin
+          MsgBox('7-Zip 下载失败。' + #13#10#13#10 +
+                 '可能原因：' + #13#10 +
+                 '- 网络连接问题' + #13#10 +
+                 '- 防火墙阻止' + #13#10#13#10 +
+                 'UE Toolkit 将使用内置解压（速度较慢）。' + #13#10 +
+                 '您可以稍后手动安装 7-Zip: https://www.7-zip.org/',
+                 mbError, MB_OK);
+        end;
+        
+        WizardForm.ProgressGauge.Style := npbstNormal;
+      end;
+    end;
+  end;
+end;
 
 // 获取卸载注册表路径
 function GetUninstallRegKey(): String;
