@@ -35,7 +35,7 @@ class MessageDialog(QDialog):
         self.goto_settings = False  # 是否点击了"去设置"
 
         self.setModal(True)
-        self.setFixedSize(420, 200)
+        self.setFixedSize(448, 228)
 
         # 无边框 + 透明背景支持
         self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Dialog)
@@ -60,7 +60,7 @@ class MessageDialog(QDialog):
         # 自定义标题栏
         title_bar = QWidget()
         title_bar.setObjectName("MessageDialogTitleBar")
-        title_bar.setFixedHeight(45)
+        title_bar.setFixedHeight(50)
         title_bar_layout = QHBoxLayout()
         title_bar_layout.setSpacing(0)
         title_bar_layout.setContentsMargins(0, 0, 0, 0)
@@ -82,8 +82,8 @@ class MessageDialog(QDialog):
 
         # 内容布局
         content_layout = QVBoxLayout()
-        content_layout.setSpacing(20)
-        content_layout.setContentsMargins(20, 20, 20, 20)
+        content_layout.setSpacing(14)
+        content_layout.setContentsMargins(24, 18, 24, 20)
 
         # 消息标签
         message_label = QLabel(self.message_text)
@@ -94,7 +94,7 @@ class MessageDialog(QDialog):
 
         # 按钮
         button_layout = QHBoxLayout()
-        button_layout.setSpacing(10)
+        button_layout.setSpacing(12)
         button_layout.addStretch()
 
         if self.show_settings_button:
@@ -102,14 +102,14 @@ class MessageDialog(QDialog):
             settings_btn = QPushButton("去设置")
             settings_btn.setObjectName("MessageDialogSettingsBtn")
             settings_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-            settings_btn.setFixedSize(80, 32)
+            settings_btn.setFixedSize(92, 34)
             settings_btn.clicked.connect(self._on_goto_settings)
             button_layout.addWidget(settings_btn)
 
             cancel_btn = QPushButton("取消")
             cancel_btn.setObjectName("MessageDialogCancelBtn")
             cancel_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-            cancel_btn.setFixedSize(80, 32)
+            cancel_btn.setFixedSize(92, 34)
             cancel_btn.clicked.connect(self.reject)
             button_layout.addWidget(cancel_btn)
         else:
@@ -117,7 +117,7 @@ class MessageDialog(QDialog):
             ok_btn = QPushButton("确定")
             ok_btn.setObjectName("MessageDialogOkBtn")
             ok_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-            ok_btn.setFixedSize(80, 32)
+            ok_btn.setFixedSize(92, 34)
             ok_btn.clicked.connect(self.accept)
             button_layout.addWidget(ok_btn)
 

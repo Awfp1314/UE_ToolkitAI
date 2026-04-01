@@ -522,7 +522,8 @@ def global_exception_handler(exc_type: type, exc_value: BaseException, exc_trace
     
     # ✅ 显示用户友好的错误对话框
     try:
-        from PyQt6.QtWidgets import QApplication, QMessageBox
+        from PyQt6.QtWidgets import QApplication
+        from modules.asset_manager.ui.confirm_dialog import ConfirmDialog
         import traceback
         
         # 确保QApplication存在
@@ -530,35 +531,23 @@ def global_exception_handler(exc_type: type, exc_value: BaseException, exc_trace
             # 格式化详细错误信息
             error_details = ''.join(traceback.format_exception(exc_type, exc_value, exc_traceback))
             
-            msg = QMessageBox()
-            msg.setIcon(QMessageBox.Icon.Critical)
-            msg.setWindowTitle("应用程序错误")
-            msg.setText(f"遇到了一个严重错误")
-            msg.setInformativeText(
+            dialog = ConfirmDialog(
+                "应用程序错误",
+                "遇到了一个严重错误",
                 f"错误类型: {exc_type.__name__}\n"
                 f"错误信息: {str(exc_value)}\n\n"
                 "应用程序将尝试继续运行，但可能不稳定。\n"
                 "建议保存当前工作后重启应用程序。\n\n"
-                "详细信息请查看下方或日志文件。"
+                "点击【确认】退出应用；点击【取消】继续运行。\n\n"
+                f"详细堆栈：\n{error_details}",
+                parent=None
             )
-            msg.setDetailedText(error_details)
-            msg.setStandardButtons(
-                QMessageBox.StandardButton.Ok | QMessageBox.StandardButton.Close
-            )
-            msg.setDefaultButton(QMessageBox.StandardButton.Ok)
+            if hasattr(dialog, 'center_on_parent'):
+                dialog.center_on_parent()
             
-            # 设置按钮文本（添加类型检查）
-            ok_button = msg.button(QMessageBox.StandardButton.Ok)
-            if ok_button is not None:
-                ok_button.setText("继续运行")
-                
-            close_button = msg.button(QMessageBox.StandardButton.Close)
-            if close_button is not None:
-                close_button.setText("退出应用")
+            result = dialog.exec()
             
-            result = msg.exec()
-            
-            if result == QMessageBox.StandardButton.Close:
+            if result == ConfirmDialog.DialogCode.Accepted:
                 # 用户选择退出
                 try:
                     quit_app()

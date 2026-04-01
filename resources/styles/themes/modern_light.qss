@@ -170,6 +170,14 @@ QScrollBar::sub-page:horizontal {
     color: rgba(0, 0, 0, 0.45);
 }
 
+#AddAssetDialogReadOnlyValue {
+    background-color: #ececec;
+    border-radius: 8px;
+    padding: 8px 12px;
+    color: #333333;
+    font-size: 13px;
+}
+
 /* 类型选择下拉框（QComboBox�?*/
 QComboBox#AddAssetDialogInput {
     padding-right: 30px;
@@ -822,7 +830,7 @@ QComboBox#AddAssetDialogInput QAbstractItemView::item:selected {
     color: #1a1a1a;
     font-size: 15px;
     font-weight: bold;
-    padding: 10px 5px;
+    padding: 10px 6px 6px 6px;
 }
 
 /* 详细信息文本 */
@@ -840,10 +848,11 @@ QComboBox#AddAssetDialogInput QAbstractItemView::item:selected {
     background-color: #4a9eff;
     color: white;
     border: none;
-    padding: 10px 28px;
+    padding: 5px 14px;
     border-radius: 5px;
     font-size: 13px;
-    min-width: 80px;
+    min-width: 60px;
+    min-height: 28px;
     font-weight: bold;
 }
 
@@ -860,10 +869,11 @@ QComboBox#AddAssetDialogInput QAbstractItemView::item:selected {
     background-color: #f0f0f0;
     color: #1a1a1a;
     border: none;
-    padding: 10px 28px;
+    padding: 5px 14px;
     border-radius: 5px;
     font-size: 13px;
-    min-width: 80px;
+    min-width: 60px;
+    min-height: 28px;
     font-weight: bold;
 }
 
@@ -1342,7 +1352,119 @@ QMainWindow {
     background: transparent;
 }
 
-/* ===== 主题切换按钮（右侧标题区�?===== */
+/* ===== 状态信息指示器 ===== */
+#StatusIndicator {
+    background: transparent;
+}
+
+#StatusProgressBar {
+    background: rgba(0, 0, 0, 0.1);
+    border: none;
+    border-radius: 1px;
+}
+
+#StatusProgressBar::chunk {
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+        stop:0 #1e88e5, stop:1 #42a5f5);
+    border-radius: 1px;
+}
+
+#StatusLabel {
+    color: rgba(0, 0, 0, 0.7);
+    font-size: 11px;
+    font-weight: 500;
+    background: transparent;
+}
+
+#StatusDetail {
+    color: rgba(0, 0, 0, 0.42);
+    font-size: 10px;
+    background: transparent;
+}
+
+#StatusDetailButton {
+    min-width: 44px;
+    padding: 0 10px;
+    background: rgba(0, 0, 0, 0.04);
+    border: 1px solid rgba(0, 0, 0, 0.12);
+    border-radius: 11px;
+    color: rgba(0, 0, 0, 0.68);
+    font-size: 11px;
+    font-weight: 500;
+}
+
+#StatusDetailButton:hover {
+    background: rgba(0, 0, 0, 0.08);
+    border: 1px solid rgba(0, 0, 0, 0.18);
+    color: rgba(0, 0, 0, 0.88);
+}
+
+#StatusDetailButton:pressed {
+    background: rgba(0, 0, 0, 0.13);
+    border: 1px solid rgba(0, 0, 0, 0.24);
+    color: rgba(0, 0, 0, 0.92);
+}
+
+#StatusDetailButton:disabled {
+    background: rgba(0, 0, 0, 0.02);
+    border: 1px solid rgba(0, 0, 0, 0.08);
+    color: rgba(0, 0, 0, 0.35);
+}
+
+/* ===== 改名结果弹窗 ===== */
+#RenameResultContainer {
+    background: #ffffff;
+    border: 1px solid rgba(0, 0, 0, 0.08);
+    border-radius: 12px;
+}
+#RenameResultTitle {
+    font-size: 16px;
+    font-weight: 600;
+    color: #1a1a1a;
+}
+#RenameResultSummary {
+    font-size: 13px;
+    color: rgba(0, 0, 0, 0.50);
+}
+#RenameResultDoneItem {
+    font-size: 12px;
+    color: #2e7d32;
+    padding: 1px 0;
+}
+#RenameResultCompat {
+    font-size: 12px;
+    color: rgba(0, 0, 0, 0.55);
+    padding: 6px 10px;
+    background: rgba(0, 0, 0, 0.03);
+    border-radius: 6px;
+}
+#RenameResultTip {
+    font-size: 11px;
+    color: rgba(0, 0, 0, 0.38);
+}
+#RenameResultBtnDone {
+    background: transparent;
+    border: 1px solid rgba(0, 0, 0, 0.12);
+    border-radius: 6px;
+    color: rgba(0, 0, 0, 0.55);
+    font-size: 12px;
+}
+#RenameResultBtnDone:hover {
+    background: rgba(0, 0, 0, 0.04);
+}
+#RenameResultBtnOpen {
+    background: #1976d2;
+    border: none;
+    border-radius: 6px;
+    color: #ffffff;
+    font-size: 12px;
+    font-weight: 500;
+}
+#RenameResultBtnOpen:hover {
+    background: #1e88e5;
+}
+
+/* ===== 主题切换按钮（右侧标题区）===== */
 #ThemeToggleButton {
     background: transparent;
     border: none;
@@ -1602,14 +1724,14 @@ QMainWindow {
 
 #MessageDialogIcon {
     color: #1a1a1a;
-    font-size: 20px;
+    font-size: 21px;
     background-color: transparent;
     border: none;
 }
 
 #MessageDialogTitleLabel {
     color: #1a1a1a;
-    font-size: 14px;
+    font-size: 15px;
     font-weight: bold;
     padding-left: 10px;
     background-color: transparent;
@@ -1621,7 +1743,7 @@ QMainWindow {
     color: #1a1a1a;
     font-size: 14px;
     line-height: 1.6;
-    padding: 5px;
+    padding: 10px 8px;
 }
 
 /* ===== 按钮 ===== */
@@ -1634,8 +1756,8 @@ QMainWindow {
     padding: 6px 20px;
     border-radius: 4px;
     font-size: 13px;
-    min-width: 80px;
-    min-height: 32px;
+    min-width: 92px;
+    min-height: 34px;
 }
 
 #MessageDialogOkBtn:hover,
@@ -1656,8 +1778,8 @@ QMainWindow {
     padding: 6px 20px;
     border-radius: 4px;
     font-size: 13px;
-    min-width: 80px;
-    min-height: 32px;
+    min-width: 92px;
+    min-height: 34px;
 }
 
 #MessageDialogCancelBtn:hover {

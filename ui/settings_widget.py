@@ -8,7 +8,7 @@
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QLineEdit, QComboBox, QRadioButton, QButtonGroup, QTabWidget,
-    QScrollArea, QFileDialog, QMessageBox, QCheckBox
+    QScrollArea, QFileDialog, QCheckBox
 )
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal
 from core.logger import get_logger
@@ -914,8 +914,8 @@ class AIAssistantSection(SettingsSection):
         """保存配置按钮点击"""
         self._save_config()
         # 显示保存成功提示
-        from PyQt6.QtWidgets import QMessageBox
-        QMessageBox.information(self, "保存成功", "AI 助手配置已保存")
+        from modules.asset_manager.ui.message_dialog import MessageDialog
+        MessageDialog("保存成功", "AI 助手配置已保存", "success", parent=self).exec()
     
     def _save_config(self):
         """保存配置"""
@@ -957,8 +957,8 @@ class AIAssistantSection(SettingsSection):
                 if not ollama_model:
                     logger.warning("⚠️ Ollama模型未选择，请先扫描并选择模型")
                     self.ollama_status_label.setText("⚠️ 请先选择一个Ollama模型")
-                    from PyQt6.QtWidgets import QMessageBox
-                    QMessageBox.warning(self, "配置不完整", "请先扫描并选择一个 Ollama 模型")
+                    from modules.asset_manager.ui.message_dialog import MessageDialog
+                    MessageDialog("配置不完整", "请先扫描并选择一个 Ollama 模型", "warning", parent=self).exec()
                     return
             
             # 打印调试信息
@@ -1135,12 +1135,13 @@ class AIAssistantSection(SettingsSection):
             
             # 先检查模型是否已存在
             if AIModelManager.check_model_integrity():
-                QMessageBox.information(
-                    self,
+                from modules.asset_manager.ui.message_dialog import MessageDialog
+                MessageDialog(
                     "AI资源已就绪",
                     "AI模型已经下载完成，无需重复下载。",
-                    QMessageBox.StandardButton.Ok
-                )
+                    "info",
+                    parent=self
+                ).exec()
                 return
             
             # 显示下载对话框
@@ -1158,12 +1159,13 @@ class AIAssistantSection(SettingsSection):
                 logger.warning("AI模型下载失败或被取消")
         except Exception as e:
             logger.error(f"下载AI模型失败: {e}", exc_info=True)
-            QMessageBox.critical(
-                self,
+            from modules.asset_manager.ui.message_dialog import MessageDialog
+            MessageDialog(
                 "下载失败",
                 f"下载AI模型时发生错误：\n{str(e)}",
-                QMessageBox.StandardButton.Ok
-            )
+                "error",
+                parent=self
+            ).exec()
 
 
 class GeneralSection(SettingsSection):

@@ -176,13 +176,13 @@ class UpdateCheckerIntegration:
         self.logger.info("手动检查完成，没有可用更新")
         # 可以在这里显示一个提示消息
         if self.main_window:
-            from PyQt6.QtWidgets import QMessageBox
-            QMessageBox.information(
-                self.main_window,
+            from modules.asset_manager.ui.message_dialog import MessageDialog
+            MessageDialog(
                 "检查更新",
                 "当前已是最新版本！",
-                QMessageBox.StandardButton.Ok
-            )
+                "info",
+                parent=self.main_window
+            ).exec()
     
     def _show_update_dialog(self, version_info: dict, app: QApplication, is_manual: bool = False):
         """

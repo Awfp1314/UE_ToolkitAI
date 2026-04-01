@@ -7,7 +7,6 @@
 
 from PyQt6.QtCore import QSharedMemory
 from PyQt6.QtNetwork import QLocalServer, QLocalSocket
-from PyQt6.QtWidgets import QMessageBox
 from core.logger import get_logger
 
 logger = get_logger(__name__)

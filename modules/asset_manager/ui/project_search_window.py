@@ -8,13 +8,15 @@ from datetime import datetime
 
 from PyQt6.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, 
-    QFrame, QScrollArea, QLineEdit, QComboBox, QGridLayout, QMessageBox
+    QFrame, QScrollArea, QLineEdit, QComboBox, QGridLayout
 )
 from PyQt6.QtCore import Qt, QThread, pyqtSignal, QRectF, QPoint, QTimer
 from PyQt6.QtGui import (
     QFont, QKeySequence, QShortcut, QPixmap, QPainter, 
     QColor, QPainterPath, QLinearGradient
 )
+
+from .message_dialog import MessageDialog
 
 from core.logger import get_logger
 
@@ -928,11 +930,21 @@ class ProjectSearchWindow(QWidget):
             logger.info(f"注册表是否存在: {registry_path.exists()}")
             
             if not registry.has_registry():
-                logger.info("注册表不存在，启动扫描")
+                logger.info("注册表不存在或路径无效，启动扫描")
                 self._scan()
                 return
             
-            data = registry.load_registry()
+            # 获取注册表文件内容
+            import json
+            registry_file = registry._registry_path
+            try:
+                with open(registry_file, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+            except Exception as e:
+                logger.error(f"读取注册表失败: {e}")
+                self._scan()
+                return
+
             projects = data.get("projects", [])
             
             if not projects:
@@ -982,6 +994,8 @@ class ProjectSearchWindow(QWidget):
                     'path': str(proj_path),
                     'project_path': str(uproject_files[0]),
                     'version': proj.get("version", ""),
+                    'modified': datetime.fromtimestamp(uproject_files[0].stat().st_mtime).strftime("%Y-%m-%d"),
+                    'recent_order': self._get_project_last_opened_time(proj_path),
                     'category': proj.get("category", "默认"),
                     'thumbnail': thumbnail,
                     'pid': 0
@@ -990,7 +1004,9 @@ class ProjectSearchWindow(QWidget):
             self.all = converted_projects
             self.projs = converted_projects
             self._load_categories_from_registry(data)
-            self._refresh()
+            self._apply_package_version_filter(converted_projects)
+            self._update_version_filter()
+            self._sort()
             
         except Exception as e:
             logger.error(f"从注册表加载工程失败: {e}", exc_info=True)
@@ -1043,7 +1059,85 @@ class ProjectSearchWindow(QWidget):
             logger.error(f"获取排除路径失败: {e}", exc_info=True)
         
         return exclude_paths
+
+    def _get_project_last_opened_time(self, project_dir: Path) -> int:
+        """获取工程最近打开时间（用于注册表加载后的排序）"""
+        try:
+            saved_dir = project_dir / "Saved"
+            if not saved_dir.exists():
+                uproject_files = list(project_dir.glob("*.uproject"))
+                if uproject_files:
+                    return int(uproject_files[0].stat().st_mtime)
+                return 0
+
+            logs_dir = saved_dir / "Logs"
+            if logs_dir.exists():
+                log_files = list(logs_dir.glob("*.log"))
+                if log_files:
+                    latest_log = max(log_files, key=lambda f: f.stat().st_mtime)
+                    return int(latest_log.stat().st_mtime)
+
+            config_file = saved_dir / "Config" / "Windows" / "EditorPerProjectUserSettings.ini"
+            if config_file.exists():
+                return int(config_file.stat().st_mtime)
+
+            uproject_files = list(project_dir.glob("*.uproject"))
+            if uproject_files:
+                return int(uproject_files[0].stat().st_mtime)
+            return 0
+
+        except Exception:
+            return 0
     
+    def _apply_package_version_filter(self, projects):
+        """根据资产包装类型应用版本过滤"""
+        if not (self.package_type and self.engine_version):
+            self.projs = projects
+            return
+
+        pkg_type_str = self.package_type.value if hasattr(self.package_type, 'value') else str(self.package_type)
+
+            # 修正版本过滤逻辑：插件模式下 engine_version 不能为空且需匹配
+            if pkg_type_str.lower() == 'plugin':
+                if not self.engine_version:
+                    self.projs = projects
+                    logger.warning("插件版本筛选: 资产引擎版本为空，显示所有工程")
+                    return
+                
+                filtered = []
+                for p in projects:
+                    project_version = p.get('version', '')
+                    # 插件要求大版本一致，如 5.4 匹配 5.4.x
+                    if project_version and project_version.startswith(self.engine_version):
+                        filtered.append(p)
+                self.projs = filtered
+                logger.info(f"插件版本筛选: 需要 UE {self.engine_version}，匹配后剩余 {len(filtered)} 个工程")
+                return
+
+        if pkg_type_str.lower() in ('content', 'project'):
+            # 资产包/工程资产可向上兼容（目标工程版本 >= 资产版本）
+            filtered = []
+            try:
+                asset_version_parts = [int(x) for x in self.engine_version.split('.')]
+                for p in projects:
+                    project_version = p.get('version', '')
+                    if not project_version:
+                        continue
+                    try:
+                        project_version_parts = [int(x) for x in project_version.split('.')]
+                        if project_version_parts >= asset_version_parts:
+                            filtered.append(p)
+                    except (ValueError, AttributeError):
+                        continue
+                self.projs = filtered
+                logger.info(f"版本筛选({pkg_type_str}): 需要 UE {self.engine_version} 或更高版本，筛选后剩余 {len(filtered)} 个工程")
+            except (ValueError, AttributeError) as e:
+                logger.warning(f"版本号解析失败: {self.engine_version}, 错误: {e}")
+                self.projs = projects
+            return
+
+        self.projs = projects
+
     def _found(self, ps):
         self.all = ps
         self.projs = ps
@@ -1051,79 +1145,8 @@ class ProjectSearchWindow(QWidget):
         # 加载分类列表到下拉框
         self._load_categories()
         
-        # 如果是插件或资产包类型，自动过滤版本
-        if self.package_type and self.engine_version:
-            from ..logic.asset_model import PackageType
-            pkg_type_str = self.package_type.value if hasattr(self.package_type, 'value') else str(self.package_type)
-            
-            if pkg_type_str.lower() == 'plugin':
-                # 插件必须严格匹配版本
-                filtered = []
-                for p in ps:
-                    project_version = p.get('version', '')
-                    # 严格匹配版本（如 "5.4" 匹配 "5.4"）
-                    if project_version and self.engine_version in project_version:
-                        filtered.append(p)
-                self.projs = filtered
-                logger.info(f"插件版本筛选: 需要 UE {self.engine_version}，筛选后剩余 {len(filtered)} 个工程")
-            
-            elif pkg_type_str.lower() == 'content':
-                # 资产包可以向上兼容（可以导入到相同或更高版本的工程）
-                filtered = []
-                try:
-                    # 解析资产包的版本号（如 "5.4" -> [5, 4]）
-                    asset_version_parts = [int(x) for x in self.engine_version.split('.')]
-                    
-                    for p in ps:
-                        project_version = p.get('version', '')
-                        if not project_version:
-                            continue
-                        
-                        try:
-                            # 解析工程版本号
-                            project_version_parts = [int(x) for x in project_version.split('.')]
-                            
-                            # 比较版本号：工程版本 >= 资产包版本
-                            if project_version_parts >= asset_version_parts:
-                                filtered.append(p)
-                        except (ValueError, AttributeError):
-                            # 版本号解析失败，跳过
-                            continue
-                    
-                    self.projs = filtered
-                    logger.info(f"资产包版本筛选: 需要 UE {self.engine_version} 或更高版本，筛选后剩余 {len(filtered)} 个工程")
-                except (ValueError, AttributeError) as e:
-                    # 资产包版本号解析失败，不进行筛选
-                    logger.warning(f"资产包版本号解析失败: {self.engine_version}, 错误: {e}")
-            
-            elif pkg_type_str.lower() == 'project':
-                # 工程资产的 Content 可以向上兼容（类似资产包）
-                filtered = []
-                try:
-                    # 解析工程资产的版本号（如 "5.4" -> [5, 4]）
-                    asset_version_parts = [int(x) for x in self.engine_version.split('.')]
-                    
-                    for p in ps:
-                        project_version = p.get('version', '')
-                        if not project_version:
-                            continue
-                        
-                        try:
-                            # 解析目标工程版本号
-                            project_version_parts = [int(x) for x in project_version.split('.')]
-                            
-                            # 比较版本号：目标工程版本 >= 工程资产版本
-                            if project_version_parts >= asset_version_parts:
-                                filtered.append(p)
-                        except (ValueError, AttributeError):
-                            # 版本号解析失败，跳过
-                            continue
-                    
-                    self.projs = filtered
-                    logger.info(f"工程资产版本筛选: 需要 UE {self.engine_version} 或更高版本，筛选后剩余 {len(filtered)} 个工程")
-                except (ValueError, AttributeError) as e:
-                    # 工程资产版本号解析失败，不进行筛选
-                    logger.warning(f"工程资产版本号解析失败: {self.engine_version}, 错误: {e}")
+        # 根据资产类型自动过滤版本
+        self._apply_package_version_filter(ps)
         
         # 更新版本选择框 - 基于搜索到的工程版本
         self._update_version_filter()
@@ -1235,16 +1258,19 @@ class ProjectSearchWindow(QWidget):
         
         f = []
         for p in self.all:
+            # 搜索文本过滤
             if st and st not in p['name'].lower() and st not in p['path'].lower():
                 continue
-            if vf != "所有版本" and p.get('version','') not in vf:
+            # 版本下拉框过滤
+            if vf != "所有版本" and p.get('version','') != vf:
                 continue
+            # 分类下拉框过滤
             if cf != "全部分类" and p.get('category', '默认') != cf:
                 continue
             f.append(p)
         
         self.projs = f
-        self._refresh()
+        self._sort()
     
     def _sort(self):
         """按最近打开时间排序（降序）"""
@@ -1269,7 +1295,7 @@ class ProjectSearchWindow(QWidget):
                     subprocess.Popen([str(uf[0])], shell=False)
                     print(f"打开: {pp}")
             except Exception as e:
-                QMessageBox.warning(self, "错误", f"无法打开: {e}")
+                MessageDialog("错误", f"无法打开: {e}", "error", parent=self).exec()
     
     def _on_select_project(self, project_path: str):
         """处理工程选择请求（选择模式）"""
@@ -1294,16 +1320,13 @@ class ProjectSearchWindow(QWidget):
                     pass
             except PermissionError:
                 # 文件被占用，提示用户
-                from PyQt6.QtWidgets import QMessageBox
-                QMessageBox.warning(
-                    self,
+                MessageDialog(
                     "工程正在运行",
-                    f"目标工程正在 UE 编辑器中打开。\n\n"
-                    f"导入资产时需要覆盖同名文件，如果编辑器正在使用这些文件，可能会导致导入失败。\n\n"
-                    f"建议：先关闭 UE 编辑器，再导入资产。\n\n"
+                    "目标工程正在 UE 编辑器中打开。\n\n导入资产时需要覆盖同名文件，如果编辑器正在使用这些文件，可能会导致导入失败。\n\n建议：先关闭 UE 编辑器，再导入资产。\n\n"
                     f"工程路径：{project_path}",
-                    QMessageBox.StandardButton.Ok
-                )
+                    "warning",
+                    parent=self
+                ).exec()
                 return
             except Exception:
                 # 其他错误忽略，继续导入

@@ -997,18 +997,18 @@ class ModernAssetCard(QFrame):
                 return
             
             # 导入确认对话框
-            from PyQt6.QtWidgets import QMessageBox
-            
-            # 显示确认对话框
-            reply = QMessageBox.question(
-                self,
+            from .confirm_dialog import ConfirmDialog
+
+            dialog = ConfirmDialog(
                 "确认删除",
-                f"确定要删除资产 \"{self.name}\" 的文档吗？\n\n此操作不可恢复！",
-                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-                QMessageBox.StandardButton.No
+                f"确定要删除资产 \"{self.name}\" 的文档吗？",
+                "此操作不可恢复！",
+                self
             )
-            
-            if reply != QMessageBox.StandardButton.Yes:
+            if hasattr(dialog, 'center_on_parent'):
+                dialog.center_on_parent()
+
+            if dialog.exec() != ConfirmDialog.DialogCode.Accepted:
                 return
             
             # 删除文档文件
@@ -1017,14 +1017,16 @@ class ModernAssetCard(QFrame):
             if doc_path.exists():
                 doc_path.unlink()
                 logger.info(f"已删除文档: {doc_path}")
-                QMessageBox.information(self, "删除成功", "文档已删除")
+                from .message_dialog import MessageDialog
+                MessageDialog("删除成功", "文档已删除", "success", parent=self).exec()
             else:
-                QMessageBox.warning(self, "删除失败", "未找到文档文件")
+                from .message_dialog import MessageDialog
+                MessageDialog("删除失败", "未找到文档文件", "warning", parent=self).exec()
                 
         except Exception as e:
             logger.error(f"删除文档失败: {e}", exc_info=True)
-            from PyQt6.QtWidgets import QMessageBox
-            QMessageBox.warning(self, "错误", f"删除文档失败：{e}")
+            from .message_dialog import MessageDialog
+            MessageDialog("错误", f"删除文档失败：{e}", "error", parent=self).exec()
 
     def update_theme(self, theme: str):
         """更新主题
@@ -1616,18 +1618,18 @@ class CompactAssetCard(QFrame):
                 return
             
             # 导入确认对话框
-            from PyQt6.QtWidgets import QMessageBox
-            
-            # 显示确认对话框
-            reply = QMessageBox.question(
-                self,
+            from .confirm_dialog import ConfirmDialog
+
+            dialog = ConfirmDialog(
                 "确认删除",
-                f"确定要删除资产 \"{self.name}\" 的文档吗？\n\n此操作不可恢复！",
-                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-                QMessageBox.StandardButton.No
+                f"确定要删除资产 \"{self.name}\" 的文档吗？",
+                "此操作不可恢复！",
+                self
             )
-            
-            if reply != QMessageBox.StandardButton.Yes:
+            if hasattr(dialog, 'center_on_parent'):
+                dialog.center_on_parent()
+
+            if dialog.exec() != ConfirmDialog.DialogCode.Accepted:
                 return
             
             # 删除文档文件
@@ -1636,14 +1638,16 @@ class CompactAssetCard(QFrame):
             if doc_path.exists():
                 doc_path.unlink()
                 logger.info(f"已删除文档: {doc_path}")
-                QMessageBox.information(self, "删除成功", "文档已删除")
+                from .message_dialog import MessageDialog
+                MessageDialog("删除成功", "文档已删除", "success", parent=self).exec()
             else:
-                QMessageBox.warning(self, "删除失败", "未找到文档文件")
+                from .message_dialog import MessageDialog
+                MessageDialog("删除失败", "未找到文档文件", "warning", parent=self).exec()
                 
         except Exception as e:
             logger.error(f"删除文档失败: {e}", exc_info=True)
-            from PyQt6.QtWidgets import QMessageBox
-            QMessageBox.warning(self, "错误", f"删除文档失败：{e}")
+            from .message_dialog import MessageDialog
+            MessageDialog("错误", f"删除文档失败：{e}", "error", parent=self).exec()
 
     def update_theme(self, theme: str):
         """更新主题

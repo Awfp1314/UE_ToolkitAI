@@ -129,14 +129,8 @@ class AIAssistantModule:
             message: 对话框消息
         """
         try:
-            from PyQt6.QtWidgets import QMessageBox
-            msg = QMessageBox()
-            msg.setIcon(QMessageBox.Icon.Warning)
-            msg.setWindowTitle(title)
-            msg.setText("语义模型下载失败")
-            msg.setInformativeText(message)
-            msg.setStandardButtons(QMessageBox.StandardButton.Ok)
-            msg.exec()
+            from modules.asset_manager.ui.message_dialog import MessageDialog
+            MessageDialog(title, f"语义模型下载失败\n\n{message}", "warning", parent=self.parent).exec()
         except Exception as e:
             logger.warning(f"显示警告对话框失败: {e}")
 

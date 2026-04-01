@@ -38,10 +38,36 @@ class ProjectRegistry:
 
     @staticmethod
     def _get_registry_dir() -> Path:
+        """获取注册表目录（兼容新旧路径）"""
+        candidates = []
+
         app_data = QStandardPaths.writableLocation(
             QStandardPaths.StandardLocation.AppDataLocation
         )
-        return Path(app_data) / "ue_toolkit" / "my_projects"
+        if app_data:
+            app_data_path = Path(app_data)
+            # 当前默认路径
+            candidates.append(app_data_path / "ue_toolkit" / "my_projects")
+            # 兼容历史路径（目录名带空格）
+            candidates.append(app_data_path / "UE Toolkit" / "ue_toolkit" / "my_projects")
+            candidates.append(app_data_path / "UE Toolkit" / "my_projects")
+
+        # Windows 下再追加显式 Roaming 兼容路径
+        roaming = Path.home() / "AppData" / "Roaming"
+        candidates.append(roaming / "UE Toolkit" / "ue_toolkit" / "my_projects")
+        candidates.append(roaming / "ue_toolkit" / "my_projects")
+
+        # 增加项目根目录下的候选路径（针对便携式或特定配置）
+        project_root = Path(__file__).parent.parent.parent.parent.parent
+        candidates.append(project_root / "Toolkit" / "ue_toolkit" / "my_projects")
+
+        # 优先使用已存在 registry.json 的目录
+        for candidate in candidates:
+            if (candidate / REGISTRY_FILE).exists():
+                return candidate
+
+        # 都不存在时使用默认候选
+        return candidates[0]
 
     # ── 注册表读写 ──
 

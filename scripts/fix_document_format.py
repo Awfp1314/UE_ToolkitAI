@@ -26,8 +26,8 @@ def fix_file(file_path):
     
     # 替换2: 删除文档的逻辑
     content = re.sub(
-        r'# 删除文档文件\s+doc_path_txt = logic\.documents_dir / f"\{self\.asset_id\}\.txt"\s+doc_path_md = logic\.documents_dir / f"\{self\.asset_id\}\.md"\s+\s+deleted = False\s+if doc_path_txt\.exists\(\):\s+doc_path_txt\.unlink\(\)\s+logger\.info\(f"已删除文档: \{doc_path_txt\}"\)\s+deleted = True\s+\s+if doc_path_md\.exists\(\):\s+doc_path_md\.unlink\(\)\s+logger\.info\(f"已删除文档: \{doc_path_md\}"\)\s+deleted = True\s+\s+if deleted:\s+QMessageBox\.information\(self, "删除成功", "文档已删除"\)\s+else:\s+QMessageBox\.warning\(self, "删除失败", "未找到文档文件"\)',
-        '# 删除文档文件\n            doc_path = logic.documents_dir / f"{self.asset_id}.docx"\n            \n            if doc_path.exists():\n                doc_path.unlink()\n                logger.info(f"已删除文档: {doc_path}")\n                QMessageBox.information(self, "删除成功", "文档已删除")\n            else:\n                QMessageBox.warning(self, "删除失败", "未找到文档文件")',
+        r'# 删除文档文件\s+doc_path_txt = logic\.documents_dir / f"\{self\.asset_id\}\.txt"\s+doc_path_md = logic\.documents_dir / f"\{self\.asset_id\}\.md"\s+\s+deleted = False\s+if doc_path_txt\.exists\(\):\s+doc_path_txt\.unlink\(\)\s+logger\.info\(f"已删除文档: \{doc_path_txt\}"\)\s+deleted = True\s+\s+if doc_path_md\.exists\(\):\s+doc_path_md\.unlink\(\)\s+logger\.info\(f"已删除文档: \{doc_path_md\}"\)\s+deleted = True\s+\s+if deleted:\s+MessageDialog\.information\(self, "删除成功", "文档已删除"\)\s+else:\s+MessageDialog\.warning\(self, "删除失败", "未找到文档文件"\)',
+        '# 删除文档文件\n            doc_path = logic.documents_dir / f"{self.asset_id}.docx"\n            \n            if doc_path.exists():\n                doc_path.unlink()\n                logger.info(f"已删除文档: {doc_path}")\n                MessageDialog.information(self, "删除成功", "文档已删除")\n            else:\n                MessageDialog.warning(self, "删除失败", "未找到文档文件")',
         content,
         flags=re.MULTILINE
     )

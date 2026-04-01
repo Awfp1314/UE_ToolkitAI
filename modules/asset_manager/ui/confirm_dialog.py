@@ -20,15 +20,16 @@ class ConfirmDialog(QDialog):
     
     def _init_ui(self, message: str, details: str):
         """初始化UI"""
-        self.setMinimumWidth(450)
+        self.setMinimumWidth(492)
+        self.setMinimumHeight(196)
         self.setObjectName("ConfirmDialog")
         
         # 去掉标题栏
         self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Dialog)
         
         layout = QVBoxLayout()
-        layout.setSpacing(15)
-        layout.setContentsMargins(25, 25, 25, 25)
+        layout.setSpacing(14)
+        layout.setContentsMargins(24, 22, 24, 22)
         
         message_label = QLabel(message)
         message_label.setObjectName("ConfirmDialogMessage")
@@ -43,18 +44,21 @@ class ConfirmDialog(QDialog):
             details_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
             layout.addWidget(details_label)
         
-        layout.addSpacing(10)
+        layout.addSpacing(8)
         
         button_layout = QHBoxLayout()
+        button_layout.setSpacing(12)
         button_layout.addStretch()
         
         cancel_btn = QPushButton("取消")
         cancel_btn.setObjectName("ConfirmDialogCancelButton")
+        cancel_btn.setMinimumSize(92, 34)
         cancel_btn.clicked.connect(self.reject)
         button_layout.addWidget(cancel_btn)
         
         ok_btn = QPushButton("确认")
         ok_btn.setObjectName("ConfirmDialogOkButton")
+        ok_btn.setMinimumSize(92, 34)
         ok_btn.clicked.connect(self.accept)
         ok_btn.setDefault(True)
         button_layout.addWidget(ok_btn)

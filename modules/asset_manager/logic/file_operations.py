@@ -113,17 +113,38 @@ class FileOperations:
             
             # 如果有进度回调，使用基于文件大小的进度报告
             if progress_callback:
-                # 1. 预先扫描所有文件，计算总大小
+                # 1. 预先扫描所有文件，计算总大小（过滤广告和系统垃圾文件）
+                _AD_EXTENSIONS = {'.txt', '.nfo', '.url', '.webloc', '.lnk', '.html', '.htm', '.mhtml', '.pdf'}
+                _AD_NAMES = {'__macosx', '.ds_store', 'thumbs.db', 'desktop.ini'}
+                def _is_junk(f: Path) -> bool:
+                    """判断是否为广告/系统垃圾文件"""
+                    # 跳过 __MACOSX 目录下所有文件
+                    if any(p.lower() == '__macosx' for p in f.parts):
+                        return True
+                    name_lower = f.name.lower()
+                    if name_lower in _AD_NAMES:
+                        return True
+                    if f.suffix.lower() in _AD_EXTENSIONS:
+                        return True
+                    return False
+
                 all_files = []
                 total_bytes = 0
+                skipped_junk = 0
                 for src_file in src.rglob('*'):
                     if src_file.is_file():
+                        if _is_junk(src_file):
+                            skipped_junk += 1
+                            self._logger.debug(f"跳过广告/垃圾文件: {src_file.name}")
+                            continue
                         try:
                             file_size = src_file.stat().st_size
                             all_files.append((src_file, file_size))
                             total_bytes += file_size
                         except Exception as e:
                             self._logger.warning(f"无法获取文件大小: {src_file}, {e}")
+                if skipped_junk:
+                    self._logger.info(f"🧹 已过滤 {skipped_junk} 个广告/垃圾文件")
                 
                 total_files = len(all_files)
                 self._logger.info(f"📊 统计到 {total_files} 个文件，总大小 {self.format_size(total_bytes)}")

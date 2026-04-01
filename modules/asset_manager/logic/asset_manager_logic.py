@@ -11,13 +11,14 @@
 Task 10 重构：将 AssetManagerLogic 转换为门面模式。
 """
 
+import re
 import sys
 import uuid
 import shutil
 import subprocess
 import threading
 from pathlib import Path
-from typing import List, Optional, Dict, Any, Callable
+from typing import List, Optional, Dict, Any, Callable, Generator
 from datetime import datetime
 
 try:
@@ -441,6 +442,20 @@ class AssetManagerLogic(QObject):
             progress_callback=None
         )
 
+    def add_asset_stream(self, **kwargs) -> Generator[str, None, None]:
+        """SSE 流式资产添加接口
+        
+        yields:
+            "data: {"progress": 10, "message": "..."}\n\n"
+        """
+        def stream_callback(current, total, message):
+            import json
+            progress = int((current / total * 100)) if total > 0 else 0
+            data = json.dumps({"progress": progress, "message": message}, ensure_ascii=False)
+            # 注意：这里我们无法直接从回调返回，需要某种方式传递出去
+            # 在 SSE 场景下，我们通常会手动控制逻辑循环
+            pass
+
     def add_asset_async(self, asset_path: Path, asset_type: AssetType, name: str = "",
                         category: str = "默认分类", description: str = "",
                         create_markdown: bool = False, engine_version: str = "",
@@ -526,6 +541,29 @@ class AssetManagerLogic(QObject):
 
             # 确定资产包装文件夹名称（用户命名，处理重名）
             asset_wrapper_name = name if name else asset_path.name
+
+            # CONTENT 类型兜底：若名称仍是 content/Content，自动取真实资产目录名
+            if package_type == PackageType.CONTENT and asset_wrapper_name.lower() == "content":
+                inferred_name = ""
+                try:
+                    # 若当前路径是 Content，优先取其下第一个非 Content 子目录
+                    if asset_path.is_dir() and asset_path.name.lower() == "content":
+                        sub_dirs = [
+                            d for d in asset_path.iterdir()
+                            if d.is_dir() and not d.name.startswith('.') and d.name.lower() != "content"
+                        ]
+                        if sub_dirs:
+                            inferred_name = sub_dirs[0].name
+                    # 否则使用路径名（避免空名）
+                    if not inferred_name and asset_path.name.lower() != "content":
+                        inferred_name = asset_path.name
+                except Exception:
+                    inferred_name = ""
+
+                if inferred_name:
+                    logger.info(f"CONTENT 名称兜底: {asset_wrapper_name} -> {inferred_name}")
+                    asset_wrapper_name = inferred_name
+
             wrapper_path = category_folder / asset_wrapper_name
             if wrapper_path.exists():
                 counter = 1
@@ -556,13 +594,50 @@ class AssetManagerLogic(QObject):
             project_file_rel = ""  # 仅 PROJECT 类型使用
 
             if package_type == PackageType.CONTENT:
-                # Content 类型：处理源路径本身就是 Content 文件夹的情况（避免嵌套）
-                is_source_content = (
-                    asset_path.is_dir() 
-                    and asset_path.name.lower() == "content"
-                )
+                # Content 类型：兼容多种输入路径，避免出现 Content/Content 嵌套
+                # 支持：
+                # - Content/资产包
+                # - content/content/资产包
+                # - xxx/.../content/资产包
+                # - 无 Content 的隐式资产包（由分析器给出）
+                content_source = asset_path
+                is_source_content = False
+
+                def _single_content_child(path):
+                    try:
+                        # 直接使用外部作用域的 Path 或通过 path 对象的类型判断
+                        content_dirs = [
+                            d for d in path.iterdir()
+                            if d.is_dir() and d.name.lower() == "content"
+                        ]
+                        return content_dirs[0] if len(content_dirs) == 1 else None
+                    except Exception:
+                        return None
+
+                if asset_path.is_dir():
+                    current = asset_path
+                    depth = 0
+                    # 连续下钻 content 链（最多 5 层）
+                    while depth < 5 and current.name.lower() == "content":
+                        inner = _single_content_child(current)
+                        if not inner:
+                            break
+                        logger.info(f"检测到嵌套 Content 包装，下钻: {current} -> {inner}")
+                        current = inner
+                        depth += 1
+
+                    # 若传入的是外层目录且内部只有一个 Content，自动下钻一层
+                    if current == asset_path:
+                        inner = _single_content_child(current)
+                        if inner:
+                            logger.info(f"检测到外层目录仅包含 Content，自动定位到: {inner}")
+                            current = inner
+
+                    content_source = current
+                    is_source_content = (content_source.name.lower() == "content")
+
                 success = self._move_contents_to_folder(
-                    asset_path, inner_folder, is_flatten=is_source_content,
+                    content_source, inner_folder, is_flatten=is_source_content,
                     progress_callback=progress_callback
                 )
             elif package_type == PackageType.PROJECT:
@@ -597,29 +672,56 @@ class AssetManagerLogic(QObject):
                 
                 import zipfile
                 import tempfile
-                from pathlib import Path
                 from ..utils.archive_extractor import is_ad_file
                 
                 # 创建资产名称子文件夹（在 Others/ 下）
-                # 优先使用原始文件名，避免使用临时目录名
-                subfolder_name = original_filename if original_filename else asset_path.name
+                # 优先使用原始文件名，避免使用临时目录名，并清理常见尾部噪声
+                import re
+                
+                def _normalize_others_folder_name(raw_name: str) -> str:
+                    name = (raw_name or "").strip()
+                    if not name:
+                        return "NewAsset"
+                    
+                    # 1. 去掉文件扩展名（如果是 .zip 等）
+                    if '.' in name:
+                        name = name.rsplit('.', 1)[0]
+
+                    # 2. 处理非法字符
+                    name = re.sub(r'[<>:"/\\|?*]', ' ', name)
+                    
+                    # 3. 递归清理后缀：版本号、日期、序号、副本标识
+                    # 使用循环确保处理 JapaneseStreet_v1.2_20250326 这种多重后缀
+                    while True:
+                        old_name = name
+                        # 匹配 (1), - 副本, _copy
+                        name = re.sub(r'\s*[\(（]\s*\d+\s*[\)）]\s*$', '', name, flags=re.IGNORECASE)
+                        name = re.sub(r'\s*[-_ ]\s*(copy|副本|最终版|final|备份)\s*$', '', name, flags=re.IGNORECASE)
+                        # 匹配日期 _20250326, _2025-03-26, _2025_03_26 (包含结尾可能的时间戳)
+                        name = re.sub(r'[-_ ]\d{4}[-_ ]?\d{2}[-_ ]?\d{2}(?:[-_ ]?\d{2,6})?\s*$', '', name)
+                        # 匹配版本号 _v1.2, -V5, _v1.0.3
+                        name = re.sub(r'\s*[-_ ]\s*v?\d+(?:\.\d+){0,3}\s*$', '', name, flags=re.IGNORECASE)
+                        
+                        if name == old_name:
+                            break
+
+                    # 4. 最后清理首尾空格和特殊连字符
+                    name = re.sub(r'\s+', ' ', name).strip(' ._-')
+                    return name or "NewAsset"
+                
+                raw_subfolder_name = original_filename if original_filename else asset_path.name
+                subfolder_name = _normalize_others_folder_name(raw_subfolder_name)
                 asset_subfolder = inner_folder / subfolder_name
                 asset_subfolder.mkdir(parents=True, exist_ok=True)
-                logger.info(f"OTHERS 类型子文件夹名称: {subfolder_name} (原始: {original_filename}, 路径: {asset_path.name})")
+                logger.info(f"OTHERS 类型子文件夹名称: {subfolder_name} (原始: {raw_subfolder_name}, 路径: {asset_path.name})")
                 
                 # 按类型分类文件
                 model_extensions = {'.fbx', '.obj', '.gltf', '.glb', '.abc', '.usd', '.usda', '.usdc'}
                 texture_extensions = {'.png', '.jpg', '.jpeg', '.tga', '.bmp', '.exr', '.hdr', '.tif', '.tiff'}
-                audio_extensions = {'.wav', '.mp3', '.ogg', '.flac', '.aac', '.m4a'}
-                video_extensions = {'.mp4', '.avi', '.mov', '.mkv', '.wmv', '.flv', '.webm'}
-                ue_asset_extensions = {'.uasset', '.umap', '.uexp', '.ubulk'}
                 
                 # 收集文件（按类型分类，同时记录文件大小）
                 models = {}  # {文件名: (文件路径, 文件大小)}
                 textures = {}
-                audios = {}
-                videos = {}
-                ue_assets = {}
                 temp_dirs = []
                 
                 try:
@@ -634,59 +736,55 @@ class AssetManagerLogic(QObject):
                                 
                                 ext = item.suffix.lower()
                                 if ext == '.zip':
-                                    # 自动解压嵌套 zip
+                                    # 自动解压嵌套 zip 到另一个临时目录，然后继续扫描
                                     try:
-                                        temp_dir = Path(tempfile.mkdtemp(prefix='ue_toolkit_nested_'))
-                                        temp_dirs.append(temp_dir)
-                                        logger.info(f"解压嵌套 zip: {item.name}")
+                                        nested_temp = Path(tempfile.mkdtemp(prefix='ue_toolkit_nested_'))
+                                        temp_dirs.append(nested_temp)
+                                        logger.info(f"检测到嵌套压缩包，开始递归解压: {item.name}")
                                         
                                         with zipfile.ZipFile(item, 'r') as zip_ref:
-                                            zip_ref.extractall(temp_dir)
+                                            # 处理 Zip 内部文件名编码问题（GBK 兼容）
+                                            for z_info in zip_ref.infolist():
+                                                try:
+                                                    # 尝试按照 cp437 编码重新解码并转为 gbk
+                                                    z_info.filename = z_info.filename.encode('cp437').decode('gbk')
+                                                except:
+                                                    pass
+                                            zip_ref.extractall(nested_temp)
                                         
-                                        scan_and_extract(temp_dir)
+                                        # 递归扫描解压后的目录
+                                        scan_and_extract(nested_temp)
                                     except Exception as e:
                                         logger.warning(f"解压嵌套 zip 失败: {item}, {e}")
                                 elif ext in model_extensions:
-                                    # 去重：同名文件只保留一个
+                                    # 模型文件：即使路径不同，同名文件也只取一个（通常是不同阶段的备份）
                                     if item.name not in models:
-                                        file_size = item.stat().st_size
-                                        models[item.name] = (item, file_size)
+                                        models[item.name] = (item, item.stat().st_size)
                                 elif ext in texture_extensions:
-                                    if item.name not in textures:
-                                        file_size = item.stat().st_size
-                                        textures[item.name] = (item, file_size)
-                                elif ext in audio_extensions:
-                                    if item.name not in audios:
-                                        file_size = item.stat().st_size
-                                        audios[item.name] = (item, file_size)
-                                elif ext in video_extensions:
-                                    if item.name not in videos:
-                                        file_size = item.stat().st_size
-                                        videos[item.name] = (item, file_size)
-                                elif ext in ue_asset_extensions:
-                                    if item.name not in ue_assets:
-                                        file_size = item.stat().st_size
-                                        ue_assets[item.name] = (item, file_size)
+                                    # 贴图文件：同名去重（优先保留大文件，应对重复贴图）
+                                    current_size = item.stat().st_size
+                                    if item.name not in textures or current_size > textures[item.name][1]:
+                                        textures[item.name] = (item, current_size)
                             elif item.is_dir():
+                                # 跳过一些明显的无用目录
+                                if item.name.lower() in ['__macosx', '.git']:
+                                    continue
                                 scan_and_extract(item)
                     
                     # 开始扫描
                     scan_and_extract(asset_path)
                     
                     # 统计文件数量和总大小
-                    total_files = len(models) + len(textures) + len(audios) + len(videos) + len(ue_assets)
+                    total_files = len(models) + len(textures)
                     total_bytes = sum(size for _, size in models.values()) + \
-                                  sum(size for _, size in textures.values()) + \
-                                  sum(size for _, size in audios.values()) + \
-                                  sum(size for _, size in videos.values()) + \
-                                  sum(size for _, size in ue_assets.values())
+                                  sum(size for _, size in textures.values())
                     
                     if total_files == 0:
                         logger.error("未找到任何有用的文件")
                         success = False
                     else:
                         success = True
-                        logger.info(f"📊 找到文件: 模型 {len(models)}, 贴图 {len(textures)}, 音频 {len(audios)}, 视频 {len(videos)}, UE资产 {len(ue_assets)}")
+                        logger.info(f"📊 找到文件: 模型 {len(models)}, 贴图 {len(textures)}")
                         logger.info(f"📊 总大小: {self._file_ops.format_size(total_bytes)}, 总文件数: {total_files}")
                         
                         copied_bytes = 0
@@ -727,12 +825,12 @@ class AssetManagerLogic(QObject):
                                 import shutil
                                 shutil.copystat(str(source_file), str(target_file))
                         
-                        # 复制模型文件到 Models/
+                        # 复制模型文件到 Mesh/
                         if models:
-                            models_folder = asset_subfolder / "Models"
-                            models_folder.mkdir(parents=True, exist_ok=True)
+                            mesh_folder = asset_subfolder / "Mesh"
+                            mesh_folder.mkdir(parents=True, exist_ok=True)
                             for filename, (source_file, file_size) in models.items():
-                                target_file = models_folder / filename
+                                target_file = mesh_folder / filename
                                 try:
                                     copy_file_with_progress(source_file, target_file, file_size, "模型")
                                 except Exception as e:
@@ -750,45 +848,6 @@ class AssetManagerLogic(QObject):
                                     copy_file_with_progress(source_file, target_file, file_size, "贴图")
                                 except Exception as e:
                                     logger.error(f"复制贴图失败: {source_file} -> {target_file}, {e}")
-                                    success = False
-                                    break
-                        
-                        # 复制音频文件到 Audio/
-                        if success and audios:
-                            audio_folder = asset_subfolder / "Audio"
-                            audio_folder.mkdir(parents=True, exist_ok=True)
-                            for filename, (source_file, file_size) in audios.items():
-                                target_file = audio_folder / filename
-                                try:
-                                    copy_file_with_progress(source_file, target_file, file_size, "音频")
-                                except Exception as e:
-                                    logger.error(f"复制音频失败: {source_file} -> {target_file}, {e}")
-                                    success = False
-                                    break
-                        
-                        # 复制视频文件到 Video/
-                        if success and videos:
-                            video_folder = asset_subfolder / "Video"
-                            video_folder.mkdir(parents=True, exist_ok=True)
-                            for filename, (source_file, file_size) in videos.items():
-                                target_file = video_folder / filename
-                                try:
-                                    copy_file_with_progress(source_file, target_file, file_size, "视频")
-                                except Exception as e:
-                                    logger.error(f"复制视频失败: {source_file} -> {target_file}, {e}")
-                                    success = False
-                                    break
-                        
-                        # 复制 UE 资产到 UEAssets/
-                        if success and ue_assets:
-                            ue_folder = asset_subfolder / "UEAssets"
-                            ue_folder.mkdir(parents=True, exist_ok=True)
-                            for filename, (source_file, file_size) in ue_assets.items():
-                                target_file = ue_folder / filename
-                                try:
-                                    copy_file_with_progress(source_file, target_file, file_size, "UE资产")
-                                except Exception as e:
-                                    logger.error(f"复制UE资产失败: {source_file} -> {target_file}, {e}")
                                     success = False
                                     break
                 

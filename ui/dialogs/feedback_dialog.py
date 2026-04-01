@@ -5,9 +5,10 @@
 """
 
 from PyQt6.QtWidgets import (
-    QDialog, QVBoxLayout, QHBoxLayout, QLabel, 
-    QPushButton, QTextEdit, QLineEdit, QMessageBox
+    QDialog, QVBoxLayout, QHBoxLayout, QLabel,
+    QPushButton, QTextEdit, QLineEdit
 )
+from modules.asset_manager.ui.message_dialog import MessageDialog
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QFont
 import requests
@@ -158,7 +159,7 @@ class FeedbackDialog(QDialog):
         problem = self.problem_text.toPlainText().strip()
         
         if not problem:
-            QMessageBox.warning(self, "提示", "请输入问题描述")
+            MessageDialog("提示", "请输入问题描述", "warning", parent=self).exec()
             return
         
         # 发送到服务器
@@ -182,26 +183,26 @@ class FeedbackDialog(QDialog):
             if response.status_code == 200:
                 result = response.json()
                 if result.get('success'):
-                    QMessageBox.information(self, "成功", "感谢您的反馈！我们会尽快处理")
+                    MessageDialog("成功", "感谢您的反馈！我们会尽快处理", "success", parent=self).exec()
                     self.accept()
                 else:
                     error_msg = result.get('error', '未知错误')
-                    QMessageBox.warning(self, "失败", f"提交失败: {error_msg}")
+                    MessageDialog("失败", f"提交失败: {error_msg}", "warning", parent=self).exec()
             else:
                 try:
                     error_data = response.json()
                     error_msg = error_data.get('error', response.text)
                 except:
                     error_msg = response.text
-                QMessageBox.warning(self, "失败", f"提交失败 ({response.status_code}): {error_msg}")
+                MessageDialog("失败", f"提交失败 ({response.status_code}): {error_msg}", "warning", parent=self).exec()
         except requests.exceptions.ConnectionError as e:
             print(f"连接错误: {e}")
-            QMessageBox.warning(self, "连接错误", "无法连接到服务器，请确保服务器正在运行")
+            MessageDialog("连接错误", "无法连接到服务器，请确保服务器正在运行", "error", parent=self).exec()
         except requests.exceptions.Timeout as e:
             print(f"超时错误: {e}")
-            QMessageBox.warning(self, "超时", "请求超时，请稍后重试")
+            MessageDialog("超时", "请求超时，请稍后重试", "warning", parent=self).exec()
         except Exception as e:
             print(f"未知错误: {type(e).__name__}: {e}")
             import traceback
             traceback.print_exc()
-            QMessageBox.warning(self, "错误", f"提交失败: {str(e)}")
+            MessageDialog("错误", f"提交失败: {str(e)}", "error", parent=self).exec()

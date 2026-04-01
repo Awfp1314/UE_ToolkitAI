@@ -13,9 +13,9 @@ from pathlib import Path
 from datetime import datetime
 
 from PyQt6.QtWidgets import (
-    QApplication, QWidget, QVBoxLayout, QHBoxLayout, QLabel,
+    QApplication, QWidget, QDialog, QVBoxLayout, QHBoxLayout, QLabel,
     QPushButton, QFrame, QScrollArea, QLineEdit, QComboBox,
-    QGridLayout, QProgressBar, QMenu, QMessageBox
+    QGridLayout, QProgressBar, QMenu
 )
 from PyQt6.QtCore import Qt, QThread, pyqtSignal, QRectF, QPoint, QTimer, QObject, QEvent, QFileSystemWatcher
 from PyQt6.QtGui import (
@@ -25,6 +25,7 @@ from PyQt6.QtGui import (
 from core.logger import get_logger
 from modules.base_module_widget import BaseModuleWidget
 from modules.my_projects.logic.project_registry import ProjectRegistry, TOOLKIT_CONFIG_DIR
+from modules.asset_manager.ui.message_dialog import MessageDialog
 
 logger = get_logger(__name__)
 
@@ -132,13 +133,278 @@ class _MenuAutoClose(QObject):
             self.menu = None
 
 
+class ProjectNameEditDialog(QDialog):
+    """统一风格：更改项目名称"""
+
+    def __init__(self, current_name: str, parent=None):
+        super().__init__(parent)
+        self.drag_position = QPoint()
+        self._result_name = current_name
+
+        self.setModal(True)
+        self.setFixedSize(460, 230)
+        self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Dialog)
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        self.setObjectName("AddAssetDialog")
+
+        container = QWidget()
+        container.setObjectName("AddAssetDialogContainer")
+
+        root = QVBoxLayout(container)
+        root.setSpacing(0)
+        root.setContentsMargins(0, 0, 0, 0)
+
+        title_bar = QWidget()
+        title_bar.setObjectName("AddAssetDialogTitleBar")
+        title_bar.setFixedHeight(48)
+        title_layout = QHBoxLayout(title_bar)
+        title_layout.setContentsMargins(20, 0, 20, 0)
+        title_layout.setSpacing(10)
+
+        icon = QLabel("✏️")
+        icon.setObjectName("AddAssetDialogTitleIcon")
+        title_layout.addWidget(icon)
+
+        title = QLabel("更改项目名称")
+        title.setObjectName("AddAssetDialogTitleLabel")
+        title_layout.addWidget(title)
+        title_layout.addStretch()
+
+        close_btn = QPushButton("✕")
+        close_btn.setObjectName("CategoryDialogCloseButton")
+        close_btn.setFixedSize(28, 28)
+        close_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        close_btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        close_btn.clicked.connect(self.reject)
+        title_layout.addWidget(close_btn)
+
+        title_bar.mousePressEvent = self._title_bar_mouse_press
+        title_bar.mouseMoveEvent = self._title_bar_mouse_move
+        root.addWidget(title_bar)
+
+        content = QWidget()
+        content.setObjectName("AddAssetDialogContent")
+        content_layout = QVBoxLayout(content)
+        content_layout.setContentsMargins(24, 18, 24, 22)
+        content_layout.setSpacing(12)
+
+        name_label = QLabel("项目名称")
+        name_label.setObjectName("AddAssetDialogLabel")
+        content_layout.addWidget(name_label)
+
+        self.name_input = QLineEdit()
+        self.name_input.setObjectName("AddAssetDialogInput")
+        self.name_input.setMinimumHeight(38)
+        self.name_input.setText(current_name)
+        content_layout.addWidget(self.name_input)
+
+        self.error_label = QLabel("")
+        self.error_label.setObjectName("AddAssetDialogErrorLabel")
+        self.error_label.setWordWrap(True)
+        self.error_label.hide()
+        content_layout.addWidget(self.error_label)
+
+        content_layout.addStretch()
+
+        btn_row = QHBoxLayout()
+        btn_row.addStretch()
+
+        cancel_btn = QPushButton("取消")
+        cancel_btn.setObjectName("AddAssetDialogCancelBtn")
+        cancel_btn.setFixedSize(100, 38)
+        cancel_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        cancel_btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        cancel_btn.clicked.connect(self.reject)
+        btn_row.addWidget(cancel_btn)
+
+        ok_btn = QPushButton("确定")
+        ok_btn.setObjectName("AddAssetDialogAddBtn")
+        ok_btn.setFixedSize(100, 38)
+        ok_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        ok_btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        ok_btn.clicked.connect(self._on_accept)
+        btn_row.addWidget(ok_btn)
+
+        content_layout.addLayout(btn_row)
+        root.addWidget(content, 1)
+
+        dialog_layout = QVBoxLayout(self)
+        dialog_layout.setContentsMargins(0, 0, 0, 0)
+        dialog_layout.addWidget(container)
+
+    def _title_bar_mouse_press(self, event):
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.drag_position = event.globalPosition().toPoint() - self.frameGeometry().topLeft()
+            event.accept()
+
+    def _title_bar_mouse_move(self, event):
+        if event.buttons() == Qt.MouseButton.LeftButton and not self.drag_position.isNull():
+            self.move(event.globalPosition().toPoint() - self.drag_position)
+            event.accept()
+
+    def _on_accept(self):
+        text = (self.name_input.text() or "").strip()
+        if not text:
+            self.error_label.setText("项目名称不能为空")
+            self.error_label.show()
+            return
+        self._result_name = text
+        self.accept()
+
+    def get_name(self) -> str:
+        return self._result_name
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        self.center_on_parent()
+        self.name_input.setFocus()
+        self.name_input.selectAll()
+
+    def center_on_parent(self):
+        if self.parent():
+            p = self.parent()
+            while p.parent():
+                p = p.parent()
+            geo = p.frameGeometry()
+            x = geo.x() + (geo.width() - self.width()) // 2
+            y = geo.y() + (geo.height() - self.height()) // 2
+            self.move(x, y)
+
+
+class ProjectCategorySelectDialog(QDialog):
+    """统一风格：更改工程分类"""
+
+    def __init__(self, categories, current_category, parent=None):
+        super().__init__(parent)
+        self.drag_position = QPoint()
+        self._result_category = current_category
+
+        self.setModal(True)
+        self.setFixedSize(460, 230)
+        self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Dialog)
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        self.setObjectName("AddAssetDialog")
+
+        container = QWidget()
+        container.setObjectName("AddAssetDialogContainer")
+
+        root = QVBoxLayout(container)
+        root.setSpacing(0)
+        root.setContentsMargins(0, 0, 0, 0)
+
+        title_bar = QWidget()
+        title_bar.setObjectName("AddAssetDialogTitleBar")
+        title_bar.setFixedHeight(48)
+        title_layout = QHBoxLayout(title_bar)
+        title_layout.setContentsMargins(20, 0, 20, 0)
+        title_layout.setSpacing(10)
+
+        icon = QLabel("🏷️")
+        icon.setObjectName("AddAssetDialogTitleIcon")
+        title_layout.addWidget(icon)
+
+        title = QLabel("更改分类")
+        title.setObjectName("AddAssetDialogTitleLabel")
+        title_layout.addWidget(title)
+        title_layout.addStretch()
+
+        close_btn = QPushButton("✕")
+        close_btn.setObjectName("CategoryDialogCloseButton")
+        close_btn.setFixedSize(28, 28)
+        close_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        close_btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        close_btn.clicked.connect(self.reject)
+        title_layout.addWidget(close_btn)
+
+        title_bar.mousePressEvent = self._title_bar_mouse_press
+        title_bar.mouseMoveEvent = self._title_bar_mouse_move
+        root.addWidget(title_bar)
+
+        content = QWidget()
+        content.setObjectName("AddAssetDialogContent")
+        content_layout = QVBoxLayout(content)
+        content_layout.setContentsMargins(24, 18, 24, 22)
+        content_layout.setSpacing(12)
+
+        category_label = QLabel("工程分类")
+        category_label.setObjectName("AddAssetDialogLabel")
+        content_layout.addWidget(category_label)
+
+        self.category_combo = QComboBox()
+        self.category_combo.setObjectName("AddAssetDialogCombo")
+        self.category_combo.setMinimumHeight(38)
+        self.category_combo.addItems(categories or ["默认"])
+        current_index = self.category_combo.findText(current_category)
+        self.category_combo.setCurrentIndex(current_index if current_index >= 0 else 0)
+        content_layout.addWidget(self.category_combo)
+
+        content_layout.addStretch()
+
+        btn_row = QHBoxLayout()
+        btn_row.addStretch()
+
+        cancel_btn = QPushButton("取消")
+        cancel_btn.setObjectName("AddAssetDialogCancelBtn")
+        cancel_btn.setFixedSize(100, 38)
+        cancel_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        cancel_btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        cancel_btn.clicked.connect(self.reject)
+        btn_row.addWidget(cancel_btn)
+
+        ok_btn = QPushButton("确定")
+        ok_btn.setObjectName("AddAssetDialogAddBtn")
+        ok_btn.setFixedSize(100, 38)
+        ok_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        ok_btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        ok_btn.clicked.connect(self._on_accept)
+        btn_row.addWidget(ok_btn)
+
+        content_layout.addLayout(btn_row)
+        root.addWidget(content, 1)
+
+        dialog_layout = QVBoxLayout(self)
+        dialog_layout.setContentsMargins(0, 0, 0, 0)
+        dialog_layout.addWidget(container)
+
+    def _title_bar_mouse_press(self, event):
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.drag_position = event.globalPosition().toPoint() - self.frameGeometry().topLeft()
+            event.accept()
+
+    def _title_bar_mouse_move(self, event):
+        if event.buttons() == Qt.MouseButton.LeftButton and not self.drag_position.isNull():
+            self.move(event.globalPosition().toPoint() - self.drag_position)
+            event.accept()
+
+    def _on_accept(self):
+        self._result_category = (self.category_combo.currentText() or "").strip()
+        self.accept()
+
+    def get_category(self) -> str:
+        return self._result_category
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        self.center_on_parent()
+
+    def center_on_parent(self):
+        if self.parent():
+            p = self.parent()
+            while p.parent():
+                p = p.parent()
+            geo = p.frameGeometry()
+            x = geo.x() + (geo.width() - self.width()) // 2
+            y = geo.y() + (geo.height() - self.height()) // 2
+            self.move(x, y)
+
+
 class ProjectCard(QFrame):
     """工程卡片 - 参考资产卡片风格"""
 
     open_requested = pyqtSignal(str)
     delete_requested = pyqtSignal(str)
     category_changed = pyqtSignal(str, str)  # (project_path, new_category)
-    edit_requested = pyqtSignal(str, str, str, str)  # (old_path, new_path, new_name, new_category)
+    rename_requested = pyqtSignal(str, str)  # (project_path, new_name)
 
     def __init__(self, name, path, version, modified, theme, thumb_path=None, categories=None, current_category="默认", parent=None):
         super().__init__(parent)
@@ -325,10 +591,13 @@ class ProjectCard(QFrame):
         open_folder_action.triggered.connect(self._open_folder)
         menu.addAction(open_folder_action)
 
-        # 编辑工程
-        edit_action = QAction("✏️ 编辑工程", self)
-        edit_action.triggered.connect(self._show_edit_dialog)
-        menu.addAction(edit_action)
+        rename_action = QAction("✏️ 更改项目名称", self)
+        rename_action.triggered.connect(self._rename_project_name)
+        menu.addAction(rename_action)
+
+        change_category_action = QAction("🏷️ 更改分类", self)
+        change_category_action.triggered.connect(self._change_category)
+        menu.addAction(change_category_action)
 
         menu.addSeparator()
 
@@ -341,23 +610,38 @@ class ProjectCard(QFrame):
 
         menu.exec(self.mapToGlobal(position))
 
-    def _show_edit_dialog(self):
-        """显示编辑工程对话框"""
-        from .edit_project_dialog import EditProjectDialog
-        
-        dialog = EditProjectDialog(
-            project_name=self.name,
-            project_path=self.path,
-            project_version=self.version,
-            current_category=self.current_category,
-            categories=self.categories,
-            parent=self
-        )
-        
-        if dialog.exec() == EditProjectDialog.DialogCode.Accepted:
-            info = dialog.get_project_info()
-            # 发送更新信号
-            self.edit_requested.emit(self.path, info["path"], info["name"], info["category"])
+    def _rename_project_name(self):
+        """右键菜单：更改项目名称（统一风格弹窗）"""
+        dialog = ProjectNameEditDialog(self.name, parent=self)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+
+        new_name = (dialog.get_name() or "").strip()
+        if not new_name or new_name == self.name:
+            return
+
+        invalid_chars = '<>:"/\\|?*'
+        if any(c in new_name for c in invalid_chars):
+            msg = MessageDialog("名称无效", f"项目名称不能包含以下字符: {invalid_chars}", "warning", parent=self)
+            msg.exec()
+            return
+
+        self.rename_requested.emit(self.path, new_name)
+
+    def _change_category(self):
+        """右键菜单：更改分类（统一风格弹窗）"""
+        categories = self.categories or ["默认"]
+        current = self.current_category if self.current_category in categories else categories[0]
+
+        dialog = ProjectCategorySelectDialog(categories, current, parent=self)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+
+        selected = (dialog.get_category() or "").strip()
+        if not selected or selected == self.current_category:
+            return
+
+        self.category_changed.emit(self.path, selected)
 
     def _open_folder(self):
         import subprocess, sys
@@ -1178,7 +1462,7 @@ class MyProjectsUI(BaseModuleWidget):
             card.open_requested.connect(self._open_project)
             card.delete_requested.connect(self._delete_project)
             card.category_changed.connect(self._on_project_category_changed)
-            card.edit_requested.connect(self._on_project_edited)
+            card.rename_requested.connect(self._on_project_name_changed)
 
             row = i // 5
             col = i % 5
@@ -1232,8 +1516,13 @@ class MyProjectsUI(BaseModuleWidget):
         self.add_project_btn.setText("+ 创建工程")
 
         if not engines:
-            from PyQt6.QtWidgets import QMessageBox
-            QMessageBox.warning(self, "未找到引擎", "未检测到已安装的虚幻引擎。\n请确认已通过 Epic Games Launcher 安装。")
+            dialog = MessageDialog(
+                "未找到引擎",
+                "未检测到已安装的虚幻引擎。\n请确认已通过 Epic Games Launcher 安装。",
+                "warning",
+                parent=self
+            )
+            dialog.exec()
             return
 
         # 缓存引擎列表
@@ -1302,8 +1591,13 @@ class MyProjectsUI(BaseModuleWidget):
 
         except Exception as e:
             logger.error(f"启动编辑器失败: {e}")
-            from PyQt6.QtWidgets import QMessageBox
-            QMessageBox.critical(self, "启动失败", f"无法启动 UE {engine.version} 编辑器:\n{e}")
+            dialog = MessageDialog(
+                "启动失败",
+                f"无法启动 UE {engine.version} 编辑器:\n{e}",
+                "error",
+                parent=self
+            )
+            dialog.exec()
 
     def _on_project_created(self, uproject_path: str):
         """工程创建完成"""
@@ -1351,7 +1645,13 @@ class MyProjectsUI(BaseModuleWidget):
             self._apply_filter()
         except Exception as e:
             logger.error(f"删除工程失败: {e}")
-            QMessageBox.critical(self, "删除失败", f"无法删除工程:\n{e}")
+            dialog = MessageDialog(
+                "删除失败",
+                f"无法删除工程:\n{e}",
+                "error",
+                parent=self
+            )
+            dialog.exec()
 
     def _on_project_category_changed(self, project_path: str, new_category: str):
         """工程分类变更"""
@@ -1386,35 +1686,97 @@ class MyProjectsUI(BaseModuleWidget):
         logger.info(f"工程 {project_path} 分类改为: {new_category}")
 
 
-    def _on_project_edited(self, old_path: str, new_path: str, new_name: str, new_category: str):
-        """工程编辑完成"""
+    def _on_project_name_changed(self, project_path: str, new_name: str):
+        """工程名称变更（蓝图走真实改名流程，C++ 暂不支持）"""
+        proj = next((p for p in self.all_projects if p.get("path") == project_path), None)
+        if not proj:
+            dialog = MessageDialog("提示", "未找到对应工程，无法改名", "warning", parent=self)
+            dialog.exec()
+            return
+
+        from .edit_project_dialog import EditProjectDialog, RenameProgressDialog, _RenameProgressController
+
+        # 复用现有改名流程（蓝图完整改名 + 回滚）
+        dialog = EditProjectDialog(
+            project_name=proj.get("name", ""),
+            project_path=project_path,
+            project_version=proj.get("version", "Unknown"),
+            current_category=proj.get("category", "默认"),
+            categories=self.registry.load_registry().get("categories", ["默认"]),
+            parent=self
+        )
+
+        # C++ 项目：仅提示，不执行改名
+        if dialog.is_cpp_project:
+            msg = MessageDialog("暂不支持", "暂不支持 C++ 项目改名", "info", parent=self)
+            msg.exec()
+            return
+
+        old_path = project_path
+        old_name = proj.get("name", "")
+
+        # 与原编辑对话框一致：先创建详情弹窗与进度控制器
+        total_stages = 5
+        mw = dialog._get_main_window()
+        parent_for_dlg = mw if mw else self
+
+        dialog._progress_dlg = RenameProgressDialog(
+            old_name=old_name,
+            new_name=new_name,
+            total=total_stages,
+            open_cb=dialog._open_project_in_ue,
+            parent=parent_for_dlg
+        )
+        dialog._progress_dlg.show()
+        dialog._progress_dlg._center_on_parent()
+
+        if mw and hasattr(mw, 'set_status_detail_callback'):
+            def _show_detail():
+                if dialog._progress_dlg and not dialog._progress_dlg.isVisible():
+                    dialog._progress_dlg.show()
+                    dialog._progress_dlg._center_on_parent()
+            mw.set_status_detail_callback(_show_detail)
+
+        dialog._prog_ctrl = _RenameProgressController(
+            total=total_stages,
+            main_window=mw,
+            progress_dialog=dialog._progress_dlg
+        )
+        dialog._prog_ctrl.start()
+
+        success = dialog._rename_project(new_name, project_path)
+        if not success:
+            if dialog._prog_ctrl:
+                dialog._prog_ctrl.stop()
+            if mw and hasattr(mw, 'set_status_detail_callback'):
+                mw.set_status_detail_callback(None)
+            return
+
+        new_path = dialog.project_path
+
         # 重新查找缩略图（路径可能已变）
         new_thumb = ProjectScanner._get_thumbnail(Path(new_path))
-        
-        # 更新修改时间为当前时间（改名后应该排到最前面）
-        from datetime import datetime
         new_modified = datetime.now().strftime("%Y-%m-%d")
+        current_category = proj.get("category", "默认")
 
         # 更新注册表
         data = self.registry.load_registry()
-        for proj in data.get("projects", []):
-            if proj["path"] == old_path:
-                proj["path"] = new_path
-                proj["name"] = new_name
-                proj["category"] = new_category
-                proj["thumbnail"] = new_thumb
-                proj["modified"] = new_modified
+        for p in data.get("projects", []):
+            if p.get("path") == old_path:
+                p["path"] = new_path
+                p["name"] = new_name
+                p["thumbnail"] = new_thumb
+                p["modified"] = new_modified
                 break
         self.registry.save_registry(data)
 
         # 更新内存数据
-        for proj in self.all_projects:
-            if proj["path"] == old_path:
-                proj["path"] = new_path
-                proj["name"] = new_name
-                proj["category"] = new_category
-                proj["thumbnail"] = new_thumb
-                proj["modified"] = new_modified
+        for p in self.all_projects:
+            if p.get("path") == old_path:
+                p["path"] = new_path
+                p["name"] = new_name
+                p["thumbnail"] = new_thumb
+                p["modified"] = new_modified
                 break
 
         # 更新 .UeToolkitconfig
@@ -1428,24 +1790,15 @@ class MyProjectsUI(BaseModuleWidget):
                 with open(config_file, "r", encoding="utf-8") as f:
                     cfg = json.load(f)
             cfg["name"] = new_name
-            cfg["category"] = new_category
+            cfg["category"] = current_category
             with open(config_file, "w", encoding="utf-8") as f:
                 json.dump(cfg, f, ensure_ascii=False, indent=2)
         except Exception as e:
             logger.warning(f"更新工程配置失败: {e}")
 
-        # 更新对应卡片的缩略图
-        for card in self.cards:
-            if card.path == old_path:
-                card.path = new_path
-                card.name = new_name
-                if new_thumb:
-                    card.update_thumbnail(new_thumb)
-                break
-
         self._update_version_filter()
         self._apply_filter()
-        logger.info(f"工程已更新: {old_path} → {new_path}, 名称: {new_name}, 分类: {new_category}")
+        logger.info(f"工程已改名: {old_name} -> {new_name}, 路径: {old_path} -> {new_path}")
 
     def update_theme(self, theme: str):
         self.theme = theme

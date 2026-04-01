@@ -141,29 +141,69 @@ class AssetStructureAnalyzer:
         # 特殊情况 1：检查 root 本身是否就是 Content 文件夹
         if root.name.lower() == 'content':
             logger.info(f"检测到用户直接选择了 Content 文件夹: {root}")
-            # 检查是否包含 UE 资产
+
+            # 若出现 content/content/... 包装，自动下钻到最内层有效 Content
+            effective_content = root
+            depth = 0
+            while depth < 5:
+                try:
+                    meaningful_items = [
+                        p for p in effective_content.iterdir()
+                        if not p.name.startswith('.') and p.name.lower() not in {'__macosx'}
+                    ]
+                except Exception:
+                    break
+
+                if (
+                    len(meaningful_items) == 1
+                    and meaningful_items[0].is_dir()
+                    and meaningful_items[0].name.lower() == 'content'
+                ):
+                    logger.info(f"检测到嵌套 Content 包装，下钻: {effective_content} -> {meaningful_items[0]}")
+                    effective_content = meaningful_items[0]
+                    depth += 1
+                else:
+                    break
+
             ue_assets = []
             for ext in ('.uasset', '.umap'):
-                ue_assets.extend(root.rglob(f'*{ext}'))
+                ue_assets.extend(effective_content.rglob(f'*{ext}'))
             
             if ue_assets:
                 asset_count = len(ue_assets)
                 logger.info(f"Content 文件夹包含 {asset_count} 个 UE 资产")
+
+                # 名称优先取 Content 下首个非 Content 子目录
+                suggested_name = ""
+                try:
+                    sub_dirs = [d for d in effective_content.iterdir() if d.is_dir() and not d.name.startswith('.')]
+                    for d in sub_dirs:
+                        if d.name.lower() != 'content':
+                            suggested_name = d.name
+                            break
+                except Exception:
+                    pass
+
+                if not suggested_name:
+                    parent_name = effective_content.parent.name if effective_content.parent else ""
+                    if parent_name and parent_name.lower() != 'content':
+                        suggested_name = parent_name
+                if not suggested_name:
+                    suggested_name = "UnnamedAsset"
+
                 return AnalysisResult(
                     structure_type=StructureType.CONTENT_PACKAGE,
-                    content_root=root,
-                    asset_root=root,
-                    suggested_name=root.parent.name if root.parent.name else "Content",
+                    content_root=effective_content,
+                    asset_root=effective_content,
+                    suggested_name=suggested_name,
                     ue_asset_count=asset_count,
                     description=f"UE 资产包，包含 {asset_count} 个资产文件",
                     warnings=[]
                 )
         
         # 特殊情况 2：检查 root 的父目录是否是 Content
-        # 例如：用户选择了 Content/MyAsset，应识别为 CONTENT 类型
         if root.parent and root.parent.name.lower() == 'content':
             logger.info(f"检测到用户选择了 Content 的子文件夹: {root}")
-            # 检查是否包含 UE 资产
             ue_assets = []
             for ext in ('.uasset', '.umap'):
                 ue_assets.extend(root.rglob(f'*{ext}'))
@@ -173,9 +213,9 @@ class AssetStructureAnalyzer:
                 logger.info(f"Content 子文件夹包含 {asset_count} 个 UE 资产")
                 return AnalysisResult(
                     structure_type=StructureType.CONTENT_PACKAGE,
-                    content_root=root.parent,  # Content 文件夹
-                    asset_root=root.parent,    # 指向 Content
-                    suggested_name=root.name,  # 使用子文件夹名称
+                    content_root=root.parent,
+                    asset_root=root.parent,
+                    suggested_name=root.name,
                     ue_asset_count=asset_count,
                     description=f"UE 资产包（Content 子文件夹），包含 {asset_count} 个资产文件",
                     warnings=[]
@@ -192,7 +232,7 @@ class AssetStructureAnalyzer:
         except Exception as e:
             logger.warning(f"诊断日志失败: {e}")
         
-        # 方法一：使用 os.walk 遍历（更可靠，避免 rglob 在某些情况下漏掉目录）
+        # 使用 os.walk 遍历（更可靠，避免 rglob 在某些情况下漏掉目录）
         content_dirs = []
         for dirpath, dirnames, filenames in os.walk(str(root)):
             for dirname in dirnames:
@@ -202,7 +242,6 @@ class AssetStructureAnalyzer:
         logger.info(f"搜索到的 Content 文件夹: {content_dirs}")
         
         if not content_dirs:
-            # 没有找到 Content 文件夹，尝试隐式 Content 识别
             logger.info("未找到 Content 文件夹，尝试隐式 Content 识别")
             return self._find_implicit_content_package(root)
         
@@ -219,24 +258,34 @@ class AssetStructureAnalyzer:
                 logger.info(f"  空 Content（无 UE 资产）: {content_dir}")
         
         if not valid_contents:
-            # Content 文件夹存在但没有 UE 资产
-            # 可能是空的或者只有其他类型文件
-            # 尝试兜底逻辑：查找"隐式 Content"（没有 Content 文件夹但有 UE 资产）
             return self._find_implicit_content_package(root)
         
-        # 选择最浅层级的 Content（避免嵌套误判）
-        valid_contents.sort(key=lambda x: len(x[0].parts))
-        best_content, asset_count = valid_contents[0]
+        # 选择最佳 Content：优先处理连续嵌套的 content/content/... 场景
+        # 规则：
+        # 1) 连续 content 链更深的优先（避免选到外层包装 content）
+        # 2) 若链深相同，选择层级更浅的（保持原有行为）
+        def _content_chain_depth(content_path: Path) -> int:
+            depth = 0
+            p = content_path
+            while p.name.lower() == 'content':
+                depth += 1
+                p = p.parent
+            return depth
+
+        best_content, asset_count = sorted(
+            valid_contents,
+            key=lambda x: (-_content_chain_depth(x[0]), len(x[0].parts))
+        )[0]
+        chain_depth = _content_chain_depth(best_content)
         
-        # 推断资产名称
         suggested_name = self._infer_name_from_content(best_content, root)
-        
-        # 确定 asset_root（Content 文件夹本身，后续需要其内容）
-        logger.info(f"找到 Content 资产包: {best_content} ({asset_count} 个 UE 资产)")
+        logger.info(f"找到 Content 资产包: {best_content} ({asset_count} 个 UE 资产), content 链深度: {chain_depth}")
         
         warnings = []
         if len(valid_contents) > 1:
-            warnings.append(f"发现 {len(valid_contents)} 个 Content 文件夹，使用最浅层级的")
+            warnings.append(f"发现 {len(valid_contents)} 个 Content 文件夹，已自动选择最匹配路径")
+        if chain_depth > 1:
+            warnings.append("检测到多层 Content 包装，已自动剥离外层包装")
         
         return AnalysisResult(
             structure_type=StructureType.CONTENT_PACKAGE,
@@ -252,27 +301,14 @@ class AssetStructureAnalyzer:
         """查找"隐式 Content"资产包
         
         处理没有 Content 文件夹，但包含 UE 资产文件的情况。
-        只有满足以下所有条件时才识别为 CONTENT_PACKAGE：
-        1. 没有 Content/ 文件夹
+        只要满足以下条件即识别为 CONTENT_PACKAGE：
+        1. 没有 Content/ 文件夹（调用方已确认）
         2. 有 .uasset 或 .umap 文件
-        3. 这些文件分布在至少 1 个典型的 UE 文件夹中
-        4. 没有 .uproject 或 .uplugin 文件
+        3. 没有 .uproject 或 .uplugin 文件
         
-        Args:
-            root: 搜索根目录
-            
-        Returns:
-            AnalysisResult 或 None
+        结构2：AssetName/AssetName/资产文件夹（无 Content）
+        这种情况下取内层文件夹作为 asset_root。
         """
-        # 典型的 UE Content 子文件夹名称（大小写不敏感）
-        TYPICAL_UE_FOLDERS = {
-            'blueprints', 'materials', 'meshes', 'textures', 'animations',
-            'sounds', 'particles', 'ui', 'maps', 'characters', 'weapons',
-            'effects', 'environment', 'props', 'vehicles', 'audio', 'models',
-            'fx', 'vfx', 'sfx', 'music', 'cinematics', 'cutscenes'
-        }
-        
-        # 查找所有 UE 资产文件
         ue_assets = []
         for ext in ('.uasset', '.umap'):
             ue_assets.extend(root.rglob(f'*{ext}'))
@@ -281,58 +317,54 @@ class AssetStructureAnalyzer:
             logger.info("未找到 UE 资产文件")
             return None
         
-        logger.info(f"找到 {len(ue_assets)} 个 UE 资产文件")
+        logger.info(f"找到 {len(ue_assets)} 个 UE 资产文件，识别为隐式 Content 资产包")
         
-        # 统计这些资产分布在哪些文件夹中
-        asset_folders = set()
-        for asset_file in ue_assets:
-            # 获取相对于 root 的路径
-            try:
-                rel_path = asset_file.relative_to(root)
-                # 检查所有层级的文件夹名（不只是第一层）
-                for part in rel_path.parts[:-1]:  # 排除文件名本身
-                    folder_name = part.lower()
-                    asset_folders.add(folder_name)
-                    logger.debug(f"资产文件夹: {folder_name}")
-            except ValueError:
-                continue
-        
-        logger.info(f"资产分布在 {len(asset_folders)} 个文件夹中: {sorted(asset_folders)}")
-        
-        # 检查是否有至少 1 个典型的 UE 文件夹
-        typical_folders_found = asset_folders & TYPICAL_UE_FOLDERS
-        
-        if len(typical_folders_found) < 1:
-            logger.info(f"不满足隐式 Content 条件：没有典型的 UE 文件夹（找到的文件夹：{sorted(asset_folders)}）")
-            return None
-        
-        logger.info(f"检测到隐式 Content 结构：{len(ue_assets)} 个 UE 资产分布在 {len(typical_folders_found)} 个典型文件夹中")
-        logger.info(f"典型文件夹：{sorted(typical_folders_found)}")
-        
-        # 检测双层嵌套结构（资产名/资产名/）
-        # 如果根目录只有一个子目录，且子目录名与根目录名相同或相似
-        root_subdirs = [d for d in root.iterdir() if d.is_dir() and not d.name.startswith('.')]
-        
+        # 剥皮策略：从 root 开始，循环向内剥，直到找到真正的资产层
+        # 规则：当前层下有且仅有一个有意义的子目录（忽略广告/系统文件），就继续往内取
+        # 终止条件：子目录数量 > 1（多个资产文件夹并列，当前层就是 asset_root）
+        #           或当前层下直接有 .uasset/.umap 文件
+        _JUNK_EXTS = {'.txt', '.nfo', '.url', '.webloc', '.lnk', '.html', '.htm', '.pdf'}
+        _JUNK_DIRS = {'__macosx', '.git', '.svn'}
+
+        def _real_subdirs(path: Path):
+            """过滤掉广告/系统目录后的真实子目录列表"""
+            return [
+                d for d in path.iterdir()
+                if d.is_dir() and d.name.lower() not in _JUNK_DIRS and not d.name.startswith('.')
+            ]
+
+        def _has_direct_assets(path: Path) -> bool:
+            """当前层下是否直接含有 .uasset/.umap（非递归）"""
+            return any(
+                f.suffix.lower() in ('.uasset', '.umap')
+                for f in path.iterdir() if f.is_file()
+            )
+
         asset_root = root
-        if len(root_subdirs) == 1:
-            subdir = root_subdirs[0]
-            # 检查是否是双层嵌套（名称相同或相似）
-            if subdir.name.lower() == root.name.lower() or \
-               subdir.name.lower().replace('_', '').replace('-', '') == root.name.lower().replace('_', '').replace('-', ''):
-                logger.info(f"检测到双层嵌套结构，跳过外层：{root.name} -> {subdir.name}")
-                asset_root = subdir
+        depth = 0
+        while depth < 5:  # 最多剥5层，防止死循环
+            subdirs = _real_subdirs(asset_root)
+            if len(subdirs) == 1 and not _has_direct_assets(asset_root):
+                # 只有一个子目录且当前层没有直接资产文件 → 继续往内
+                logger.info(f"剥皮第{depth+1}层：{asset_root.name} -> {subdirs[0].name}")
+                asset_root = subdirs[0]
+                depth += 1
+            else:
+                # 多个子目录 或 当前层有直接资产 → 这里就是 asset_root
+                break
+
+        logger.info(f"最终 asset_root: {asset_root}")
         
-        # 推断资产名称
         suggested_name = self._infer_name_from_path(asset_root, root)
         
         return AnalysisResult(
             structure_type=StructureType.CONTENT_PACKAGE,
-            content_root=asset_root,  # 将整个目录视为 Content
+            content_root=asset_root,
             asset_root=asset_root,
             suggested_name=suggested_name,
             ue_asset_count=len(ue_assets),
-            description=f"UE 资产包（隐式 Content），包含 {len(ue_assets)} 个资产文件",
-            warnings=[f"未检测到 Content 文件夹，但包含典型的 UE 资产结构（{', '.join(sorted(typical_folders_found))}），将自动包装"]
+            description=f"UE 资产包（无 Content 文件夹），包含 {len(ue_assets)} 个资产文件",
+            warnings=["未检测到 Content 文件夹，将以当前目录结构直接包装"]
         )
     
     def _find_ue_project(self, root: Path) -> Optional[AnalysisResult]:
@@ -348,7 +380,6 @@ class AssetStructureAnalyzer:
         if not uproject_files:
             return None
         
-        # 选最浅层级的
         uproject_files.sort(key=lambda x: len(x.parts))
         uproject = uproject_files[0]
         project_dir = uproject.parent
@@ -361,16 +392,13 @@ class AssetStructureAnalyzer:
         
         suggested_name = uproject.stem
         
-        # 从 .uproject 文件读取引擎版本
         engine_version = ""
         try:
             import json
             with open(uproject, 'r', encoding='utf-8') as f:
                 uproject_data = json.load(f)
-                # .uproject 使用 EngineAssociation 字段，格式可能是 "5.4" 或 "{GUID}"
                 engine_assoc = uproject_data.get('EngineAssociation', '')
                 if engine_assoc and not engine_assoc.startswith('{'):
-                    # 如果不是 GUID，直接使用
                     engine_version = engine_assoc
                     logger.info(f"从 .uproject 读取到引擎版本: {engine_version}")
         except Exception as e:
@@ -378,16 +406,18 @@ class AssetStructureAnalyzer:
         
         logger.info(f"找到 UE 项目: {uproject} ({ue_asset_count} 个资产)")
         
+        # FIX: PROJECT 类型 asset_root 指向完整项目目录，而非仅 Content
+        # 保留 .uproject、Config/、Plugins/ 等完整项目结构
         return AnalysisResult(
             structure_type=StructureType.UE_PROJECT,
             content_root=content_dir if content_dir.exists() else None,
-            asset_root=content_dir if content_dir.exists() else project_dir,
+            asset_root=project_dir,
             suggested_name=suggested_name,
             uproject_path=uproject,
             ue_asset_count=ue_asset_count,
             engine_version=engine_version,
             description=f"完整 UE 项目「{suggested_name}」，Content 内有 {ue_asset_count} 个资产",
-            warnings=["将仅导入 Content 文件夹内容"] if content_dir.exists() else ["项目无 Content 文件夹"]
+            warnings=["将导入完整项目目录（含 .uproject、Config、Plugins 等）"] if content_dir.exists() else ["项目无 Content 文件夹"]
         )
     
     def _find_ue_plugin(self, root: Path) -> Optional[AnalysisResult]:
@@ -408,13 +438,15 @@ class AssetStructureAnalyzer:
         plugin_dir = uplugin.parent
         content_dir = plugin_dir / 'Content'
         
-        # 检测是否已包含 Plugins/ 前缀（大小写不敏感）
-        # 如果压缩包结构是 Plugins/PluginName/，我们需要去掉 Plugins/ 前缀
+        # FIX: 修正 Plugins/ 前缀判断死代码
+        # 如果压缩包结构是 Plugins/PluginName/.uplugin，actual_plugin_dir 应该指向
+        # plugin_dir（即 PluginName/），因为存储时我们只需要插件目录本身。
+        # 如果压缩包结构是 PluginName/.uplugin（无 Plugins/ 前缀），同样指向 plugin_dir。
+        # 两种情况 asset_root 都是 plugin_dir，区别在于 warning 提示。
         actual_plugin_dir = plugin_dir
-        if plugin_dir.parent.name.lower() == 'plugins':
-            # 压缩包已包含 Plugins/ 前缀，使用插件目录本身
-            actual_plugin_dir = plugin_dir
-            logger.info(f"检测到插件压缩包包含 Plugins/ 前缀: {plugin_dir}")
+        has_plugins_prefix = plugin_dir.parent.name.lower() == 'plugins'
+        if has_plugins_prefix:
+            logger.info(f"检测到插件压缩包包含 Plugins/ 前缀，asset_root 指向插件目录: {plugin_dir}")
         
         ue_asset_count = 0
         if content_dir.exists():
@@ -423,7 +455,6 @@ class AssetStructureAnalyzer:
         
         suggested_name = uplugin.stem
         
-        # 从 .uplugin 文件读取引擎版本
         engine_version = ""
         try:
             import json
@@ -431,7 +462,6 @@ class AssetStructureAnalyzer:
                 uplugin_data = json.load(f)
                 engine_version_str = uplugin_data.get('EngineVersion', '')
                 if engine_version_str:
-                    # 解析版本号，如 "5.4.0" -> "5.4"
                     parts = engine_version_str.split('.')
                     if len(parts) >= 2:
                         engine_version = f"{parts[0]}.{parts[1]}"
@@ -440,6 +470,10 @@ class AssetStructureAnalyzer:
             logger.warning(f"读取 .uplugin 文件版本失败: {e}")
         
         logger.info(f"找到 UE 插件: {uplugin}")
+        
+        warnings = ["检测到插件格式，将导入整个插件目录"]
+        if has_plugins_prefix:
+            warnings.append("压缩包包含 Plugins/ 前缀，已自动定位到插件根目录")
         
         return AnalysisResult(
             structure_type=StructureType.UE_PLUGIN,
@@ -450,7 +484,7 @@ class AssetStructureAnalyzer:
             ue_asset_count=ue_asset_count,
             engine_version=engine_version,
             description=f"UE 插件「{suggested_name}」",
-            warnings=["检测到插件格式，将导入整个插件目录"]
+            warnings=warnings
         )
     
     def _find_loose_assets(self, root: Path) -> Optional[AnalysisResult]:
@@ -469,16 +503,13 @@ class AssetStructureAnalyzer:
         if not ue_files:
             return None
         
-        # 找到包含 UE 资产的最浅层目录
         asset_dirs = set()
         for f in ue_files:
             asset_dirs.add(f.parent)
         
-        # 找到公共根目录
         if len(asset_dirs) == 1:
             asset_root = list(asset_dirs)[0]
         else:
-            # 多个目录，找最浅的公共父目录
             asset_root = self._find_common_parent(list(asset_dirs), root)
         
         suggested_name = self._infer_name_from_path(asset_root, root)
@@ -512,7 +543,6 @@ class AssetStructureAnalyzer:
         if not raw_files:
             return None
         
-        # 找资产根目录
         asset_dirs = set(f.parent for f in raw_files)
         if len(asset_dirs) == 1:
             asset_root = list(asset_dirs)[0]
@@ -546,19 +576,15 @@ class AssetStructureAnalyzer:
         """
         parent = content_dir.parent
         
-        # 如果 Content 的父目录不是解压根目录，用父目录名
         if parent != root:
-            # 检查是否是有意义的名称（不是类似 temp_ 的名称）
             name = parent.name
             if name and not name.startswith('temp') and not name.startswith('.'):
                 return name
         
-        # 用 Content 下的第一个子文件夹名
         sub_dirs = [d for d in content_dir.iterdir() if d.is_dir() and not d.name.startswith('.')]
         if sub_dirs:
             return sub_dirs[0].name
         
-        # 最后兜底：用解压根下的第一个文件夹名
         root_dirs = [d for d in root.iterdir() if d.is_dir() and not d.name.startswith('.')]
         if root_dirs:
             return root_dirs[0].name
@@ -570,7 +596,6 @@ class AssetStructureAnalyzer:
         if asset_root != extracted_root:
             return asset_root.name
         
-        # 用根目录下第一个有意义的子目录
         sub_dirs = [d for d in extracted_root.iterdir() if d.is_dir() and not d.name.startswith('.')]
         if sub_dirs:
             return sub_dirs[0].name
@@ -585,7 +610,6 @@ class AssetStructureAnalyzer:
         if len(dirs) == 1:
             return dirs[0]
         
-        # 用第一个目录的 parts 作为基准
         common_parts = list(dirs[0].parts)
         
         for d in dirs[1:]:

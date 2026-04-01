@@ -16,6 +16,19 @@ class AssetType(Enum):
     PACKAGE = "package"  # A型：资源包（文件夹）
     FILE = "file"        # B型：原始文件（已废弃，保留向后兼容）
 
+    @classmethod
+    def _missing_(cls, value):
+        """访问废弃枚举值时发出警告"""
+        import warnings
+        if value == "file":
+            warnings.warn(
+                "AssetType.FILE 已废弃，请使用 AssetType.PACKAGE",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+            return cls.FILE
+        return None
+
 
 class PackageType(Enum):
     """包装类型枚举 - 决定资产的存储结构和预览行为"""

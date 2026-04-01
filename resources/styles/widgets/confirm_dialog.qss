@@ -30,10 +30,10 @@
     background-color: ${primary};
     color: white;
     border: none;
-    padding: 10px 28px;
+    padding: 6px 16px;
     border-radius: 5px;
     font-size: 13px;
-    min-width: 80px;
+    min-width: 60px;
     font-weight: bold;
 }
 
@@ -50,10 +50,10 @@
     background-color: ${bg_tertiary};
     color: ${text_primary};
     border: none;
-    padding: 10px 28px;
+    padding: 6px 16px;
     border-radius: 5px;
     font-size: 13px;
-    min-width: 80px;
+    min-width: 60px;
     font-weight: bold;
 }
 

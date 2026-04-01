@@ -10,9 +10,9 @@ from collections import OrderedDict
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QScrollArea,
     QGridLayout, QLineEdit, QPushButton, QApplication, QDialog, QComboBox,
-    QLabel
+    QLabel, QFileDialog
 )
-from PyQt6.QtCore import Qt, QTimer, pyqtSignal, QObject, QUrl
+from PyQt6.QtCore import Qt, QTimer, pyqtSignal, QObject, QUrl, QThread, QPoint, QPoint
 from PyQt6.QtGui import QPixmap, QDragEnterEvent, QDropEvent
 
 from core.logger import get_logger
@@ -24,8 +24,390 @@ from .project_selector_dialog import ProjectSelectorDialog
 from .add_asset_dialog import AddAssetDialog
 from .confirm_dialog import ConfirmDialog
 from .asset_detail_dialog import AssetDetailDialog
+from ..utils.archive_extractor import ARCHIVE_EXTENSIONS, ArchiveExtractor
+from ..utils.asset_structure_analyzer import AssetStructureAnalyzer, StructureType
+from ..utils.ue_version_detector import UEVersionDetector
+from ..logic.asset_model import AssetType, PackageType
 
 logger = get_logger(__name__)
+
+
+class _StageSpinnerLabel(QLabel):
+    """阶段加载动画"""
+    _FRAMES = ["◐", "◓", "◑", "◒"]
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._idx = 0
+        self.setText(self._FRAMES[0])
+        self._timer = QTimer(self)
+        self._timer.timeout.connect(self._tick)
+        self._timer.start(120)
+
+    def _tick(self):
+        self._idx = (self._idx + 1) % len(self._FRAMES)
+        self.setText(self._FRAMES[self._idx])
+
+    def stop(self):
+        self._timer.stop()
+
+
+class AddAssetSourceTypeDialog(QDialog):
+    """添加资产来源格式选择弹窗"""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.selected_source = None  # "archive" | "folder"
+        self.drag_position = QPoint()
+
+        self.setModal(True)
+        self.setFixedSize(340, 220)
+        self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Dialog)
+        self.setObjectName("ConfirmDialog")
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(24, 22, 24, 20)
+        layout.setSpacing(10)
+
+        title = QLabel("选择来源格式")
+        title.setObjectName("ConfirmDialogMessage")
+        layout.addWidget(title)
+
+        hint = QLabel("请选择要添加的资产来源类型")
+        hint.setObjectName("ConfirmDialogDetails")
+        layout.addWidget(hint)
+
+        layout.addSpacing(6)
+
+        # 两个主按钮并排
+        btn_row = QHBoxLayout()
+        btn_row.setSpacing(10)
+
+        archive_btn = QPushButton("压缩包")
+        archive_btn.setObjectName("ConfirmDialogOkButton")
+        archive_btn.setFixedHeight(34)
+        archive_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        archive_btn.clicked.connect(lambda: self._select("archive"))
+        btn_row.addWidget(archive_btn)
+
+        folder_btn = QPushButton("文件夹")
+        folder_btn.setObjectName("ConfirmDialogOkButton")
+        folder_btn.setFixedHeight(34)
+        folder_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        folder_btn.clicked.connect(lambda: self._select("folder"))
+        btn_row.addWidget(folder_btn)
+
+        layout.addLayout(btn_row)
+
+        # 取消按钮单独右对齐
+        cancel_row = QHBoxLayout()
+        cancel_row.addStretch()
+        cancel_btn = QPushButton("取消")
+        cancel_btn.setObjectName("ConfirmDialogCancelButton")
+        cancel_btn.setFixedSize(72, 28)
+        cancel_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        cancel_btn.clicked.connect(self.reject)
+        cancel_row.addWidget(cancel_btn)
+        layout.addLayout(cancel_row)
+
+    def _select(self, source_type: str):
+        self.selected_source = source_type
+        self.accept()
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        self._center_on_parent()
+
+    def _center_on_parent(self):
+        """左右居中，上下偏上（1/4 处），相对右侧 RightPanel 区域"""
+        self.adjustSize()
+        host = self._find_right_panel()
+        if host:
+            host_global = host.mapToGlobal(host.rect().topLeft())
+            x = host_global.x() + (host.width() - self.width()) // 2
+            y = host_global.y() + (host.height() - self.height()) // 4
+            self.move(x, y)
+            return
+        screen = QApplication.primaryScreen()
+        if screen:
+            available = screen.availableGeometry()
+            self.move(
+                available.x() + (available.width() - self.width()) // 2,
+                available.y() + (available.height() - self.height()) // 4,
+            )
+
+    def _find_right_panel(self):
+        """向上遍历 parent 链，找到 objectName == 'RightPanel' 的组件"""
+        w = self.parent()
+        while w is not None:
+            if hasattr(w, 'objectName') and w.objectName() == "RightPanel":
+                return w
+            w = w.parent() if hasattr(w, 'parent') and callable(w.parent) else None
+        return self.parent()
+
+
+class AddAssetAnalysisThread(QThread):
+    """资产来源识别与分析线程"""
+
+    stage_running = pyqtSignal(int, str)
+    stage_done = pyqtSignal(int)
+    analysis_done = pyqtSignal(dict)
+    analysis_failed = pyqtSignal(str)
+
+    def __init__(self, source_path: Path, source_type: str, password: str = "", parent=None):
+        super().__init__(parent)
+        self.source_path = source_path
+        self.source_type = source_type  # archive | folder
+        self.password = password
+
+    def run(self):
+        try:
+            if self.source_type == "archive":
+                self._analyze_archive()
+            else:
+                self._analyze_folder()
+        except Exception as e:
+            logger.error(f"资产分析线程异常: {e}", exc_info=True)
+            self.analysis_failed.emit(f"分析失败: {e}")
+
+    def _map_package_type(self, structure_type: str) -> PackageType:
+        pkg_map = {
+            StructureType.CONTENT_PACKAGE.value: PackageType.CONTENT,
+            StructureType.UE_PROJECT.value: PackageType.PROJECT,
+            StructureType.UE_PLUGIN.value: PackageType.PLUGIN,
+            StructureType.LOOSE_ASSETS.value: PackageType.OTHERS,
+            StructureType.RAW_3D_FILES.value: PackageType.OTHERS,
+            StructureType.MIXED_FILES.value: PackageType.OTHERS,
+            StructureType.UNKNOWN.value: PackageType.OTHERS,
+        }
+        return pkg_map.get(structure_type, PackageType.OTHERS)
+
+    def _analyze_archive(self):
+        self.stage_running.emit(0, "正在分析资产版本")
+
+        extractor = ArchiveExtractor()
+        try:
+            temp_dir = extractor.extract(self.source_path, password=self.password if self.password else None)
+        except RuntimeError as e:
+            self.analysis_failed.emit(str(e))
+            return
+
+        analyzer = AssetStructureAnalyzer()
+        analysis = analyzer.analyze(temp_dir)
+        self.stage_done.emit(0)
+
+        import time as _time
+        _time.sleep(0.4)  # 等待阶段0完成动画播完（0→50%）
+        self.stage_running.emit(1, "正在分析资产类型")
+        _time.sleep(0.4)  # 等待阶段1开始动画播完（50→75%）
+        package_type = self._map_package_type(analysis.structure_type.value)
+
+        engine_version = analysis.engine_version or ""
+        if not engine_version:
+            detector = UEVersionDetector(logger)
+            detect_path = analysis.content_root or analysis.asset_root or temp_dir
+            engine_version = detector.detect_asset_min_version(detect_path) or ""
+
+        if package_type == PackageType.PLUGIN and analysis.asset_root:
+            resolved_path = analysis.asset_root
+            plugin_folder_name = analysis.asset_root.name
+        else:
+            resolved_path = analysis.asset_root or temp_dir
+            plugin_folder_name = ""
+
+        self.stage_done.emit(1)
+        self.analysis_done.emit({
+            "is_archive": True,
+            "package_type": package_type,
+            "engine_version": engine_version,
+            "suggested_name": analysis.suggested_name,
+            "resolved_asset_path": str(resolved_path),
+            "archive_content_path": str(resolved_path),
+            "archive_temp_dir": str(temp_dir),
+            "archive_extractor": extractor,
+            "plugin_folder_name": plugin_folder_name,
+        })
+
+    def _analyze_folder(self):
+        self.stage_running.emit(0, "正在分析资产版本")
+
+        analyzer = AssetStructureAnalyzer()
+        analysis = analyzer.analyze(self.source_path)
+        package_type = self._map_package_type(analysis.structure_type.value)
+        self.stage_done.emit(0)
+
+        import time as _time
+        _time.sleep(0.4)  # 等待阶段0完成动画播完（0→50%）
+        self.stage_running.emit(1, "正在分析资产类型")
+        _time.sleep(0.4)  # 等待阶段1开始动画播完（50→75%）
+        engine_version = analysis.engine_version or ""
+        if not engine_version:
+            detector = UEVersionDetector(logger)
+            detect_path = analysis.content_root or analysis.asset_root or self.source_path
+            engine_version = detector.detect_asset_min_version(detect_path) or ""
+
+        if package_type in (PackageType.PLUGIN, PackageType.PROJECT) and analysis.asset_root:
+            resolved_path = analysis.asset_root
+        elif analysis.content_root:
+            resolved_path = analysis.content_root
+        elif analysis.asset_root:
+            resolved_path = analysis.asset_root
+        else:
+            resolved_path = self.source_path
+
+        plugin_folder_name = resolved_path.name if package_type == PackageType.PLUGIN else ""
+
+        self.stage_done.emit(1)
+        self.analysis_done.emit({
+            "is_archive": False,
+            "package_type": package_type,
+            "engine_version": engine_version,
+            "suggested_name": analysis.suggested_name,
+            "resolved_asset_path": str(resolved_path),
+            "plugin_folder_name": plugin_folder_name,
+        })
+
+
+class AddAssetAnalysisDialog(QDialog):
+    """添加资产识别/分析详情窗口"""
+
+    STAGES = ["分析资产版本", "分析资产类型"]
+
+    def __init__(self, source_name: str, parent=None):
+        super().__init__(parent)
+        self._rows = []
+        self._spinners = {}
+        self.result = None
+
+        self.setModal(True)
+        self.setFixedWidth(420)
+        self.setWindowTitle("识别分析")
+        self.setWindowFlags(Qt.WindowType.Dialog | Qt.WindowType.FramelessWindowHint)
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+
+        container = QWidget(self)
+        container.setObjectName("RenameResultContainer")
+        root = QVBoxLayout(self)
+        root.setContentsMargins(0, 0, 0, 0)
+        root.addWidget(container)
+
+        layout = QVBoxLayout(container)
+        layout.setContentsMargins(24, 20, 24, 18)
+        layout.setSpacing(8)
+
+        title = QLabel("资产识别分析中")
+        title.setObjectName("RenameResultTitle")
+        layout.addWidget(title)
+
+        summary = QLabel(source_name)
+        summary.setObjectName("RenameResultSummary")
+        layout.addWidget(summary)
+
+        self.detail_label = QLabel("等待开始...")
+        self.detail_label.setObjectName("RenameResultTip")
+        layout.addWidget(self.detail_label)
+
+        layout.addSpacing(8)
+
+        for idx, name in enumerate(self.STAGES):
+            row = QHBoxLayout()
+            row.setSpacing(10)
+
+            icon = QLabel("○")
+            icon.setObjectName("RenameStageIcon")
+            icon.setFixedWidth(18)
+            icon.setStyleSheet("color: #666666; font-size: 14px;")
+            row.addWidget(icon)
+
+            text = QLabel(f"阶段 {idx + 1}/{len(self.STAGES)} · {name}")
+            text.setObjectName("RenameResultDoneItem")
+            text.setStyleSheet("color: #666666;")
+            row.addWidget(text, 1)
+
+            layout.addLayout(row)
+            self._rows.append((icon, text, row))
+
+        layout.addSpacing(8)
+
+    def set_stage_running(self, stage_idx: int, detail: str):
+        if stage_idx < 0 or stage_idx >= len(self._rows):
+            return
+        icon, text, row = self._rows[stage_idx]
+        spinner = _StageSpinnerLabel(self)
+        spinner.setObjectName("RenameStageIcon")
+        spinner.setFixedWidth(18)
+        spinner.setStyleSheet("color: #4A9EFF; font-size: 14px;")
+
+        row.removeWidget(icon)
+        icon.hide()
+        row.insertWidget(0, spinner)
+        self._rows[stage_idx] = (spinner, text, row)
+        self._spinners[stage_idx] = spinner
+
+        text.setStyleSheet("color: #e0e0e0; font-weight: bold;")
+        self.detail_label.setText(detail)
+
+    def set_stage_done(self, stage_idx: int):
+        if stage_idx < 0 or stage_idx >= len(self._rows):
+            return
+        icon, text, row = self._rows[stage_idx]
+        spinner = self._spinners.pop(stage_idx, None)
+        if spinner:
+            spinner.stop()
+            row.removeWidget(spinner)
+            spinner.hide()
+
+            done_icon = QLabel("✓")
+            done_icon.setObjectName("RenameStageIcon")
+            done_icon.setFixedWidth(18)
+            done_icon.setStyleSheet("color: #4CAF50; font-size: 14px; font-weight: bold;")
+            row.insertWidget(0, done_icon)
+            self._rows[stage_idx] = (done_icon, text, row)
+
+        text.setStyleSheet("color: #4CAF50;")
+
+    def show_complete_then_close(self):
+        """展示完成态，确保窗口至少显示 1.5 秒后再关闭"""
+        self.detail_label.setText("识别分析完成")
+        import time as _time
+        elapsed_ms = int((_time.monotonic() - self._show_time) * 1000)
+        remain_ms = max(0, 1500 - elapsed_ms)
+        QTimer.singleShot(remain_ms, self.accept)
+
+    def showEvent(self, event):
+        import time as _time
+        self._show_time = _time.monotonic()
+        super().showEvent(event)
+        self._center_on_content_area()
+
+    def _center_on_content_area(self):
+        """左右居中，上下偏上（距顶 1/4 处），相对右侧 RightPanel 区域"""
+        self.adjustSize()
+        host = self._find_right_panel()
+
+        if host:
+            host_global = host.mapToGlobal(host.rect().topLeft())
+            x = host_global.x() + (host.width() - self.width()) // 2
+            # 偏上：距顶部 1/4 处，让用户视觉舒适
+            y = host_global.y() + (host.height() - self.height()) // 4
+            self.move(x, y)
+            return
+
+        screen = QApplication.primaryScreen()
+        if screen:
+            available = screen.availableGeometry()
+            x = available.x() + (available.width() - self.width()) // 2
+            y = available.y() + (available.height() - self.height()) // 4
+            self.move(x, y)
+
+    def _find_right_panel(self):
+        """向上遍历 parent 链，找到 objectName == 'RightPanel' 的组件（右侧整体区域）"""
+        w = self.parent()
+        while w is not None:
+            if w.objectName() == "RightPanel":
+                return w
+            w = w.parent() if hasattr(w, 'parent') and callable(w.parent) else None
+        return self.parent()
 
 
 class AssetManagerUI(BaseModuleWidget):
@@ -1605,8 +1987,8 @@ class AssetManagerUI(BaseModuleWidget):
                     break
         
         if not uproject_path or not uproject_path.exists():
-            from PyQt6.QtWidgets import QMessageBox
-            QMessageBox.warning(self, "无法打开项目", f"未找到 .uproject 文件：{name}")
+            from .message_dialog import MessageDialog
+            MessageDialog("无法打开项目", f"未找到 .uproject 文件：{name}", "warning", parent=self).exec()
             logger.error(f"未找到 .uproject: {asset.path}")
             return
         
@@ -1616,8 +1998,8 @@ class AssetManagerUI(BaseModuleWidget):
             os.startfile(str(uproject_path))
         except Exception as e:
             logger.error(f"打开项目失败: {e}", exc_info=True)
-            from PyQt6.QtWidgets import QMessageBox
-            QMessageBox.warning(self, "打开失败", f"无法打开项目文件：{e}")
+            from .message_dialog import MessageDialog
+            MessageDialog("打开失败", f"无法打开项目文件：{e}", "error", parent=self).exec()
     
     def _preview_others_asset(self, asset_id: str, name: str, preview_card):
         """预览 OTHERS 类型资产：模型复制到预览工程，图片/视频/音效用 Windows 打开"""
@@ -1674,8 +2056,8 @@ class AssetManagerUI(BaseModuleWidget):
                 os.startfile(str(first_media_file))
             except Exception as e:
                 logger.error(f"打开媒体文件失败: {e}", exc_info=True)
-                from PyQt6.QtWidgets import QMessageBox
-                QMessageBox.warning(self, "打开失败", f"无法打开文件：{e}")
+                from .message_dialog import MessageDialog
+                MessageDialog("打开失败", f"无法打开文件：{e}", "error", parent=self).exec()
         else:
             # 无法识别内容 → 打开资产文件夹
             logger.info(f"Others 资产无法识别内容，打开文件夹: {others_dir}")
@@ -1818,12 +2200,15 @@ class AssetManagerUI(BaseModuleWidget):
                         self.load_assets_async(force_reload=True)
                         self._load_categories()
                     else:
-                        # 2. 只是改名，找到对应卡片更新显示即可
+                        # 2. 只是改名，找到对应卡片更新显示和路径即可
+                        updated_asset = self.logic.get_asset(asset.id)
                         for card in self.asset_cards.values():
                             if card.name == name:
                                 card.name = new_name
                                 card.name_label.setText(new_name)
-                                logger.info(f"已更新卡片显示: {name} -> {new_name}")
+                                if updated_asset and getattr(updated_asset, 'path', None):
+                                    card.asset_path = str(updated_asset.path)
+                                logger.info(f"已更新卡片显示与路径: {name} -> {new_name}")
                                 break
                 else:
                     logger.error(f"资产 {name} 信息更新失败")
@@ -1848,8 +2233,8 @@ class AssetManagerUI(BaseModuleWidget):
             # 检查文档目录是否存在
             if not self.logic.documents_dir:
                 logger.error("文档目录未设置")
-                from PyQt6.QtWidgets import QMessageBox
-                QMessageBox.warning(self, "错误", "文档目录未设置")
+                from .message_dialog import MessageDialog
+                MessageDialog("错误", "文档目录未设置", "error", parent=self).exec()
                 return
             
             # 构建文档路径（.docx 格式）
@@ -1874,24 +2259,23 @@ class AssetManagerUI(BaseModuleWidget):
             else:
                 # 文档不存在，询问是否创建
                 logger.info(f"[打开文档] 文档不存在，询问创建")
-                from PyQt6.QtWidgets import QMessageBox
-                
-                reply = QMessageBox.question(
-                    self,
+                dialog = ConfirmDialog(
                     "创建文档",
-                    f"资产 \"{asset.name}\" 目前没有文档。\n\n是否创建文档？",
-                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-                    QMessageBox.StandardButton.Yes
+                    f"资产 \"{asset.name}\" 目前没有文档。",
+                    "是否创建文档？",
+                    self
                 )
+                if hasattr(dialog, 'center_on_parent'):
+                    dialog.center_on_parent()
                 
-                if reply == QMessageBox.StandardButton.Yes:
+                if dialog.exec() == QDialog.DialogCode.Accepted:
                     # 创建文档
                     self._create_asset_document(asset)
             
         except Exception as e:
             logger.error(f"打开资产文档时出错: {e}", exc_info=True)
-            from PyQt6.QtWidgets import QMessageBox
-            QMessageBox.warning(self, "错误", f"无法打开文档：{e}")
+            from .message_dialog import MessageDialog
+            MessageDialog("错误", f"无法打开文档：{e}", "error", parent=self).exec()
     
     def _create_asset_document(self, asset):
         """创建资产文档"""
@@ -2002,8 +2386,8 @@ class AssetManagerUI(BaseModuleWidget):
             
         except Exception as e:
             logger.error(f"创建文档失败: {e}", exc_info=True)
-            from PyQt6.QtWidgets import QMessageBox
-            QMessageBox.warning(self, "错误", f"创建文档失败：{e}")
+            from .message_dialog import MessageDialog
+            MessageDialog("错误", f"创建文档失败：{e}", "error", parent=self).exec()
     
     def _format_size(self, size: int) -> str:
         """格式化文件大小"""
@@ -2175,29 +2559,201 @@ class AssetManagerUI(BaseModuleWidget):
         except Exception as e:
             logger.error(f"处理缩略图更新时出错: {e}", exc_info=True)
     
+    def _get_main_window(self):
+        """获取顶层主窗口引用（用于驱动标题栏状态指示器）"""
+        w = self.window()
+        if hasattr(w, 'show_status'):
+            return w
+        return None
+    
     def _show_add_asset_dialog(self):
-        """显示添加资产对话框"""
+        """显示添加资产流程（来源选择 -> 分析 -> 添加表单）"""
         try:
-            # 通过控制器获取已有的资产名称和分类列表
-            existing_names = self.controller.get_existing_asset_names()
-            categories = self.controller.get_existing_categories_list()
-            
-            # 创建对话框
-            dialog = AddAssetDialog(existing_names, categories, parent=self)
-            
-            # 居中显示
-            dialog.center_on_parent()
-            
-            # 显示对话框
-            if dialog.exec() == AddAssetDialog.DialogCode.Accepted:
-                asset_info = dialog.get_asset_info()
-                logger.info(f"准备添加资产: {asset_info['name']}")
-                
-                # 异步添加资产
-                self._add_asset_async(asset_info)
-                    
+            self._start_add_asset_flow()
         except Exception as e:
-            logger.error(f"显示添加资产对话框时出错: {e}", exc_info=True)
+            logger.error(f"显示添加资产流程时出错: {e}", exc_info=True)
+    
+    def _start_add_asset_flow(self, initial_path: Path = None, initial_source_type: str = None,
+                              default_category: str = None):
+        """统一添加资产流程：来源判定 -> 分析 -> 添加表单"""
+        source_type = initial_source_type
+        source_path = initial_path
+
+        if not default_category:
+            current_category = self.category_filter.currentText() if hasattr(self, 'category_filter') else "默认分类"
+            if current_category in ("全部分类", "⚙️ 分类管理"):
+                current_category = "默认分类"
+            default_category = current_category
+
+        if source_path is None:
+            source_dialog = AddAssetSourceTypeDialog(self)
+            if source_dialog.exec() != QDialog.DialogCode.Accepted:
+                return
+
+            source_type = source_dialog.selected_source
+            source_path = self._pick_source_path_by_type(source_type)
+            if not source_path:
+                return
+        else:
+            if source_type is None:
+                source_type = "archive" if source_path.suffix.lower() in ARCHIVE_EXTENSIONS else "folder"
+
+        self._run_add_asset_analysis(source_path, source_type, default_category)
+
+    def _pick_source_path_by_type(self, source_type: str):
+        """根据来源类型选择源路径"""
+        if source_type == "archive":
+            file_path, _ = QFileDialog.getOpenFileName(
+                self,
+                "选择压缩包",
+                "",
+                "压缩包 (*.zip *.rar *.7z);;所有文件 (*)"
+            )
+            if not file_path:
+                return None
+            path = Path(file_path)
+            if path.suffix.lower() not in ARCHIVE_EXTENSIONS:
+                from .message_dialog import MessageDialog
+                MessageDialog("不支持的文件类型", "请选择压缩包文件（.zip/.rar/.7z）", "warning", parent=self).exec()
+                return None
+            return path
+
+        dir_path = QFileDialog.getExistingDirectory(
+            self,
+            "选择资源包文件夹",
+            "",
+            QFileDialog.Option.ShowDirsOnly
+        )
+        return Path(dir_path) if dir_path else None
+
+    def _run_add_asset_analysis(self, source_path: Path, source_type: str, default_category: str):
+        """执行识别分析详情流程"""
+        password = ""
+        if source_type == "archive":
+            # 先尝试缓存密码
+            password = ArchiveExtractor.get_cached_password() if hasattr(ArchiveExtractor, 'get_cached_password') else ""
+            if ArchiveExtractor.check_password_required(source_path) and not password:
+                from .password_dialog import PasswordDialog
+                pwd_dialog = PasswordDialog(source_path.name, parent=self)
+                if pwd_dialog.exec() != QDialog.DialogCode.Accepted:
+                    return
+                password = pwd_dialog.get_password()
+
+        analysis_dialog = AddAssetAnalysisDialog(source_path.name, self)
+        analysis_thread = AddAssetAnalysisThread(source_path, source_type, password=password, parent=self)
+        self._current_add_analysis_thread = analysis_thread
+
+        # 驱动标题栏进度指示器
+        _mw = self._get_main_window()
+        if _mw:
+            _mw.show_status("资产识别分析", f"正在分析: {source_path.name}", -1)
+
+        def _sync_stage_running(stage_idx: int, detail: str):
+            analysis_dialog.set_stage_running(stage_idx, detail)
+            if _mw:
+                stage_names = ["分析资产版本", "分析资产类型"]
+                name = stage_names[stage_idx] if stage_idx < len(stage_names) else ""
+                total = len(stage_names)
+                # 阶段开始：从上一阶段完成值动画到本阶段中间值（表示正在进行）
+                # 阶段0: 0→25%，阶段1: 50→75%
+                mid_pct = int(((stage_idx + 0.5) / total) * 100)
+                if stage_idx == 0:
+                    # 第一次出现，先把进度条初始化为 0
+                    _mw.show_status(
+                        f"阶段 {stage_idx + 1}/{total} · {name}",
+                        detail,
+                        0
+                    )
+                else:
+                    _mw._status_label.setText(f"阶段 {stage_idx + 1}/{total} · {name}")
+                    _mw._status_detail.setText(detail)
+                _mw.animate_status_progress(mid_pct, 600)
+
+        def _sync_stage_done(stage_idx: int):
+            analysis_dialog.set_stage_done(stage_idx)
+            if _mw:
+                stage_names = ["分析资产版本", "分析资产类型"]
+                total = len(stage_names)
+                done_pct = int(((stage_idx + 1) / total) * 100)
+                _mw._status_label.setText(
+                    f"阶段 {stage_idx + 1}/{total} · 完成"
+                )
+                _mw._status_detail.setText("")
+                # 平滑动画填充到该阶段完成值
+                _mw.animate_status_progress(done_pct, 350)
+
+        analysis_thread.stage_running.connect(_sync_stage_running)
+        analysis_thread.stage_done.connect(_sync_stage_done)
+
+        def _on_analysis_done(result: dict):
+            analysis_dialog.result = result
+            if source_type == "archive" and password:
+                ArchiveExtractor.set_cached_password(password)
+            if _mw:
+                # 先动画到 100%，350ms 后再隐藏，避免截断动画
+                _mw.animate_status_progress(100, 350)
+                QTimer.singleShot(400, _mw.hide_status)
+            # 展示完成态停留后自动关闭，避免一闪而过
+            analysis_dialog.show_complete_then_close()
+
+        def _on_analysis_failed(error_msg: str):
+            if _mw:
+                _mw.hide_status()
+            analysis_dialog.reject()
+            from .message_dialog import MessageDialog
+            friendly = {
+                "PASSWORD_REQUIRED": "压缩包需要密码，请重试并输入密码。",
+                "PASSWORD_INCORRECT": "压缩包密码错误，请重试。",
+                "MISSING_7Z_EXE": "7z 文件使用了不支持的压缩方法，且未找到 7-Zip 程序。",
+            }
+            MessageDialog("识别分析失败", friendly.get(error_msg, error_msg), "error", parent=self).exec()
+
+        analysis_thread.analysis_done.connect(_on_analysis_done)
+        analysis_thread.analysis_failed.connect(_on_analysis_failed)
+
+        analysis_thread.start()
+        accepted = analysis_dialog.exec() == QDialog.DialogCode.Accepted and analysis_dialog.result
+        # 若对话框被用户手动关闭（未通过信号关闭），确保隐藏状态指示器
+        if _mw:
+            _mw.hide_status()
+        if accepted:
+            self._open_add_asset_dialog_with_analysis(
+                source_path=source_path,
+                source_type=source_type,
+                analysis=analysis_dialog.result,
+                default_category=default_category
+            )
+
+    def _open_add_asset_dialog_with_analysis(self, source_path: Path, source_type: str,
+                                             analysis: dict, default_category: str):
+        """分析完成后打开添加资产表单"""
+        existing_names = self.controller.get_existing_asset_names()
+        categories = self.controller.get_existing_categories_list()
+            
+        prefill_name = source_path.stem if source_type == "archive" else source_path.name
+        # 压缩包优先使用原文件名，避免压缩包内部错误编码导致中文乱码
+        if source_type != "archive":
+            suggested_name = (analysis or {}).get("suggested_name", "")
+            if suggested_name:
+                prefill_name = suggested_name
+
+        dialog = AddAssetDialog(
+            existing_names,
+            categories,
+            parent=self,
+            prefill_path=str(source_path),
+            prefill_type=AssetType.PACKAGE,
+            prefill_category=default_category,
+            prefill_name=prefill_name,
+            prefill_analysis=analysis,
+            is_archive=(source_type == "archive")
+        )
+        dialog.center_on_parent()
+            
+        if dialog.exec() == AddAssetDialog.DialogCode.Accepted:
+            asset_info = dialog.get_asset_info()
+            logger.info(f"准备添加资产: {asset_info['name']}")
+            self._add_asset_async(asset_info)
     
     def _add_asset_async(self, asset_info):
         """异步添加资产（带进度显示，支持压缩包预分析路径）"""
@@ -2228,6 +2784,20 @@ class AssetManagerUI(BaseModuleWidget):
                     # 导入 PackageType 用于默认值
                     from ..logic.asset_model import PackageType
                     
+                    # 计算原始文件名（用于压缩包导入，避免使用临时解压目录名）
+                    original_filename = ""
+                    original_source = self.asset_info.get('original_source_path')
+                    if original_source:
+                        try:
+                            original_source_path = Path(original_source)
+                            original_filename = (
+                                original_source_path.stem
+                                if original_source_path.is_file()
+                                else original_source_path.name
+                            )
+                        except Exception:
+                            original_filename = ""
+                    
                     result = self.logic.add_asset_async(
                         asset_path=add_path,
                         asset_type=self.asset_info['type'],
@@ -2238,6 +2808,7 @@ class AssetManagerUI(BaseModuleWidget):
                         engine_version=self.asset_info.get('engine_version', ''),
                         package_type=self.asset_info.get('package_type', PackageType.CONTENT),
                         plugin_folder_name=self.asset_info.get('plugin_folder_name', ''),
+                        original_filename=original_filename,
                         progress_callback=self._progress_callback
                     )
                     
@@ -2304,9 +2875,9 @@ class AssetManagerUI(BaseModuleWidget):
                 self._ask_delete_source(source_path)
         else:
             logger.error("资产添加失败")
-            from PyQt6.QtWidgets import QMessageBox
+            from .message_dialog import MessageDialog
             error_detail = getattr(self, '_last_add_error', '') or "请检查文件权限和磁盘空间。"
-            QMessageBox.warning(self, "添加失败", f"资产添加失败：{error_detail}")
+            MessageDialog("添加失败", f"资产添加失败：{error_detail}", "error", parent=self).exec()
         
         self._last_add_error = ""
         self._pending_source_path = None
@@ -2317,10 +2888,9 @@ class AssetManagerUI(BaseModuleWidget):
         - delete_source_after_import=True → 自动删除
         - delete_source_after_import=False（默认）→ 保留源文件，不提示
         """
-        from PyQt6.QtWidgets import QMessageBox
-        
-        source = Path(source_path)
-        if source.is_file():
+        from pathlib import Path
+        source_path = Path(source_path)
+        if source_path.is_file():
             type_text = "压缩包"
         else:
             type_text = "文件夹"
@@ -2336,16 +2906,17 @@ class AssetManagerUI(BaseModuleWidget):
         # 仅当设置为自动删除时执行
         if auto_delete:
             try:
-                if source.is_file():
-                    source.unlink()
-                    logger.info(f"已删除源文件: {source}")
-                elif source.is_dir():
+                if source_path.is_file():
+                    source_path.unlink()
+                    logger.info(f"已删除源文件: {source_path}")
+                elif source_path.is_dir():
                     import shutil
-                    shutil.rmtree(str(source))
-                    logger.info(f"已删除源文件夹: {source}")
+                    shutil.rmtree(str(source_path))
+                    logger.info(f"已删除源文件夹: {source_path}")
             except Exception as e:
                 logger.error(f"删除源文件失败: {e}", exc_info=True)
-                QMessageBox.warning(self, "删除失败", f"无法删除源文件：{e}")
+                from .message_dialog import MessageDialog
+                MessageDialog("删除失败", f"无法删除源文件：{e}", "error", parent=self).exec()
     
     def _show_add_category_dialog(self):
         """显示分类管理对话框"""
@@ -2394,45 +2965,36 @@ class AssetManagerUI(BaseModuleWidget):
             if not urls:
                 return
             
-            # 只处理第一个文件/文件夹
             file_path = Path(urls[0].toLocalFile())
-            
             if not file_path.exists():
                 logger.warning(f"拖入的路径不存在: {file_path}")
                 return
             
             logger.info(f"拖入文件: {file_path}")
             
-            # 识别资产类型
-            from ..logic.asset_model import AssetType
-            from ..utils.archive_extractor import ARCHIVE_EXTENSIONS
-            
-            is_archive = False
             if file_path.is_dir():
-                asset_type = AssetType.PACKAGE
-                logger.info("识别为资源包类型")
+                source_type = "folder"
             elif file_path.suffix.lower() in ARCHIVE_EXTENSIONS:
-                asset_type = AssetType.PACKAGE  # 压缩包最终作为资源包处理
-                is_archive = True
-                logger.info(f"识别为压缩包类型: {file_path.suffix}")
+                source_type = "archive"
             else:
-                # 不再支持单文件导入，提示用户
-                from PyQt6.QtWidgets import QMessageBox
-                QMessageBox.information(
-                    self, "不支持的文件类型",
-                    "不支持单文件导入，请拖入文件夹或压缩包（.zip/.rar/.7z）。"
-                )
+                from .message_dialog import MessageDialog
+                MessageDialog(
+                    "不支持的文件类型",
+                    "不支持单文件导入，请拖入文件夹或压缩包（.zip/.rar/.7z）。",
+                    "info",
+                    parent=self
+                ).exec()
                 logger.info(f"拒绝单文件拖放: {file_path}")
                 return
             
-            # 获取当前选中的分类
             current_category = self.category_filter.currentText()
-            if current_category == "全部分类" or current_category == "⚙️ 分类管理":
+            if current_category in ("全部分类", "⚙️ 分类管理"):
                 current_category = "默认分类"
             
-            # 显示添加资产对话框，预填充路径和分类
-            self._show_add_asset_dialog_with_prefill(
-                file_path, asset_type, current_category, is_archive=is_archive
+            self._start_add_asset_flow(
+                initial_path=file_path,
+                initial_source_type=source_type,
+                default_category=current_category,
             )
             
             event.acceptProposedAction()
@@ -2540,8 +3102,8 @@ class AssetManagerUI(BaseModuleWidget):
             
             if not asset.path or not asset.path.exists():
                 logger.error(f"资产路径不存在: {asset.path}")
-                from PyQt6.QtWidgets import QMessageBox
-                QMessageBox.warning(self, "导出失败", "资产路径不存在")
+                from .message_dialog import MessageDialog
+                MessageDialog("导出失败", "资产路径不存在", "error", parent=self).exec()
                 return
             
             # 创建并显示导出进度对话框

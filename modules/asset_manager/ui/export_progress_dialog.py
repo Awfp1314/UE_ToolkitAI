@@ -257,15 +257,16 @@ class ExportProgressDialog(QDialog):
         
         # 如果文件已存在，询问是否覆盖
         if self.target_path.exists():
-            from PyQt6.QtWidgets import QMessageBox
-            reply = QMessageBox.question(
-                self,
+            from .confirm_dialog import ConfirmDialog
+            dialog = ConfirmDialog(
                 "文件已存在",
                 f"文件 \"{folder_name}.zip\" 已存在，是否覆盖？",
-                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-                QMessageBox.StandardButton.No
+                "覆盖后将替换原有压缩包。",
+                self
             )
-            if reply != QMessageBox.StandardButton.Yes:
+            if hasattr(dialog, 'center_on_parent'):
+                dialog.center_on_parent()
+            if dialog.exec() != ConfirmDialog.DialogCode.Accepted:
                 self.reject()
                 return
         

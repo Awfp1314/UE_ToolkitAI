@@ -155,12 +155,13 @@ class AppBootstrap:
 
             # 显示用户友好的错误对话框
             try:
-                from PyQt6.QtWidgets import QMessageBox
-                QMessageBox.critical(
-                    None,
+                from modules.asset_manager.ui.message_dialog import MessageDialog
+                MessageDialog(
                     "启动失败",
-                    f"应用程序启动失败，请查看日志文件获取详细信息。\n\n错误: {str(e)}"
-                )
+                    f"应用程序启动失败，请查看日志文件获取详细信息。\n\n错误: {str(e)}",
+                    "error",
+                    parent=None
+                ).exec()
             except:
                 pass  # 如果显示对话框失败，静默忽略
 

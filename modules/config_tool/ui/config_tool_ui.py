@@ -10,10 +10,10 @@ import threading
 from pathlib import Path
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, 
-    QPushButton, QScrollArea, QFrame, QGridLayout, QMenu, QMessageBox,
-    QFileDialog, QDialog, QApplication
+    QPushButton, QScrollArea, QFrame, QGridLayout, QMenu,
+    QFileDialog, QDialog, QApplication, QLineEdit
 )
-from PyQt6.QtCore import Qt, pyqtSignal as Signal, QTimer, QObject, QEvent
+from PyQt6.QtCore import Qt, pyqtSignal as Signal, QTimer, QObject, QEvent, QPoint
 from PyQt6.QtGui import QFont, QCursor, QAction
 from typing import List, Optional
 
@@ -96,6 +96,149 @@ class _MenuAutoClose(QObject):
         except RuntimeError:
             self._timer.stop()
             self.menu = None
+
+
+from modules.asset_manager.ui.message_dialog import MessageDialog
+from modules.asset_manager.ui.confirm_dialog import ConfirmDialog
+
+
+class ConfigNameEditDialog(QDialog):
+    """统一风格：配置重命名输入框"""
+
+    def __init__(self, current_name: str, parent=None):
+        super().__init__(parent)
+        self.drag_position = QPoint()
+        self._result_name = current_name
+
+        self.setModal(True)
+        self.setFixedSize(460, 230)
+        self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Dialog)
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        self.setObjectName("AddAssetDialog")
+
+        container = QWidget()
+        container.setObjectName("AddAssetDialogContainer")
+
+        root = QVBoxLayout(container)
+        root.setSpacing(0)
+        root.setContentsMargins(0, 0, 0, 0)
+
+        title_bar = QWidget()
+        title_bar.setObjectName("AddAssetDialogTitleBar")
+        title_bar.setFixedHeight(48)
+        title_layout = QHBoxLayout(title_bar)
+        title_layout.setContentsMargins(20, 0, 20, 0)
+        title_layout.setSpacing(10)
+
+        icon = QLabel("✏️")
+        icon.setObjectName("AddAssetDialogTitleIcon")
+        title_layout.addWidget(icon)
+
+        title = QLabel("重命名配置")
+        title.setObjectName("AddAssetDialogTitleLabel")
+        title_layout.addWidget(title)
+        title_layout.addStretch()
+
+        close_btn = QPushButton("✕")
+        close_btn.setObjectName("CategoryDialogCloseButton")
+        close_btn.setFixedSize(28, 28)
+        close_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        close_btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        close_btn.clicked.connect(self.reject)
+        title_layout.addWidget(close_btn)
+
+        title_bar.mousePressEvent = self._title_bar_mouse_press
+        title_bar.mouseMoveEvent = self._title_bar_mouse_move
+        root.addWidget(title_bar)
+
+        content = QWidget()
+        content.setObjectName("AddAssetDialogContent")
+        content_layout = QVBoxLayout(content)
+        content_layout.setContentsMargins(24, 18, 24, 22)
+        content_layout.setSpacing(12)
+
+        name_label = QLabel("配置名称")
+        name_label.setObjectName("AddAssetDialogLabel")
+        content_layout.addWidget(name_label)
+
+        self.name_input = QLineEdit()
+        self.name_input.setObjectName("AddAssetDialogInput")
+        self.name_input.setMinimumHeight(38)
+        self.name_input.setText(current_name)
+        content_layout.addWidget(self.name_input)
+
+        self.error_label = QLabel("")
+        self.error_label.setObjectName("AddAssetDialogErrorLabel")
+        self.error_label.setWordWrap(True)
+        self.error_label.hide()
+        content_layout.addWidget(self.error_label)
+
+        content_layout.addStretch()
+
+        btn_row = QHBoxLayout()
+        btn_row.addStretch()
+
+        cancel_btn = QPushButton("取消")
+        cancel_btn.setObjectName("AddAssetDialogCancelBtn")
+        cancel_btn.setFixedSize(100, 38)
+        cancel_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        cancel_btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        cancel_btn.clicked.connect(self.reject)
+        btn_row.addWidget(cancel_btn)
+
+        ok_btn = QPushButton("确定")
+        ok_btn.setObjectName("AddAssetDialogAddBtn")
+        ok_btn.setFixedSize(100, 38)
+        ok_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        ok_btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        ok_btn.clicked.connect(self._on_accept)
+        btn_row.addWidget(ok_btn)
+
+        content_layout.addLayout(btn_row)
+        root.addWidget(content, 1)
+
+        dialog_layout = QVBoxLayout(self)
+        dialog_layout.setContentsMargins(0, 0, 0, 0)
+        dialog_layout.addWidget(container)
+
+    def _title_bar_mouse_press(self, event):
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.drag_position = event.globalPosition().toPoint() - self.frameGeometry().topLeft()
+            event.accept()
+
+    def _title_bar_mouse_move(self, event):
+        if event.buttons() == Qt.MouseButton.LeftButton and not self.drag_position.isNull():
+            self.move(event.globalPosition().toPoint() - self.drag_position)
+            event.accept()
+
+    def _on_accept(self):
+        text = (self.name_input.text() or "").strip()
+        if not text:
+            self.error_label.setText("配置名称不能为空")
+            self.error_label.show()
+            return
+        self._result_name = text
+        self.accept()
+
+    def get_name(self) -> str:
+        return self._result_name
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        self.center_on_parent()
+        self.name_input.setFocus()
+        self.name_input.selectAll()
+
+    def center_on_parent(self):
+        if self.parent():
+            p = self.parent()
+            while p.parent():
+                p = p.parent()
+            geo = p.frameGeometry()
+            x = geo.x() + (geo.width() - self.width()) // 2
+            y = geo.y() + (geo.height() - self.height()) // 2
+            self.move(x, y)
+
 
 
 class ConfigTemplateCard(QWidget):
@@ -484,10 +627,10 @@ class ConfigToolUI(QWidget):
             
             name = name_input.text().strip()
             if not name:
-                QMessageBox.warning(self, "提示", "配置名称不能为空")
+                MessageDialog("提示", "配置名称不能为空", "warning", parent=self).exec()
                 continue
             if name in existing_names:
-                QMessageBox.warning(self, "提示", f"配置名称 \"{name}\" 已存在")
+                MessageDialog("提示", f"配置名称 \"{name}\" 已存在", "warning", parent=self).exec()
                 continue
             
             return name, desc_input.text().strip()
@@ -504,7 +647,7 @@ class ConfigToolUI(QWidget):
             
             # 2. 检查工程是否正在运行
             if hasattr(selected_project, 'pid') and selected_project.pid > 0:
-                QMessageBox.warning(self, "警告", "当前工程正在运行无法导入配置文件，请关闭保存工程后重试")
+                MessageDialog("警告", "当前工程正在运行无法导入配置文件，请关闭保存工程后重试", "warning", parent=self).exec()
                 return
             
             # 3. 显示确认对话框
@@ -543,25 +686,23 @@ class ConfigToolUI(QWidget):
     def _on_rename_requested(self, template):
         """重命名请求"""
         logger.info(f"请求重命名: {template.name}")
-        
-        from PyQt6.QtWidgets import QInputDialog
-        
+
         existing_names = [t.name for t in self.config_templates if t != template]
-        
+
         while True:
-            new_name, ok = QInputDialog.getText(self, "重命名配置", "请输入新名称:", text=template.name)
-            if not ok:
+            dialog = ConfigNameEditDialog(template.name, self)
+            if dialog.exec() != QDialog.DialogCode.Accepted:
                 return
-            
-            new_name = new_name.strip()
+
+            new_name = (dialog.get_name() or "").strip()
             if not new_name:
-                QMessageBox.warning(self, "提示", "配置名称不能为空")
+                MessageDialog("提示", "配置名称不能为空", "warning", parent=self).exec()
                 continue
-            
+
             if new_name in existing_names:
-                QMessageBox.warning(self, "提示", f"配置名称 \"{new_name}\" 已存在")
+                MessageDialog("提示", f"配置名称 \"{new_name}\" 已存在", "warning", parent=self).exec()
                 continue
-            
+
             if new_name != template.name:
                 template.name = new_name
                 if self.logic:
@@ -574,14 +715,16 @@ class ConfigToolUI(QWidget):
         """删除请求"""
         logger.info(f"请求删除: {template.name}")
         
-        reply = QMessageBox.question(
-            self, "确认删除",
-            f"确定要删除配置 \"{template.name}\" 吗？\n此操作不可恢复。",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-            QMessageBox.StandardButton.No
+        dialog = ConfirmDialog(
+            "确认删除",
+            f"确定要删除配置 \"{template.name}\" 吗？",
+            "此操作不可恢复。",
+            self
         )
-        
-        if reply == QMessageBox.StandardButton.Yes:
+        if hasattr(dialog, 'center_on_parent'):
+            dialog.center_on_parent()
+
+        if dialog.exec() == QDialog.DialogCode.Accepted:
             if self.logic:
                 self.logic.remove_template(template)
                 self.refresh_config_list()
@@ -590,7 +733,7 @@ class ConfigToolUI(QWidget):
     def _on_open_folder_requested(self, template):
         """打开配置文件夹"""
         if not template.path or not template.path.exists():
-            QMessageBox.warning(self, "警告", "配置文件路径不存在")
+            MessageDialog("警告", "配置文件路径不存在", "warning", parent=self).exec()
             return
         
         folder_path = template.path
@@ -600,15 +743,15 @@ class ConfigToolUI(QWidget):
     
     def show_error_message(self, message: str):
         """显示错误消息"""
-        QMessageBox.critical(self, "错误", message)
+        MessageDialog("错误", message, "error", parent=self).exec()
     
     def show_success_message(self, message: str = "操作成功"):
         """显示成功消息"""
-        QMessageBox.information(self, "成功", message)
+        MessageDialog("成功", message, "success", parent=self).exec()
     
     def show_no_ue_project_message(self):
         """显示没有找到UE工程的消息"""
-        QMessageBox.information(self, "提示", "未检测到正在运行的UE工程，请先启动UE编辑器。")
+        MessageDialog("提示", "未检测到正在运行的UE工程，请先启动UE编辑器。", "info", parent=self).exec()
     
     def refresh_config_list(self):
         """刷新配置列表"""

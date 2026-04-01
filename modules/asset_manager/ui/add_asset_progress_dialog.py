@@ -6,7 +6,7 @@
 """
 
 from PyQt6.QtWidgets import (
-    QDialog, QVBoxLayout, QLabel, 
+    QApplication, QDialog, QVBoxLayout, QLabel,
     QProgressBar
 )
 from PyQt6.QtCore import Qt
@@ -29,7 +29,25 @@ class AddAssetProgressDialog(QDialog):
         self.setModal(True)
         
         self._init_ui()
-    
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        host = self.parent().window() if self.parent() else None
+        if host:
+            geo = host.frameGeometry()
+            self.move(
+                geo.x() + (geo.width() - self.width()) // 2,
+                geo.y() + (geo.height() - self.height()) // 2,
+            )
+            return
+        screen = QApplication.primaryScreen()
+        if screen:
+            available = screen.availableGeometry()
+            self.move(
+                available.x() + (available.width() - self.width()) // 2,
+                available.y() + (available.height() - self.height()) // 2,
+            )
+
     def _init_ui(self):
         """初始化UI"""
         layout = QVBoxLayout(self)

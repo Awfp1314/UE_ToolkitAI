@@ -7,13 +7,14 @@
 from pathlib import Path
 from typing import List, Optional, Tuple
 from PyQt6.QtWidgets import (
-    QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, 
-    QLineEdit, QComboBox, QFileDialog, QCheckBox, QWidget, QMenu, QSizePolicy
+    QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
+    QLineEdit, QComboBox, QFileDialog, QWidget, QMenu, QSizePolicy
 )
 from PyQt6.QtCore import Qt, QThread, pyqtSignal, QPoint
 from PyQt6.QtGui import QMouseEvent, QCursor
 import logging
 import re
+import unicodedata
 
 from ..logic.asset_model import AssetType, PackageType
 from ..utils.ue_version_detector import UEVersionDetector
@@ -22,8 +23,63 @@ from ..utils.asset_structure_analyzer import AssetStructureAnalyzer, StructureTy
 from .custom_checkbox import CustomCheckBox
 from core.logger import get_logger
 from core.utils.custom_widgets import NoContextMenuLineEdit
+from ui.dialogs.feedback_dialog import FeedbackDialog
 
 logger = get_logger(__name__)
+
+
+def _normalize_asset_name(name: str, fallback: str = "") -> str:
+    """统一清理资产名称（用于表单预填和批量模式）"""
+    if not name:
+        return fallback or name
+
+    cleaned = str(name).strip()
+    if not cleaned:
+        return fallback or cleaned
+
+    # 统一字符形态，尽量减少奇怪编码符号影响
+    cleaned = unicodedata.normalize("NFKC", cleaned)
+
+    # 去掉压缩包扩展名
+    cleaned = re.sub(r'(\.zip|\.rar|\.7z|\.tar\.gz|\.tar)$', '', cleaned, flags=re.IGNORECASE)
+
+    # 非法路径字符替换为空格
+    cleaned = re.sub(r'[<>:"/\\|?*]', ' ', cleaned)
+
+    # 连续分隔符归一化
+    cleaned = re.sub(r'[\s._-]+', ' ', cleaned).strip()
+
+    # 尾部噪声：复制后缀 / 版本号 / 日期时间 / 批次序号
+    tail_patterns = [
+        r'\s*[\(（]\s*\d+\s*[\)）]\s*$',
+        r'\s*[\(（]\s*(copy|副本|拷贝|final|最终版)\s*[\)）]\s*$',
+        r'\s*[-_ ]\s*(copy|副本|拷贝|final|最终版)\s*$',
+        r'\s*[-_ ]\s*v?\d+(?:\.\d+){0,3}\s*$',
+        r'\s*[-_ ]\s*(ver|version|版本)\s*\d+(?:\.\d+){0,3}\s*$',
+        r'\s*[-_ ]\s*\d{8}(?:[-_ ]?\d{4,6})?\s*$',
+        r'\s*[-_ ]\s*\d{4}[-_/]\d{1,2}[-_/]\d{1,2}(?:[ T_-]?\d{1,2}[:._-]?\d{1,2}(?:[:._-]?\d{1,2})?)?\s*$',
+    ]
+
+    changed = True
+    while changed and cleaned:
+        old = cleaned
+        for p in tail_patterns:
+            cleaned = re.sub(p, '', cleaned, flags=re.IGNORECASE).strip()
+        cleaned = re.sub(r'[\s._-]+', ' ', cleaned).strip()
+        changed = cleaned != old
+
+    # 乱码兜底：包含替换字符时优先回退
+    if '�' in cleaned:
+        cleaned = ''
+
+    # 最后再做一次非法字符清理
+    cleaned = re.sub(r'[<>:"/\\|?*]', '_', cleaned)
+    cleaned = re.sub(r'_+', '_', cleaned).strip(' _.-')
+
+    if not cleaned:
+        cleaned = (fallback or "NewAsset").strip()
+
+    return cleaned
 
 
 class BatchAddThread(QThread):
@@ -56,7 +112,7 @@ class BatchAddThread(QThread):
             
             try:
                 # 更新进度
-                asset_name = self._clean_asset_name(file_path.stem)
+                asset_name = _normalize_asset_name(file_path.stem, fallback=file_path.stem)
                 self.progress.emit(i + 1, total, asset_name)
                 
                 # 检测资产的 package_type 和引擎版本
@@ -241,10 +297,7 @@ class BatchAddThread(QThread):
     @staticmethod
     def _clean_asset_name(name: str) -> str:
         """清理资产名称"""
-        import re
-        name = re.sub(r'[<>:"/\\|?*]', '_', name)
-        name = re.sub(r'_+', '_', name)
-        return name.strip('_')
+        return _normalize_asset_name(name, fallback=name)
 
 
 class ArchiveAnalysisThread(QThread):
@@ -341,42 +394,13 @@ class AddAssetDialog(QDialog):
     
     @staticmethod
     def clean_asset_name(name: str) -> str:
-        """清理资产名称，去除括号数字和其他杂乱符号
-        
-        例如：
-        - "女鬼(1).zip" -> "女鬼"
-        - "MyAsset (2)" -> "MyAsset"
-        - "Asset_v2 (Copy)" -> "Asset_v2"
-        - "Test - Copy (3)" -> "Test"
-        """
-        if not name:
-            return name
-        
-        # 先去除常见的文件复制后缀模式和扩展名
-        patterns = [
-            r'\s*\(\d+\)$',           # 匹配 (1), (2), (3) 等
-            r'\s*\(副本\)$',          # 匹配 (副本)
-            r'\s*\(Copy\)$',          # 匹配 (Copy)
-            r'\s*-\s*副本$',          # 匹配 - 副本
-            r'\s*-\s*Copy$',          # 匹配 - Copy
-            r'\s*_copy$',             # 匹配 _copy
-            r'\s*_副本$',             # 匹配 _副本
-            r'(\.zip|\.rar|\.7z|\.tar\.gz|\.tar)$',  # 压缩包扩展名
-        ]
-        
-        cleaned = name
-        for pattern in patterns:
-            cleaned = re.sub(pattern, '', cleaned, flags=re.IGNORECASE)
-        
-        # 去除首尾空格
-        cleaned = cleaned.strip()
-        
-        # 如果清理后为空，返回原名称
-        return cleaned if cleaned else name
+        """清理资产名称，去除序号/版本/时间等尾部噪声"""
+        return _normalize_asset_name(name, fallback=name)
     
     def __init__(self, existing_asset_names: List[str], categories: List[str], 
                  prefill_path: Optional[str] = None, prefill_type: Optional[AssetType] = None,
-                 prefill_category: Optional[str] = None, prefill_name: Optional[str] = None, 
+                 prefill_category: Optional[str] = None, prefill_name: Optional[str] = None,
+                 prefill_analysis: Optional[dict] = None,
                  is_archive: bool = False, 
                  batch_mode: bool = False, batch_files: Optional[list] = None,
                  parent=None):
@@ -404,6 +428,7 @@ class AddAssetDialog(QDialog):
         self.prefill_type = prefill_type
         self.prefill_category = prefill_category
         self.prefill_name = prefill_name
+        self.prefill_analysis = prefill_analysis or {}
         self.drag_position = QPoint()
         self.engine_version = ""
         self._is_archive = is_archive  # 在 init_ui 之前设置
@@ -427,7 +452,7 @@ class AddAssetDialog(QDialog):
     def init_ui(self):
         """初始化UI"""
         self.setModal(True)
-        self.setFixedSize(550, 680)  # 增加高度，为警告提示预留空间
+        self.setFixedSize(550, 620)  # 高度适配内容区域，避免超出主窗口
         
         # 无边框
         self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Dialog)
@@ -476,31 +501,6 @@ class AddAssetDialog(QDialog):
         content_layout.setContentsMargins(30, 20, 30, 25)
         content_layout.setSpacing(12)
         
-        # 资产路径选择
-        path_label = QLabel("资产路径")
-        path_label.setObjectName("AddAssetDialogLabel")
-        content_layout.addWidget(path_label)
-        
-        path_row = QHBoxLayout()
-        path_row.setSpacing(10)
-        
-        self.path_display = NoContextMenuLineEdit()
-        self.path_display.setObjectName("AddAssetDialogPathInput")
-        self.path_display.setPlaceholderText("请选择资产路径...")
-        self.path_display.setReadOnly(True)
-        self.path_display.setMinimumHeight(38)
-        path_row.addWidget(self.path_display, 1)
-        
-        browse_btn = QPushButton("浏览")
-        browse_btn.setObjectName("AddAssetDialogBrowseBtn")
-        browse_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        browse_btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
-        browse_btn.setFixedHeight(38)
-        browse_btn.clicked.connect(self._select_asset_path)
-        path_row.addWidget(browse_btn)
-        
-        content_layout.addLayout(path_row)
-        
         # 资产名称
         name_label = QLabel("资产名称")
         name_label.setObjectName("AddAssetDialogLabel")
@@ -532,42 +532,54 @@ class AddAssetDialog(QDialog):
         category_row.addStretch()
         content_layout.addLayout(category_row)
         
-        # 引擎版本
+        # 引擎版本（只读）
         version_label = QLabel("引擎版本")
         version_label.setObjectName("AddAssetDialogLabel")
         content_layout.addWidget(version_label)
-        
-        self.version_display = NoContextMenuLineEdit()
-        self.version_display.setObjectName("AddAssetDialogInput")
-        self.version_display.setPlaceholderText("选择路径后自动检测...")
-        self.version_display.setReadOnly(True)
-        self.version_display.setMinimumHeight(38)
+
+        self.version_display = QLabel("--")
+        self.version_display.setObjectName("AddAssetDialogReadOnlyValue")
+        self.version_display.setMinimumHeight(36)
+        self.version_display.setAlignment(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft)
         content_layout.addWidget(self.version_display)
-        
-        # 导入类型
-        type_label = QLabel("导入类型")
+
+        # 资产类型
+        type_label = QLabel("资产类型")
         type_label.setObjectName("AddAssetDialogLabel")
         content_layout.addWidget(type_label)
-        
+
         # 类型选择下拉框（可手动修改）
         self.type_combo = QComboBox()
-        self.type_combo.setObjectName("AddAssetDialogInput")
+        self.type_combo.setObjectName("AddAssetDialogCombo")
         self.type_combo.setMinimumHeight(38)
         self.type_combo.addItems(["资产包", "UE 项目", "UE 插件", "其他资源"])
         self.type_combo.setEditable(False)
-        self.type_combo.setEnabled(False)  # 默认禁用，检测后启用
-        self.type_combo.setCurrentIndex(-1)  # 默认不选中，待检测
+        self.type_combo.setCurrentIndex(0)
         content_layout.addWidget(self.type_combo)
-        
-        # 类型提示
-        self.type_hint = QLabel("💡 选择资产路径后自动检测")
-        self.type_hint.setObjectName("AddAssetDialogHint")
-        content_layout.addWidget(self.type_hint)
-        
+
+        # 识别反馈入口
+        self.feedback_hint_label = QLabel("版本或者资产类型识别有误？点击反馈")
+        self.feedback_hint_label.setObjectName("AddAssetDialogHint")
+        content_layout.addWidget(self.feedback_hint_label)
+
+        self.feedback_btn = QPushButton("反馈")
+        self.feedback_btn.setObjectName("AddAssetDialogBrowseBtn")
+        self.feedback_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.feedback_btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self.feedback_btn.setFixedSize(100, 34)
+        self.feedback_btn.clicked.connect(self._on_feedback_clicked)
+        content_layout.addWidget(self.feedback_btn, 0, Qt.AlignmentFlag.AlignLeft)
+
+        # 隐藏路径输入（保留内部字段兼容旧逻辑）
+        self.path_display = NoContextMenuLineEdit()
+        self.path_display.setObjectName("AddAssetDialogPathInput")
+        self.path_display.setVisible(False)
+        content_layout.addWidget(self.path_display)
+
         # 选项
         self.create_doc_checkbox = CustomCheckBox("自动创建说明文档")
         self.create_doc_checkbox.setObjectName("AddAssetDialogCheckbox")
-        self.create_doc_checkbox.setChecked(True)
+        self.create_doc_checkbox.setChecked(False)
         content_layout.addWidget(self.create_doc_checkbox)
         
         # 错误提示
@@ -631,35 +643,31 @@ class AddAssetDialog(QDialog):
             prefill_path_obj = Path(self.prefill_path)
             self.path_display.setText(self.prefill_path)
             self.asset_path = prefill_path_obj
-            self.asset_type = self.prefill_type
+            self.asset_type = self.prefill_type or AssetType.PACKAGE
             self._original_source_path = prefill_path_obj
-            
+
             logger.info(f"预填充路径: {self.prefill_path}, 类型: {self.prefill_type}, 是否存在: {prefill_path_obj.exists()}, 是否文件夹: {prefill_path_obj.is_dir()}")
-            
-            # 如果有预填名称，使用预填名称
+
+            # 如果有预填名称，使用预填名称（先规范化）
             if self.prefill_name:
-                self.name_input.setText(self.prefill_name)
-            # 如果有预填路径但没有预填名称，自动填充名称
+                normalized_prefill = self.clean_asset_name(self.prefill_name)
+                self.name_input.setText(normalized_prefill)
             else:
                 is_archive = self._is_archive or prefill_path_obj.suffix.lower() in ARCHIVE_EXTENSIONS
-                if self.prefill_type == AssetType.FILE or is_archive:
-                    auto_name = prefill_path_obj.stem
-                else:
-                    auto_name = prefill_path_obj.name
-                # 清理文件名，去除括号数字等杂乱符号
+                auto_name = prefill_path_obj.stem if is_archive else prefill_path_obj.name
                 auto_name = self.clean_asset_name(auto_name)
-                # 使用 UTF-8 编码处理文件名，避免乱码
                 try:
                     self.name_input.setText(auto_name)
                 except Exception as e:
                     logger.warning(f"文件名编码问题: {e}")
                     self.name_input.setText("NewAsset")
-            
-            # 如果是压缩包（从拖放识别），立即开始分析
-            if self._is_archive:
+
+            # 优先应用外部传入的分析结果，避免重复分析
+            if self.prefill_analysis:
+                self._apply_prefill_analysis(self.prefill_analysis)
+            elif self._is_archive:
                 logger.info(f"检测到压缩包，开始分析: {self.asset_path}")
                 self._start_archive_analysis(self.asset_path)
-            # 如果是文件夹（从拖放识别），也需要分析
             elif prefill_path_obj.exists() and prefill_path_obj.is_dir():
                 logger.info(f"检测到文件夹，开始分析: {self.asset_path}")
                 self._analyze_folder_on_prefill(self.asset_path)
@@ -672,6 +680,52 @@ class AddAssetDialog(QDialog):
             if index >= 0:
                 self.category_combo.setCurrentIndex(index)
     
+    def _on_feedback_clicked(self):
+        """打开识别反馈窗口"""
+        try:
+            dlg = FeedbackDialog(self)
+            dlg.exec()
+        except Exception as e:
+            logger.error(f"打开反馈窗口失败: {e}", exc_info=True)
+
+    def _apply_prefill_analysis(self, analysis: dict):
+        """应用外部分析结果，跳过本地重复分析"""
+        try:
+            self._is_archive = bool(analysis.get("is_archive", self._is_archive))
+            self.engine_version = analysis.get("engine_version", "") or ""
+            self._package_type = analysis.get("package_type", PackageType.CONTENT)
+
+            resolved_asset_path = analysis.get("resolved_asset_path")
+            archive_content_path = analysis.get("archive_content_path")
+            archive_temp_dir = analysis.get("archive_temp_dir")
+            archive_extractor = analysis.get("archive_extractor")
+            plugin_folder_name = analysis.get("plugin_folder_name", "")
+
+            if resolved_asset_path:
+                self.asset_path = Path(resolved_asset_path)
+                self.path_display.setText(str(self.asset_path))
+
+            if archive_content_path:
+                self._archive_content_path = Path(archive_content_path)
+            if archive_temp_dir:
+                self._archive_temp_dir = Path(archive_temp_dir)
+            if archive_extractor:
+                self._archive_extractor = archive_extractor
+            if plugin_folder_name:
+                self._plugin_folder_name = plugin_folder_name
+
+            self._update_type_display()
+
+            if self.engine_version:
+                pkg_type_str = self._package_type.value if hasattr(self._package_type, 'value') else str(self._package_type)
+                self.version_display.setText(self.version_detector.format_version_badge(self.engine_version, pkg_type_str))
+            else:
+                self.version_display.setText("未检测到版本")
+
+            logger.info("已应用预分析结果到添加资产表单")
+        except Exception as e:
+            logger.error(f"应用预分析结果失败: {e}", exc_info=True)
+
     def mousePressEvent(self, event: QMouseEvent):
         """鼠标按下事件 - 只在标题栏区域响应"""
         if event.button() == Qt.MouseButton.LeftButton:
@@ -1144,28 +1198,20 @@ class AddAssetDialog(QDialog):
             return PackageType.OTHERS
     
     def _update_type_display(self):
-        """更新导入类型显示"""
+        """更新资产类型显示"""
         pkg_type = getattr(self, '_package_type', None)
         if not pkg_type:
-            # 未检测到类型，保持未选中状态
-            self.type_combo.setCurrentIndex(-1)
-            self.type_combo.setEnabled(False)
-            self.type_hint.setText("💡 选择资产路径后自动检测")
+            self.type_combo.setCurrentIndex(0)
             return
-        
-        # 映射 PackageType 到下拉框索引
+
         type_index_map = {
-            PackageType.CONTENT: 0,  # "资产包"
-            PackageType.PROJECT: 1,  # "UE 项目"
-            PackageType.PLUGIN: 2,   # "UE 插件"
-            PackageType.OTHERS: 3,   # "其他资源"
+            PackageType.CONTENT: 0,
+            PackageType.PROJECT: 1,
+            PackageType.PLUGIN: 2,
+            PackageType.OTHERS: 3,
         }
         index = type_index_map.get(pkg_type, 0)
         self.type_combo.setCurrentIndex(index)
-        
-        # 检测完成后启用下拉框，允许用户手动修改
-        self.type_combo.setEnabled(True)
-        self.type_hint.setText("💡 自动检测，如有误可手动选择")
     
     def _select_file(self):
         """选择资源文件"""
@@ -1376,41 +1422,44 @@ class AddAssetDialog(QDialog):
             self._load_batch_file(self.current_batch_index)
     
     def _center_dialog(self):
-        """居中对话框"""
-        if self.parent():
-            # 获取父窗口
-            parent = self.parent()
-            
-            # 需要向上查找到顶层窗口
-            top_window = parent
-            while top_window.parent():
-                top_window = top_window.parent()
-            
-            # 获取顶层窗口的全局位置和大小
-            parent_geo = top_window.geometry()
-            parent_pos = top_window.pos()
-            
-            # 获取对话框大小
-            dialog_width = self.width()
-            dialog_height = self.height()
-            
-            # 计算居中位置（全局坐标）
-            x = parent_pos.x() + (parent_geo.width() - dialog_width) // 2
-            y = parent_pos.y() + (parent_geo.height() - dialog_height) // 2
-            
+        """左右居中，垂直居中，底部不超出主窗口"""
+        self.adjustSize()
+        host = self._find_content_stack()
+
+        if host:
+            host_global = host.mapToGlobal(host.rect().topLeft())
+            x = host_global.x() + (host.width() - self.width()) // 2
+            y = host_global.y() + (host.height() - self.height()) // 2
+
+            # 安全边界：确保弹窗不超出 host（content_stack）的上下边界
+            host_top = host_global.y()
+            host_bottom = host_global.y() + host.height()
+            if y < host_top + 10:
+                y = host_top + 10
+            if y + self.height() > host_bottom - 10:
+                y = host_bottom - self.height() - 10
+
             self.move(x, y)
         else:
-            # 如果没有父窗口，居中到屏幕
             from PyQt6.QtWidgets import QApplication
             screen = QApplication.primaryScreen().availableGeometry()
             x = screen.x() + (screen.width() - self.width()) // 2
             y = screen.y() + (screen.height() - self.height()) // 2
             self.move(x, y)
+
+    def _find_content_stack(self):
+        """向上遍历 parent 链，找到 QStackedWidget（右侧 content_stack）"""
+        from PyQt6.QtWidgets import QStackedWidget
+        w = self.parent()
+        while w is not None:
+            if isinstance(w, QStackedWidget):
+                return w
+            w = w.parent()
+        return self.parent()
     
     def center_on_parent(self):
-        """在父窗口中居中显示（兼容旧调用）"""
-        # 这个方法保留以兼容现有调用，但实际居中在showEvent中完成
-        pass
+        """在父窗口中居中显示（兼容旧调用，直接执行居中）"""
+        self._center_dialog()
     
     def reject(self):
         """取消/关闭对话框时清理临时资源"""
@@ -1479,8 +1528,8 @@ class AddAssetDialog(QDialog):
             # 验证第一个资产的输入
             is_valid, error_msg = self.validate_input()
             if not is_valid:
-                from PyQt6.QtWidgets import QMessageBox
-                QMessageBox.warning(self, "输入错误", error_msg)
+                from .message_dialog import MessageDialog
+                MessageDialog("输入错误", error_msg, "warning", parent=self).exec()
                 return
             
             # 保存第一个资产的设置
@@ -1512,15 +1561,16 @@ class AddAssetDialog(QDialog):
             
             # 停止按钮连接
             def on_stop_clicked():
-                from PyQt6.QtWidgets import QMessageBox
-                reply = QMessageBox.question(
-                    progress_dialog,
+                from .confirm_dialog import ConfirmDialog
+                dialog = ConfirmDialog(
                     "确认停止",
-                    "确定要停止批量添加吗？\n已添加的资产不会被删除。",
-                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-                    QMessageBox.StandardButton.No
+                    "确定要停止批量添加吗？",
+                    "已添加的资产不会被删除。",
+                    progress_dialog
                 )
-                if reply == QMessageBox.StandardButton.Yes:
+                if hasattr(dialog, 'center_on_parent'):
+                    dialog.center_on_parent()
+                if dialog.exec() == QDialog.DialogCode.Accepted:
                     batch_thread.stop()
                     progress_dialog.accept()
             
@@ -1537,8 +1587,8 @@ class AddAssetDialog(QDialog):
         
         except Exception as e:
             logger.error(f"启动批量添加失败: {e}", exc_info=True)
-            from PyQt6.QtWidgets import QMessageBox
-            QMessageBox.critical(self, "错误", f"启动批量添加失败: {e}")
+            from .message_dialog import MessageDialog
+            MessageDialog("错误", f"启动批量添加失败: {e}", "error", parent=self).exec()
     
     def _on_cancel_clicked(self):
         """取消按钮点击处理"""
@@ -1555,8 +1605,8 @@ class AddAssetDialog(QDialog):
             # 验证输入
             is_valid, error_msg = self.validate_input()
             if not is_valid:
-                from PyQt6.QtWidgets import QMessageBox
-                QMessageBox.warning(self, "输入错误", error_msg)
+                from .message_dialog import MessageDialog
+                MessageDialog("输入错误", error_msg, "warning", parent=self).exec()
                 return False
             
             # 获取资产信息

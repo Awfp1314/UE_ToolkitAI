@@ -11,7 +11,7 @@ import time
 import json
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
-    QLabel, QPushButton, QFrame, QStackedWidget, QScrollArea
+    QLabel, QPushButton, QFrame, QStackedWidget, QScrollArea, QProgressBar
 )
 from PyQt6.QtCore import Qt, QStandardPaths, pyqtSignal, QTimer
 from PyQt6.QtGui import QIcon, QPixmap
@@ -633,6 +633,62 @@ class UEMainWindow(QMainWindow):
         title_layout.addWidget(self.subtitle_label)
 
         title_layout.addStretch()
+
+        # 状态信息指示器（默认隐藏，触发时显示，紧贴主题按钮左侧）
+        self._status_indicator = QWidget()
+        self._status_indicator.setObjectName("StatusIndicator")
+        self._status_indicator.setVisible(False)
+        indicator_layout = QHBoxLayout(self._status_indicator)
+        indicator_layout.setContentsMargins(0, 0, 8, 0)
+        indicator_layout.setSpacing(8)
+
+        self._status_progress = QProgressBar()
+        self._status_progress.setObjectName("StatusProgressBar")
+        self._status_progress.setFixedHeight(3)
+        self._status_progress.setFixedWidth(80)
+        self._status_progress.setTextVisible(False)
+        self._status_progress.setRange(0, 100)
+        self._status_progress.setValue(0)
+        indicator_layout.addWidget(self._status_progress, 0, Qt.AlignmentFlag.AlignVCenter)
+
+        # 两行文本容器
+        from PyQt6.QtWidgets import QSizePolicy
+        text_container = QWidget()
+        text_container.setObjectName("StatusTextContainer")
+        text_container.setFixedWidth(180)  # 固定宽度，防止文本变化时整体跳位
+        text_layout = QVBoxLayout(text_container)
+        text_layout.setContentsMargins(0, 0, 0, 0)
+        text_layout.setSpacing(1)
+
+        self._status_label = QLabel("")          # 上行：阶段 X/N · 阶段名
+        self._status_label.setObjectName("StatusLabel")
+        self._status_label.setFixedWidth(180)
+        text_layout.addWidget(self._status_label)
+
+        self._status_detail = QLabel("")         # 下行：详情描述
+        self._status_detail.setObjectName("StatusDetail")
+        self._status_detail.setFixedWidth(180)
+        text_layout.addWidget(self._status_detail)
+
+        indicator_layout.addWidget(text_container)
+
+        # 「显示详情」按钮（默认隐藏，由调用方通过 set_status_detail_callback 激活）
+        self._status_detail_btn = QPushButton("详情")
+        self._status_detail_btn.setObjectName("StatusDetailButton")
+        self._status_detail_btn.setFixedHeight(22)
+        self._status_detail_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._status_detail_btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self._status_detail_btn.setVisible(False)
+        self._status_detail_btn.clicked.connect(self._on_status_detail_clicked)
+        self._status_detail_callback = None
+        indicator_layout.addWidget(self._status_detail_btn, 0, Qt.AlignmentFlag.AlignVCenter)
+
+        # 防止 indicator 被拉伸，紧贴主题按钮
+        self._status_indicator.setSizePolicy(
+            QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Fixed
+        )
+
+        title_layout.addWidget(self._status_indicator)
 
         # 主题切换按钮
         btn_theme = QPushButton("☀")  # 默认显示太阳图标（深色主题下）
@@ -1673,6 +1729,137 @@ class UEMainWindow(QMainWindow):
             self._ue_status_label.setText("UE 未连接")
             self._ue_status_label.setStyleSheet("color: #888888; font-size: 11px;")
     
+    # ========== 状态信息指示器 ==========
+
+    def show_status(self, label: str, detail: str = "", progress: int = -1):
+        """显示状态信息指示器（两行���式）
+
+        Args:
+            label:    上行文本，如 "阶段 3/5 · 同步配置"
+            detail:   下行文本，如 "正在处理引用兼容…"
+            progress: 进度值 0-100，-1 表示不确定进度（循环动画）
+        """
+        if not hasattr(self, '_status_indicator'):
+            return
+        self._status_label.setText(label)
+        self._status_detail.setText(detail)
+        if progress < 0:
+            self._status_progress.setRange(0, 0)  # 不确定进度，循环动画
+        else:
+            self._status_progress.setRange(0, 100)
+            self._status_progress.setValue(progress)
+        self._status_indicator.setVisible(True)
+
+    def set_status_detail_callback(self, callback):
+        """注册详情按钮回调，callback 不为 None 时显示按钮，为 None 时隐藏"""
+        if not hasattr(self, '_status_detail_btn'):
+            return
+        self._status_detail_callback = callback
+        self._status_detail_btn.setVisible(callback is not None)
+
+    def _on_status_detail_clicked(self):
+        """详情按钮点击"""
+        if self._status_detail_callback:
+            self._status_detail_callback()
+
+    def set_status_progress_smooth(self, value: int):
+        """平滑设置进度条值（0-100），供外部定时器驱动"""
+        if not hasattr(self, '_status_progress'):
+            return
+        self._status_progress.setRange(0, 100)
+        self._status_progress.setValue(value)
+
+    def animate_status_progress(self, target: int, duration_ms: int = 400):
+        """从当前值平滑动画到 target（0-100），duration_ms 为总时长"""
+        if not hasattr(self, '_status_progress'):
+            return
+        # 停止上一次动画
+        if hasattr(self, '_progress_anim_timer') and self._progress_anim_timer is not None:
+            self._progress_anim_timer.stop()
+            self._progress_anim_timer = None
+
+        self._status_progress.setRange(0, 100)
+        start = self._status_progress.value()
+        delta = target - start
+        if delta == 0:
+            return
+
+        step_ms = 16  # ~60fps
+        steps = max(1, duration_ms // step_ms)
+        current_step = [0]
+
+        def _tick():
+            current_step[0] += 1
+            t = current_step[0] / steps
+            # ease-out cubic
+            t_ease = 1 - (1 - t) ** 3
+            val = int(start + delta * t_ease)
+            self._status_progress.setValue(min(max(val, 0), 100))
+            if current_step[0] >= steps:
+                self._status_progress.setValue(target)
+                self._progress_anim_timer.stop()
+                self._progress_anim_timer = None
+
+        timer = QTimer(self)
+        timer.setInterval(step_ms)
+        timer.timeout.connect(_tick)
+        self._progress_anim_timer = timer
+        timer.start()
+
+    def hide_status(self):
+        """隐藏状态信息指示器"""
+        if not hasattr(self, '_status_indicator'):
+            return
+        # 停止正在进行的进度动画
+        if hasattr(self, '_progress_anim_timer') and self._progress_anim_timer is not None:
+            self._progress_anim_timer.stop()
+            self._progress_anim_timer = None
+        self._status_indicator.setVisible(False)
+        self._status_progress.setRange(0, 100)
+        self._status_progress.setValue(0)
+        self._status_label.setText("")
+        self._status_detail.setText("")
+        # 清理详情按钮
+        if hasattr(self, '_status_detail_btn'):
+            self._status_detail_btn.setVisible(False)
+            self._status_detail_callback = None
+
+    def _start_status_demo(self):
+        """演示模式：循环播放进度条 + 两行文本"""
+        self._demo_stages = [
+            ("阶段 1/5 · 备份项目",       "正在备份配置文件…"),
+            ("阶段 2/5 · 重命名目录",     "正在重命名项目文件夹…"),
+            ("阶段 3/5 · 同步配置",       "正在处理引用兼容…"),
+            ("阶段 4/5 · 更新 .uproject", "正在写入模块信息…"),
+            ("阶段 5/5 · 验证结果",       "正在扫描残留引用…"),
+        ]
+        self._demo_stage_idx = 0
+        self._demo_timer = QTimer(self)
+        self._demo_timer.timeout.connect(self._demo_tick)
+        self._demo_progress = 0.0
+        label, detail = self._demo_stages[0]
+        self.show_status(label, detail, 0)
+        self._demo_timer.start(16)  # ~60fps
+
+    def _demo_tick(self):
+        """演示模式的定时器回调"""
+        self._demo_progress += 0.4  # 每帧步进 0.4，约 4 秒跑完一圈
+        if self._demo_progress >= 100:
+            self._demo_progress = 0.0
+            self._demo_stage_idx = (self._demo_stage_idx + 1) % len(self._demo_stages)
+            label, detail = self._demo_stages[self._demo_stage_idx]
+            self._status_label.setText(label)
+            self._status_detail.setText(detail)
+        self._status_progress.setRange(0, 1000)
+        self._status_progress.setValue(int(self._demo_progress * 10))
+
+    def _stop_status_demo(self):
+        """停止演示模式"""
+        if hasattr(self, '_demo_timer') and self._demo_timer:
+            self._demo_timer.stop()
+            self._demo_timer = None
+        self.hide_status()
+
     def show_update_badge(self):
         """显示更新小红点"""
         if hasattr(self, 'update_badge'):
@@ -1722,12 +1909,13 @@ class UEMainWindow(QMainWindow):
             self.check_update_btn.setText("检查更新")
             
             # 显示错误提示
-            from PyQt6.QtWidgets import QMessageBox
-            QMessageBox.warning(
-                self,
+            from modules.asset_manager.ui.message_dialog import MessageDialog
+            MessageDialog(
                 "检查更新失败",
-                f"无法检查更新，请稍后重试。\n\n错误: {str(e)}"
-            )
+                f"无法检查更新，请稍后重试。\n\n错误: {str(e)}",
+                "warning",
+                parent=self
+            ).exec()
     
     def _start_license_preload(self):
         """启动授权状态预加载（异步，不阻塞UI）"""
@@ -1783,12 +1971,13 @@ class UEMainWindow(QMainWindow):
             self.update_badge.hide()
             
             # 显示提示
-            from PyQt6.QtWidgets import QMessageBox
-            QMessageBox.information(
-                self,
+            from modules.asset_manager.ui.message_dialog import MessageDialog
+            MessageDialog(
                 "检查更新",
-                "当前已是最新版本！"
-            )
+                "当前已是最新版本！",
+                "info",
+                parent=self
+            ).exec()
             
         except Exception as e:
             self.logger.error(f"处理更新完成事件失败: {e}", exc_info=True)
