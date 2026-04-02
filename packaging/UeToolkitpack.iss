@@ -347,22 +347,6 @@ begin
            mbInformation, MB_OK);
   end;
 end;
-    begin
-      Result := False;
-      Exit;
-    end;
-
-    UninstallOldVersion();
-    if (OldDir <> '') and FileExists(OldDir + '\{#MyAppExeName}') then
-      DeleteFile(OldDir + '\{#MyAppExeName}');
-    if OldDir <> '' then
-      RemoveDir(OldDir);
-
-    MsgBox('旧版本已卸载完成。' + #13#10#13#10 +
-           '点击确定继续安装新版本。',
-           mbInformation, MB_OK);
-  end;
-end;
 
 // 页面切换事件
 procedure CurPageChanged(CurPageID: Integer);
@@ -381,7 +365,7 @@ var
   DownloadSuccess: Boolean;
   InstallSuccess: Boolean;
 begin
-  if CurStep == ssPostInstall then
+  if CurStep = ssPostInstall then
   begin
     // 检查用户是否选择了 7-Zip 组件
     if IsComponentSelected('sevenzip') and not Is7ZipInstalled then
