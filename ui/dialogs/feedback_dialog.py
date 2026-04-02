@@ -174,7 +174,8 @@ class FeedbackDialog(QDialog):
                 json={
                     "content": problem
                 },
-                timeout=5
+                timeout=5,
+                proxies={"http": None, "https": None}  # 绕过系统代理
             )
             
             print(f"响应状态码: {response.status_code}")
