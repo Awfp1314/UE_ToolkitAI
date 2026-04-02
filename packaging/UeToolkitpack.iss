@@ -108,6 +108,13 @@ var
   Is7ZipInstalled: Boolean;
   Need7ZipDownload: Boolean;
 
+// 获取卸载注册表路径
+function GetUninstallRegKey(): String;
+begin
+  Result := 'Software\Microsoft\Windows\CurrentVersion\Uninstall\' +
+            Chr(123) + '218B94E0-0429-4AFF-9FA3-49A1100AD90F' + Chr(125) + '_is1';
+end;
+
 // 强制结束正在运行的程序
 function KillRunningApp(): Boolean;
 var
@@ -116,6 +123,72 @@ begin
   Exec('taskkill', '/F /IM {#MyAppExeName}', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
   Sleep(1000);
   Result := True;
+end;
+
+// 获取旧版本的卸载程序路径
+function GetUninstallString(): String;
+var
+  UninstallStr: String;
+  RegKey: String;
+begin
+  Result := '';
+  RegKey := GetUninstallRegKey();
+  if not RegQueryStringValue(HKLM64, RegKey, 'UninstallString', UninstallStr) then
+    if not RegQueryStringValue(HKCU64, RegKey, 'UninstallString', UninstallStr) then
+      if not RegQueryStringValue(HKLM32, RegKey, 'UninstallString', UninstallStr) then
+        RegQueryStringValue(HKCU32, RegKey, 'UninstallString', UninstallStr);
+  Result := UninstallStr;
+end;
+
+// 获取旧版本的安装路径
+function GetOldInstallDir(): String;
+var
+  InstallDir: String;
+  RegKey: String;
+begin
+  Result := '';
+  RegKey := GetUninstallRegKey();
+  if not RegQueryStringValue(HKLM64, RegKey, 'InstallLocation', InstallDir) then
+    if not RegQueryStringValue(HKCU64, RegKey, 'InstallLocation', InstallDir) then
+      if not RegQueryStringValue(HKLM32, RegKey, 'InstallLocation', InstallDir) then
+        RegQueryStringValue(HKCU32, RegKey, 'InstallLocation', InstallDir);
+  Result := InstallDir;
+end;
+
+// 获取旧版本号
+function GetOldVersion(): String;
+var
+  OldVersion: String;
+  RegKey: String;
+begin
+  Result := '';
+  RegKey := GetUninstallRegKey();
+  if not RegQueryStringValue(HKLM64, RegKey, 'DisplayVersion', OldVersion) then
+    if not RegQueryStringValue(HKCU64, RegKey, 'DisplayVersion', OldVersion) then
+      if not RegQueryStringValue(HKLM32, RegKey, 'DisplayVersion', OldVersion) then
+        RegQueryStringValue(HKCU32, RegKey, 'DisplayVersion', OldVersion);
+  Result := OldVersion;
+end;
+
+// 静默卸载旧版本
+function UninstallOldVersion(): Boolean;
+var
+  UninstallStr: String;
+  ResultCode: Integer;
+begin
+  Result := True;
+  UninstallStr := GetUninstallString();
+
+  if UninstallStr <> '' then
+  begin
+    if (Length(UninstallStr) > 1) and (UninstallStr[1] = '"') then
+      UninstallStr := Copy(UninstallStr, 2, Length(UninstallStr) - 2);
+
+    if not Exec(UninstallStr, '/SILENT /NORESTART /SUPPRESSMSGBOXES', '', SW_HIDE, ewWaitUntilTerminated, ResultCode) then
+      Result := False;
+
+    Sleep(1000);
+  end;
 end;
 
 // 检测系统是否已安装 7-Zip
@@ -363,78 +436,5 @@ begin
         WizardForm.ProgressGauge.Style := npbstNormal;
       end;
     end;
-  end;
-end;
-
-// 获取卸载注册表路径
-function GetUninstallRegKey(): String;
-begin
-  Result := 'Software\Microsoft\Windows\CurrentVersion\Uninstall\' +
-            Chr(123) + '218B94E0-0429-4AFF-9FA3-49A1100AD90F' + Chr(125) + '_is1';
-end;
-
-// 获取旧版本的卸载程序路径
-function GetUninstallString(): String;
-var
-  UninstallStr: String;
-  RegKey: String;
-begin
-  Result := '';
-  RegKey := GetUninstallRegKey();
-  if not RegQueryStringValue(HKLM64, RegKey, 'UninstallString', UninstallStr) then
-    if not RegQueryStringValue(HKCU64, RegKey, 'UninstallString', UninstallStr) then
-      if not RegQueryStringValue(HKLM32, RegKey, 'UninstallString', UninstallStr) then
-        RegQueryStringValue(HKCU32, RegKey, 'UninstallString', UninstallStr);
-  Result := UninstallStr;
-end;
-
-// 获取旧版本的安装路径
-function GetOldInstallDir(): String;
-var
-  InstallDir: String;
-  RegKey: String;
-begin
-  Result := '';
-  RegKey := GetUninstallRegKey();
-  if not RegQueryStringValue(HKLM64, RegKey, 'InstallLocation', InstallDir) then
-    if not RegQueryStringValue(HKCU64, RegKey, 'InstallLocation', InstallDir) then
-      if not RegQueryStringValue(HKLM32, RegKey, 'InstallLocation', InstallDir) then
-        RegQueryStringValue(HKCU32, RegKey, 'InstallLocation', InstallDir);
-  Result := InstallDir;
-end;
-
-// 获取旧版本号
-function GetOldVersion(): String;
-var
-  OldVersion: String;
-  RegKey: String;
-begin
-  Result := '';
-  RegKey := GetUninstallRegKey();
-  if not RegQueryStringValue(HKLM64, RegKey, 'DisplayVersion', OldVersion) then
-    if not RegQueryStringValue(HKCU64, RegKey, 'DisplayVersion', OldVersion) then
-      if not RegQueryStringValue(HKLM32, RegKey, 'DisplayVersion', OldVersion) then
-        RegQueryStringValue(HKCU32, RegKey, 'DisplayVersion', OldVersion);
-  Result := OldVersion;
-end;
-
-// 静默卸载旧版本
-function UninstallOldVersion(): Boolean;
-var
-  UninstallStr: String;
-  ResultCode: Integer;
-begin
-  Result := True;
-  UninstallStr := GetUninstallString();
-
-  if UninstallStr <> '' then
-  begin
-    if (Length(UninstallStr) > 1) and (UninstallStr[1] = '"') then
-      UninstallStr := Copy(UninstallStr, 2, Length(UninstallStr) - 2);
-
-    if not Exec(UninstallStr, '/SILENT /NORESTART /SUPPRESSMSGBOXES', '', SW_HIDE, ewWaitUntilTerminated, ResultCode) then
-      Result := False;
-
-    Sleep(1000);
   end;
 end;
