@@ -73,25 +73,15 @@ class SettingsSection(QWidget):
 class AIAssistantSection(SettingsSection):
     """AI助手设置区块"""
     
-    # 跨线程信号（后台线程 → 主线程）
-    _api_models_fetched = pyqtSignal(list)
-    _api_models_error = pyqtSignal(str)
-    _model_validated = pyqtSignal(dict)  # 模型验证结果
-    _ollama_models_fetched = pyqtSignal(list)  # Ollama 模型列表
-    _ollama_scan_status = pyqtSignal(str)  # Ollama 扫描状态文本
+    # API Key 验证信号
+    _api_key_validated = pyqtSignal(dict)  # 验证结果 {'valid': bool, 'error': str}
     
     def __init__(self, parent=None):
         super().__init__("AI助手设置", "🤖", parent)
         self._loading_config = False  # 加载配置标志
-        self._refreshing_models = False  # 刷新模型标志
-        self._pending_ollama_model = None  # 待设置的Ollama模型
         
-        # 连接跨线程信号
-        self._api_models_fetched.connect(self._update_api_models_ui)
-        self._api_models_error.connect(self._on_fetch_models_error)
-        self._model_validated.connect(self._on_model_validated)
-        self._ollama_models_fetched.connect(self._update_ollama_models_ui)
-        self._ollama_scan_status.connect(lambda text: self.ollama_status_label.setText(text))
+        # 连接 API Key 验证信号
+        self._api_key_validated.connect(self._on_api_key_validation_result)
         
         self.setup_content()
         
@@ -99,11 +89,15 @@ class AIAssistantSection(SettingsSection):
         QTimer.singleShot(100, self._load_config)
     
     def setup_content(self):
-        # LLM供应商选择
+        # LLM供应商选择（改为具体的供应商）
         self.provider_combo = QComboBox()
         self.provider_combo.setObjectName("SettingComboBox")
-        self.provider_combo.addItem("API（OpenAI 兼容）", "api")
-        self.provider_combo.addItem("Ollama（本地模型）", "ollama")
+        self.provider_combo.addItem("OpenAI", "openai")
+        self.provider_combo.addItem("Google Gemini", "gemini")
+        self.provider_combo.addItem("Deepseek", "deepseek")
+        self.provider_combo.addItem("Anthropic Claude", "claude")
+        self.provider_combo.addItem("Ollama (本地)", "ollama")
+        self.provider_combo.addItem("自定义 (BYOK)", "byok")
         self.provider_combo.setFixedWidth(220)
         self.provider_combo.view().window().setWindowFlags(
             Qt.WindowType.Popup | 
@@ -112,7 +106,7 @@ class AIAssistantSection(SettingsSection):
         )
         self.provider_combo.view().window().setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self.provider_combo.currentIndexChanged.connect(self._on_provider_changed)
-        self.add_setting_row("LLM 供应商", self.provider_combo, "选择使用在线API还是本地Ollama模型")
+        self.add_setting_row("供应商", self.provider_combo, "选择 AI 服务供应商")
         
         # 添加间距
         spacer = QWidget()
@@ -134,15 +128,25 @@ class AIAssistantSection(SettingsSection):
         self.api_key_row, self.api_key_input = self.create_password_row()
         self._add_row_to_layout(api_layout, "API Key", self.api_key_row, "输入你的API密钥")
         
-        # API URL
+        # API 状态标签（用于显示验证结果）
+        self.api_model_status_label = QLabel("")
+        self.api_model_status_label.setObjectName("DescriptionLabel")
+        self.api_model_status_label.setWordWrap(True)
+        self.api_model_status_label.setContentsMargins(116, 0, 0, 8)
+        api_layout.addWidget(self.api_model_status_label)
+        
+        # API URL（仅 BYOK 时显示）
+        self.api_url_row = QWidget()
+        url_row_layout = QHBoxLayout(self.api_url_row)
+        url_row_layout.setContentsMargins(0, 0, 0, 0)
+        url_row_layout.setSpacing(0)
+        
         self.api_url_input = QLineEdit()
         self.api_url_input.setObjectName("PathLineEdit")
-        self.api_url_input.setPlaceholderText("https://api.openai.com/v1/chat/completions")
-        self._add_row_to_layout(api_layout, "API URL", self.api_url_input, "API服务地址")
+        self.api_url_input.setPlaceholderText("https://api.example.com/v1/chat/completions")
+        url_row_layout.addWidget(self.api_url_input)
         
-        # 模型名称（下拉框 + 获取模型按钮）
-        self.api_model_row, self.api_model_combo = self.create_api_model_row()
-        self._add_row_to_layout(api_layout, "模型名称", self.api_model_row, "选择或输入使用的模型")
+        self._add_row_to_layout(api_layout, "API URL", self.api_url_row, "自定义 API 服务地址")
         
         self.content_layout.addWidget(self.api_widget)
         
@@ -162,22 +166,19 @@ class AIAssistantSection(SettingsSection):
         ollama_label.setObjectName("SubSectionLabel")
         ollama_layout.addWidget(ollama_label)
         
-        # Ollama服务地址
-        self.ollama_url_row, self.ollama_url_input = self.create_ollama_url_row()
-        self._add_row_to_layout(ollama_layout, "服务地址", self.ollama_url_row, "Ollama本地服务地址")
+        # Ollama 服务地址（硬编码，只显示不可编辑）
+        ollama_url_row = QWidget()
+        url_row_layout = QHBoxLayout(ollama_url_row)
+        url_row_layout.setContentsMargins(0, 0, 0, 0)
+        url_row_layout.setSpacing(0)
         
-        # Ollama模型选择
-        self.ollama_model_combo = QComboBox()
-        self.ollama_model_combo.setObjectName("SettingComboBox")
-        self.ollama_model_combo.setPlaceholderText("扫描中...")
-        self.ollama_model_combo.setFixedWidth(220)
-        self.ollama_model_combo.view().window().setWindowFlags(
-            Qt.WindowType.Popup | 
-            Qt.WindowType.FramelessWindowHint | 
-            Qt.WindowType.NoDropShadowWindowHint
-        )
-        self.ollama_model_combo.view().window().setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
-        self._add_row_to_layout(ollama_layout, "选择模型", self.ollama_model_combo, "从Ollama中选择可用模型")
+        ollama_url_label = QLabel("http://localhost:11434")
+        ollama_url_label.setObjectName("DescriptionLabel")
+        ollama_url_label.setStyleSheet("color: rgba(255, 255, 255, 0.6); font-size: 13px;")
+        url_row_layout.addWidget(ollama_url_label)
+        url_row_layout.addStretch()
+        
+        self._add_row_to_layout(ollama_layout, "服务地址", ollama_url_row, "Ollama 本地服务地址（固定）")
         
         # Ollama状态标签
         self.ollama_status_label = QLabel("")
@@ -185,6 +186,21 @@ class AIAssistantSection(SettingsSection):
         self.ollama_status_label.setWordWrap(True)
         self.ollama_status_label.setContentsMargins(116, 0, 0, 0)
         ollama_layout.addWidget(self.ollama_status_label)
+        
+        # 测试连接按钮行
+        test_row = QWidget()
+        test_layout = QHBoxLayout(test_row)
+        test_layout.setContentsMargins(0, 0, 0, 0)
+        test_layout.setSpacing(8)
+        
+        test_btn = QPushButton("测试连接")
+        test_btn.setObjectName("BrowseButton")
+        test_btn.setFixedWidth(80)
+        test_btn.clicked.connect(self._test_ollama_connection)
+        test_layout.addWidget(test_btn)
+        test_layout.addStretch()
+        
+        self._add_row_to_layout(ollama_layout, "", test_row, "")
         
         # 启动 Ollama / 下载 Ollama 按钮行
         self.ollama_launch_row = self._create_ollama_launch_row()
@@ -206,20 +222,35 @@ class AIAssistantSection(SettingsSection):
         # download_row = self.create_ai_download_row()
         # self.add_setting_row("AI 模型", download_row, "下载或检查AI助手所需的语义搜索模型")
         
-        # 初始状态：显示API设置，隐藏Ollama设置
+        # 初始状态：显示API设置，隐藏Ollama设置和URL输入
         self.api_widget.setVisible(True)
         self.ollama_widget.setVisible(False)
+        self.api_url_row.setVisible(False)
         
-        # 添加保存配置按钮
+        # 添加保存配置按钮（蓝色样式）
         save_btn = QPushButton("💾 保存配置")
-        save_btn.setObjectName("BrowseButton")
+        save_btn.setObjectName("PrimarySaveButton")
         save_btn.setFixedWidth(150)
         save_btn.clicked.connect(self._on_save_config_clicked)
+        # 应用蓝色样式
+        save_btn.setStyleSheet("""
+            QPushButton#PrimarySaveButton {
+                background-color: #0078d4;
+                color: white;
+                border: none;
+                border-radius: 4px;
+                padding: 10px 20px;
+                font-weight: bold;
+                font-size: 13px;
+            }
+            QPushButton#PrimarySaveButton:hover {
+                background-color: #106ebe;
+            }
+            QPushButton#PrimarySaveButton:pressed {
+                background-color: #005a9e;
+            }
+        """)
         self.content_layout.addWidget(save_btn, alignment=Qt.AlignmentFlag.AlignCenter)
-        
-        # 切换 API URL 或 Key 时清空模型列表，提醒重新获取
-        self.api_key_input.textChanged.connect(self._on_api_credentials_changed)
-        self.api_url_input.textChanged.connect(self._on_api_credentials_changed)
         
         # 不再自动扫描Ollama模型，只在用户切换到Ollama或点击测试连接时才扫描
         # QTimer.singleShot(200, self._auto_refresh_ollama_models)  # 已移除
@@ -327,51 +358,27 @@ class AIAssistantSection(SettingsSection):
         webbrowser.open("https://openai-hk.com/?i=2789")
     
     def create_api_model_row(self):
-        """创建API模型选择行（可编辑下拉框 + 获取模型按钮）"""
+        """创建API模型输入行（简单的输入框）"""
         container = QWidget()
         layout = QHBoxLayout(container)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(8)
         
-        # 只读下拉框（只能从获取到的模型列表中选择）
-        model_combo = QComboBox()
-        model_combo.setObjectName("SettingComboBox")
-        model_combo.setPlaceholderText("请先获取模型列表")
-        model_combo.setMinimumWidth(300)
-        model_combo.setMaxVisibleItems(15)
-        model_combo.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToContents)
-        model_combo.view().window().setWindowFlags(
-            Qt.WindowType.Popup |
-            Qt.WindowType.FramelessWindowHint |
-            Qt.WindowType.NoDropShadowWindowHint
-        )
-        model_combo.view().window().setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
-        layout.addWidget(model_combo)
+        # 模型名称输入框
+        model_input = QLineEdit()
+        model_input.setObjectName("PathLineEdit")
+        model_input.setPlaceholderText("例如: gpt-4o-mini")
+        model_input.setMinimumWidth(300)
+        layout.addWidget(model_input)
         
-        # 获取模型列表按钮
-        fetch_btn = QPushButton("获取模型列表")
-        fetch_btn.setObjectName("BrowseButton")
-        fetch_btn.setFixedWidth(110)
-        fetch_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        fetch_btn.clicked.connect(self._fetch_api_models)
-        self._fetch_models_btn = fetch_btn
-        layout.addWidget(fetch_btn)
-        
-        # 验证模型按钮
-        validate_btn = QPushButton("验证模型")
-        validate_btn.setObjectName("BrowseButton")
-        validate_btn.setFixedWidth(90)
-        validate_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        validate_btn.clicked.connect(self._validate_api_model)
-        self._validate_model_btn = validate_btn
-        layout.addWidget(validate_btn)
-        
-        # 状态标签
+        # 状态标签（用于显示验证结果）
         self.api_model_status_label = QLabel("")
         self.api_model_status_label.setObjectName("DescriptionLabel")
         layout.addWidget(self.api_model_status_label)
         
-        return container, model_combo
+        layout.addStretch()
+        
+        return container, model_input
     
     def _fetch_api_models(self):
         """获取API支持的模型列表（异步）"""
@@ -445,12 +452,8 @@ class AIAssistantSection(SettingsSection):
             self.api_model_combo.setCurrentIndex(0)
     
     def _get_selected_model_id(self) -> str:
-        """获取当前选中的完整模型ID"""
-        data = self.api_model_combo.currentData()
-        if data:
-            return data
-        # fallback：如果没有 userData，直接返回显示文本
-        return self.api_model_combo.currentText()
+        """获取当前输入的模型名称"""
+        return self.api_model_input.text().strip()
     
     def _update_api_models_ui(self, models):
         """更新API模型下拉框（主线程）"""
@@ -575,26 +578,6 @@ class AIAssistantSection(SettingsSection):
         else:
             self.api_model_status_label.setText(f"✗ {model} 不可用: {result['error']}")
     
-    def create_ollama_url_row(self):
-        """创建Ollama URL行"""
-        container = QWidget()
-        layout = QHBoxLayout(container)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(8)
-        
-        url_input = QLineEdit()
-        url_input.setObjectName("PathLineEdit")
-        url_input.setPlaceholderText("http://localhost:11434")
-        layout.addWidget(url_input, 1)
-        
-        test_btn = QPushButton("测试连接")
-        test_btn.setObjectName("BrowseButton")
-        test_btn.setFixedWidth(80)
-        test_btn.clicked.connect(self._test_ollama_connection)
-        layout.addWidget(test_btn)
-        
-        return container, url_input
-    
     def _create_ollama_launch_row(self):
         """创建 Ollama 启动/下载 按钮行"""
         container = QWidget()
@@ -674,7 +657,7 @@ class AIAssistantSection(SettingsSection):
         def check_and_launch():
             try:
                 import requests
-                ollama_url = self.ollama_url_input.text() or "http://localhost:11434"
+                ollama_url = "http://localhost:11434"  # 硬编码地址
                 session = requests.Session()
                 session.trust_env = False
                 session.proxies = {'http': None, 'https': None}
@@ -714,16 +697,14 @@ class AIAssistantSection(SettingsSection):
                                     pass
                                 # 不 return，继续走下面的启动逻辑
                             else:
-                                self._ollama_scan_status.emit("✓ Ollama 已在运行")
+                                self.ollama_status_label.setText("✓ Ollama 已在运行")
                                 self._ollama_launch_status_signal("✓ Ollama 已在运行（GUI 模式）")
                                 self._ollama_launch_btn_enable(True)
-                                self._ollama_models_fetched_trigger()
                                 return
                         else:
-                            self._ollama_scan_status.emit("✓ Ollama 已在运行")
+                            self.ollama_status_label.setText("✓ Ollama 已在运行")
                             self._ollama_launch_status_signal("✓ Ollama 已在运行")
                             self._ollama_launch_btn_enable(True)
-                            self._ollama_models_fetched_trigger()
                             return
                 except Exception:
                     pass
@@ -775,8 +756,6 @@ class AIAssistantSection(SettingsSection):
                         if resp.status_code == 200:
                             self._ollama_launch_status_signal(f"✓ Ollama 启动成功")
                             self._ollama_launch_btn_enable(True)
-                            # 自动扫描模型
-                            self._ollama_models_fetched_trigger()
                             return
                     except Exception:
                         continue
@@ -809,12 +788,6 @@ class AIAssistantSection(SettingsSection):
             Q_ARG(bool, enabled)
         )
     
-    def _ollama_models_fetched_trigger(self):
-        """从后台线程触发模型扫描"""
-        # _auto_refresh_ollama_models 内部会开新线程，这里直接调用
-        # bool 标志的读写在 GIL 下是安全的
-        self._auto_refresh_ollama_models()
-    
     def create_ai_download_row(self):
         """创建AI资源下载行"""
         container = QWidget()
@@ -845,16 +818,55 @@ class AIAssistantSection(SettingsSection):
     def _on_provider_changed(self, index):
         """供应商切换"""
         provider = self.provider_combo.currentData()
-        print(f"[Ollama] _on_provider_changed: provider={provider}")
-        self.api_widget.setVisible(provider == "api")
-        self.ollama_widget.setVisible(provider == "ollama")
+        print(f"[Provider] _on_provider_changed: provider={provider}")
         
-        # 切换到Ollama时自动扫描模型
-        if provider == "ollama":
-            print("[Ollama] 用户切换到 Ollama，触发自动扫描")
-            QTimer.singleShot(100, self._auto_refresh_ollama_models)
+        # 供应商到 URL 和默认模型的映射
+        provider_configs = {
+            "openai": {
+                "url": "https://api.openai.com/v1/chat/completions",
+                "model": "gpt-4o-mini"
+            },
+            "gemini": {
+                "url": "https://generativelanguage.googleapis.com/v1beta/chat/completions",
+                "model": "gemini-2.0-flash-exp"
+            },
+            "deepseek": {
+                "url": "https://api.deepseek.com/v1/chat/completions",
+                "model": "deepseek-chat"
+            },
+            "claude": {
+                "url": "https://api.anthropic.com/v1/messages",
+                "model": "claude-3-5-sonnet-20241022"
+            },
+            "ollama": {
+                "url": "http://localhost:11434/api/chat",
+                "model": "llama3"
+            },
+            "byok": {
+                "url": "",
+                "model": "gpt-3.5-turbo"
+            }
+        }
         
-        logger.info(f"LLM供应商切换到: {provider}")
+        # 根据供应商显示/隐藏相应的设置区域
+        is_ollama = (provider == "ollama")
+        is_byok = (provider == "byok")
+        is_api = not is_ollama
+        
+        self.api_widget.setVisible(is_api)
+        self.ollama_widget.setVisible(is_ollama)
+        self.api_url_row.setVisible(is_byok)
+        
+        # 如果不是加载配置状态，则自动设置 URL
+        if not self._loading_config:
+            config = provider_configs.get(provider, {})
+            
+            # 设置 API URL（仅非 BYOK 时）
+            if not is_byok and not is_ollama:
+                url = config.get("url", "")
+                self.api_url_input.setText(url)
+        
+        logger.info(f"供应商切换到: {provider}")
     
     def _load_config(self):
         """加载配置"""
@@ -873,36 +885,55 @@ class AIAssistantSection(SettingsSection):
             )
             config = config_manager.get_module_config()
             
-            # 加载供应商
-            provider = config.get("llm_provider", "api")
-            logger.info(f"[配置加载] 当前供应商: {provider}")
-            index = 0 if provider == "api" else 1
-            self.provider_combo.setCurrentIndex(index)
+            # 优先使用 provider_type 字段（新版本保存的）
+            provider = config.get("provider_type", "")
             
-            # 加载API设置
-            api_settings = config.get("api_settings", {})
+            # 如果没有 provider_type，则根据 llm_provider 和 URL 判断（兼容旧版本）
+            if not provider:
+                llm_provider = config.get("llm_provider", "api")
+                
+                # 加载API设置
+                api_settings = config.get("api_settings", {})
+                api_url = api_settings.get("api_url", "") or "https://api.openai.com/v1/chat/completions"
+                
+                # 根据 llm_provider 和 URL 判断供应商
+                if llm_provider == "ollama":
+                    provider = "ollama"
+                else:
+                    # API 供应商，根据 URL 判断具体类型
+                    provider = "byok"  # 默认为自定义
+                    if "openai.com" in api_url:
+                        provider = "openai"
+                    elif "generativelanguage.googleapis.com" in api_url or "gemini" in api_url.lower():
+                        provider = "gemini"
+                    elif "deepseek.com" in api_url:
+                        provider = "deepseek"
+                    elif "anthropic.com" in api_url or "claude" in api_url.lower():
+                        provider = "claude"
+            else:
+                # 有 provider_type，直接使用
+                api_settings = config.get("api_settings", {})
+                api_url = api_settings.get("api_url", "") or "https://api.openai.com/v1/chat/completions"
+            
+            logger.info(f"[配置加载] provider_type={config.get('provider_type', '无')}, 最终供应商={provider}, URL={api_url}")
+            
+            # 设置供应商下拉框
+            for i in range(self.provider_combo.count()):
+                if self.provider_combo.itemData(i) == provider:
+                    self.provider_combo.setCurrentIndex(i)
+                    logger.info(f"[配置加载] 已设置供应商下拉框为: {provider}")
+                    break
+            
+            # 加载 API Key 和 URL
             self.api_key_input.setText(api_settings.get("api_key", ""))
-            self.api_url_input.setText(api_settings.get("api_url", "") or "https://api.openai-hk.com/v1/chat/completions")
-            # 加载已保存的模型名称
-            saved_model = api_settings.get("default_model", "") or "gemini-2.5-flash"
-            self.api_model_combo.clear()
-            self.api_model_combo.addItem(saved_model)
-            self.api_model_combo.setCurrentIndex(0)
+            self.api_url_input.setText(api_url)
             
-            # 尝试从缓存加载完整模型列表
-            QTimer.singleShot(200, self._load_cached_models)
+            # API 模型在主窗口切换，这里不需要加载
             
-            # 加载Ollama设置
-            ollama_settings = config.get("ollama_settings", {})
-            self.ollama_url_input.setText(ollama_settings.get("base_url", "") or "http://localhost:11434")
+            # 尝试从缓存加载完整模型列表（已移除，不再需要）
             
-            # 保存要设置的模型名称（等待模型列表加载后再设置）
-            self._pending_ollama_model = ollama_settings.get("default_model", "")
-            logger.info(f"[配置加载] Ollama模型配置: {self._pending_ollama_model}")
-            
-            # 只在当前供应商是Ollama时才自动扫描模型
-            if provider == "ollama":
-                QTimer.singleShot(300, self._auto_refresh_ollama_models)
+            # 加载Ollama设置（地址硬编码，不需要加载）
+            # Ollama 模型在主窗口切换，这里不需要加载模型列表
             
             logger.info("AI助手配置加载完成")
         except Exception as e:
@@ -912,10 +943,102 @@ class AIAssistantSection(SettingsSection):
     
     def _on_save_config_clicked(self):
         """保存配置按钮点击"""
-        self._save_config()
-        # 显示保存成功提示
-        from modules.asset_manager.ui.message_dialog import MessageDialog
-        MessageDialog("保存成功", "AI 助手配置已保存", "success", parent=self).exec()
+        # 获取当前供应商
+        provider = self.provider_combo.currentData()
+        
+        # 如果是 API 供应商（非 Ollama），先验证 API Key
+        if provider != "ollama":
+            api_key = self.api_key_input.text().strip()
+            api_url = self.api_url_input.text().strip()
+            
+            if not api_key:
+                self._show_api_key_error("请输入 API Key")
+                return
+            
+            if not api_url:
+                self._show_api_key_error("请输入 API URL")
+                return
+            
+            # 异步验证 API Key
+            self._validate_and_save_config(api_key, api_url)
+        else:
+            # Ollama 不需要验证，直接保存
+            success = self._save_config()
+            if success:
+                from modules.asset_manager.ui.message_dialog import MessageDialog
+                MessageDialog("保存成功", "AI 助手配置已保存", "success", parent=self).exec()
+    
+    def _show_api_key_error(self, message: str):
+        """显示 API Key 错误提示"""
+        # 设置输入框为红色边框（保持密码输入框的背景透明）
+        self.api_key_input.setStyleSheet("""
+            QLineEdit {
+                border: 2px solid #e74c3c;
+                border-radius: 4px;
+                padding: 6px;
+            }
+        """)
+        # 显示错误消息
+        self.api_model_status_label.setText(f"❌ {message}")
+        self.api_model_status_label.setStyleSheet("color: #e74c3c;")
+        
+        # 3秒后恢复正常样式
+        from PyQt6.QtCore import QTimer
+        QTimer.singleShot(3000, self._reset_api_key_style)
+    
+    def _reset_api_key_style(self):
+        """恢复 API Key 输入框的正常样式"""
+        self.api_key_input.setStyleSheet("")
+        self.api_model_status_label.setText("")
+        self.api_model_status_label.setStyleSheet("")
+    
+    def _validate_and_save_config(self, api_key: str, api_url: str):
+        """验证 API Key 并保存配置"""
+        from threading import Thread
+        
+        # 显示验证中状态
+        self.api_model_status_label.setText("🔄 正在验证 API Key...")
+        self.api_model_status_label.setStyleSheet("color: #3498db;")
+        
+        def validate_in_background():
+            try:
+                from modules.ai_assistant.clients.api_llm_client import ApiLLMClient
+                
+                # 使用简单的模型列表请求来验证 API Key
+                result = ApiLLMClient.validate_api_key(api_url, api_key, timeout=10)
+                
+                # 通过信号发送结果到主线程
+                self._api_key_validated.emit(result)
+                    
+            except Exception as e:
+                error_msg = str(e)
+                logger.error(f"API Key 验证失败: {error_msg}")
+                self._api_key_validated.emit({'valid': False, 'error': f"验证失败: {error_msg}"})
+        
+        thread = Thread(target=validate_in_background, daemon=True)
+        thread.start()
+    
+    def _on_api_key_validation_result(self, result: dict):
+        """处理 API Key 验证结果（主线程）"""
+        if result.get("valid", False):
+            # 验证成功
+            self.api_model_status_label.setText("✅ 验证成功")
+            self.api_model_status_label.setStyleSheet("color: #27ae60;")
+            
+            # 保存配置
+            success = self._save_config()
+            
+            if success:
+                # 显示成功消息
+                from modules.asset_manager.ui.message_dialog import MessageDialog
+                MessageDialog("保存成功", "API Key 验证通过，配置已保存", "success", parent=self).exec()
+            
+            # 恢复状态
+            QTimer.singleShot(2000, self._reset_api_key_style)
+        else:
+            # 验证失败
+            error_msg = result.get("error", "API Key 无效")
+            self._show_api_key_error(f"验证失败: {error_msg}")
     
     def _save_config(self):
         """保存配置"""
@@ -936,144 +1059,96 @@ class AIAssistantSection(SettingsSection):
             
             # 更新配置
             provider = self.provider_combo.currentData()
-            config["llm_provider"] = provider
+            
+            # 将供应商映射为 AI 助手识别的类型
+            # 所有 API 供应商（openai, gemini, deepseek, claude, byok）都保存为 "api"
+            # 只有 ollama 保存为 "ollama"
+            if provider == "ollama":
+                config["llm_provider"] = "ollama"
+            else:
+                config["llm_provider"] = "api"
+            
+            # 保存具体的供应商类型（用于加载时准确恢复）
+            config["provider_type"] = provider
             
             # API设置
             if "api_settings" not in config:
                 config["api_settings"] = {}
-            config["api_settings"]["api_key"] = self.api_key_input.text()
-            config["api_settings"]["api_url"] = self.api_url_input.text()
-            config["api_settings"]["default_model"] = self._get_selected_model_id()
+            config["api_settings"]["api_key"] = self.api_key_input.text().strip()
+            config["api_settings"]["api_url"] = self.api_url_input.text().strip()
+            
+            # 根据供应商设置默认模型（如果配置中没有模型，使用供应商默认值）
+            provider_default_models = {
+                "openai": "gpt-4o-mini",
+                "gemini": "gemini-2.0-flash-exp",
+                "deepseek": "deepseek-chat",
+                "claude": "claude-3-5-sonnet-20241022",
+                "byok": config["api_settings"].get("default_model", "gpt-3.5-turbo")
+            }
+            
+            # 如果配置中已有模型，保留；否则使用供应商默认模型
+            if "default_model" not in config["api_settings"] or not config["api_settings"]["default_model"]:
+                config["api_settings"]["default_model"] = provider_default_models.get(provider, "gpt-4o-mini")
             
             # Ollama设置
             if "ollama_settings" not in config:
                 config["ollama_settings"] = {}
-            config["ollama_settings"]["base_url"] = self.ollama_url_input.text()
-            ollama_model = self.ollama_model_combo.currentText()
-            config["ollama_settings"]["default_model"] = ollama_model
+            # Ollama 地址硬编码
+            config["ollama_settings"]["base_url"] = "http://localhost:11434"
             
-            # 只在使用 Ollama 时才检查模型
-            if provider == "ollama":
-                if not ollama_model:
-                    logger.warning("⚠️ Ollama模型未选择，请先扫描并选择模型")
-                    self.ollama_status_label.setText("⚠️ 请先选择一个Ollama模型")
-                    from modules.asset_manager.ui.message_dialog import MessageDialog
-                    MessageDialog("配置不完整", "请先扫描并选择一个 Ollama 模型", "warning", parent=self).exec()
-                    return
+            # Ollama 模型在主窗口切换，这里不需要保存
+            # 保留配置中已有的 default_model（如果有的话）
+            
+            # Ollama 不需要额外验证，直接保存即可
             
             # 打印调试信息
-            logger.info(f"[配置保存] 供应商: {provider}")
-            if provider == "api":
+            saved_provider = config["llm_provider"]
+            logger.info(f"[配置保存] 供应商: {saved_provider} (UI选择: {provider})")
+            if saved_provider == "api":
                 logger.info(f"[配置保存] API URL: {config['api_settings'].get('api_url')}")
                 logger.info(f"[配置保存] API 模型: {config['api_settings'].get('default_model')}")
-            elif provider == "ollama":
+            elif saved_provider == "ollama":
                 logger.info(f"[配置保存] Ollama URL: {config['ollama_settings'].get('base_url')}")
                 logger.info(f"[配置保存] Ollama 模型: {config['ollama_settings'].get('default_model')}")
             
-            # 保存（使用快速保存，避免频繁备份）
+            # 保存配置
             success = config_manager.save_user_config_fast(config)
             if success:
                 logger.info("✅ AI助手配置已保存成功")
-                # 清除主窗口的模型名称缓存，使标题栏同步更新
+                
+                # 获取主窗口引用
                 main_win = self.window()
+                logger.info(f"[配置保存] 主窗口引用: {main_win}, 类型: {type(main_win).__name__}")
+                
+                # 清除主窗口的模型名称缓存，使标题栏同步更新
                 if main_win and hasattr(main_win, '_cached_ai_model_name'):
                     del main_win._cached_ai_model_name
+                    logger.info("[配置保存] 已清除模型名称缓存")
+                
+                # 刷新主窗口标题栏的模型下拉框
+                if main_win and hasattr(main_win, '_load_ai_models'):
+                    logger.info("[配置保存] 准备刷新主窗口模型列表")
+                    # 使用 lambda 确保在正确的时机调用
+                    QTimer.singleShot(100, lambda: main_win._load_ai_models())
+                else:
+                    if not main_win:
+                        logger.warning("[配置保存] 无法获取主窗口引用")
+                    else:
+                        logger.warning(f"[配置保存] 主窗口没有 _load_ai_models 方法，可用方法: {[m for m in dir(main_win) if not m.startswith('_')][:10]}")
+                
+                return True
             else:
                 logger.error("❌ AI助手配置保存失败")
+                return False
         except Exception as e:
             logger.error(f"保存AI助手配置失败: {e}", exc_info=True)
-    
-    def _auto_refresh_ollama_models(self):
-        """自动刷新Ollama模型（异步，不阻塞UI）"""
-        from threading import Thread
-        
-        print("[Ollama] _auto_refresh_ollama_models 被调用")
-        # 提前设置标志，防止 _auto_save 在扫描完成前触发保存
-        self._refreshing_models = True
-        
-        def scan_in_background():
-            try:
-                self._ollama_scan_status.emit("正在扫描Ollama模型...")
-                
-                import requests
-                ollama_url = self.ollama_url_input.text() or "http://localhost:11434"
-                url = f"{ollama_url}/api/tags"
-                print(f"[Ollama] 开始扫描: {url}")
-                # 禁用代理，避免 localhost 请求被系统代理拦截
-                session = requests.Session()
-                session.trust_env = False
-                session.proxies = {'http': None, 'https': None}
-                response = session.get(url, timeout=5)
-                
-                print(f"[Ollama] 响应状态码: {response.status_code}")
-                if response.status_code == 200:
-                    data = response.json()
-                    models = data.get("models", [])
-                    print(f"[Ollama] 获取到 {len(models)} 个模型")
-                    self._ollama_models_fetched.emit(models)
-                else:
-                    print(f"[Ollama] 连接失败: HTTP {response.status_code}")
-                    self._ollama_scan_status.emit(f"✗ 连接失败 (HTTP {response.status_code})")
-            except Exception as e:
-                print(f"[Ollama] 扫描异常: {e}")
-                import traceback
-                traceback.print_exc()
-                self._ollama_scan_status.emit(f"✗ 连接失败: {str(e)}")
-            finally:
-                self._refreshing_models = False
-        
-        thread = Thread(target=scan_in_background, daemon=True)
-        thread.start()
-    
-    def _update_ollama_models_ui(self, models):
-        """更新Ollama模型UI（在主线程调用）"""
-        try:
-            print(f"[Ollama] _update_ollama_models_ui 被调用, {len(models)} 个模型")
-            # 在clear之前保存当前选中的模型
-            previous_selection = self.ollama_model_combo.currentText()
-            if previous_selection and not self._pending_ollama_model:
-                self._pending_ollama_model = previous_selection
-            
-            self.ollama_model_combo.clear()
-            
-            if models:
-                for model in models:
-                    model_name = model.get("name", "")
-                    if model_name:
-                        self.ollama_model_combo.addItem(model_name)
-                
-                # 清除placeholder
-                self.ollama_model_combo.setPlaceholderText("")
-                print(f"[Ollama] 已添加 {self.ollama_model_combo.count()} 个模型到下拉框")
-                
-                # 如果有pending的模型名称，设置它
-                if hasattr(self, '_pending_ollama_model') and self._pending_ollama_model:
-                    index = self.ollama_model_combo.findText(self._pending_ollama_model)
-                    if index >= 0:
-                        self.ollama_model_combo.setCurrentIndex(index)
-                        print(f"[Ollama] ✅ 已设置模型: {self._pending_ollama_model}")
-                    else:
-                        if self.ollama_model_combo.count() > 0:
-                            self.ollama_model_combo.setCurrentIndex(0)
-                            print(f"[Ollama] 未找到 {self._pending_ollama_model}，选择第一个: {self.ollama_model_combo.currentText()}")
-                            self._pending_ollama_model = self.ollama_model_combo.currentText()
-                elif self.ollama_model_combo.count() > 0:
-                    self.ollama_model_combo.setCurrentIndex(0)
-                    print(f"[Ollama] 默认选择第一个: {self.ollama_model_combo.currentText()}")
-                
-                self.ollama_status_label.setText(f"✓ 扫描成功，找到 {len(models)} 个模型")
-            else:
-                self.ollama_status_label.setText("⚠ 未找到可用模型")
-                self.ollama_model_combo.setPlaceholderText("未找到模型")
-        except Exception as e:
-            logger.error(f"更新Ollama模型UI失败: {e}", exc_info=True)
+            return False
     
     def _test_ollama_connection(self):
         """测试Ollama连接（异步）"""
-        ollama_url = self.ollama_url_input.text() or "http://localhost:11434"
+        ollama_url = "http://localhost:11434"  # 硬编码地址
         
         self.ollama_status_label.setText("正在测试连接...")
-        self.ollama_model_combo.setPlaceholderText("测试中...")
         
         # 使用线程避免阻塞UI
         def test_connection():
@@ -1090,14 +1165,12 @@ class AIAssistantSection(SettingsSection):
         def on_result(result):
             success, info = result
             if success:
-                self.ollama_status_label.setText("✓ 连接成功！正在扫描模型...")
-                QTimer.singleShot(100, self._auto_refresh_ollama_models)
+                self.ollama_status_label.setText("✓ 连接成功！Ollama 服务正常运行")
             else:
                 if isinstance(info, int):
                     self.ollama_status_label.setText(f"✗ 连接失败 (HTTP {info})")
                 else:
                     self.ollama_status_label.setText(f"✗ 连接失败: {info}")
-                self.ollama_model_combo.setPlaceholderText("连接失败")
         
         # 在后台线程执行
         from core.utils.thread_utils import get_thread_manager
@@ -1397,8 +1470,9 @@ class GeneralSection(SettingsSection):
                 else:
                     app_config["close_action_preference"] = preference
                 
-                config_service.save_module_config("app", app_config)
-                logger.debug("[设置] 保存关闭偏好: %s", preference)
+                # immediate=False: 仅更新内存，退出时统一保存
+                config_service.save_module_config("app", app_config, immediate=False)
+                logger.debug("[设置] 关闭偏好已更新到内存: %s", preference)
         except Exception as e:
             logger.warning("保存关闭行为失败: %s", e)
 

@@ -70,18 +70,29 @@ class AssetReader:
             
             # 生成摘要
             summary_parts = [
-                f"[ASSET] **资产库完整列表**（共 {len(assets)} 个资产）\n",
-                "⚠️ 以下是用户资产库中的所有真实资产，请严格基于此列表回答，不要添加或编造！\n"
+                f"[ASSET] **资产库概览**（共 {len(assets)} 个资产）\n",
+                "⚠️ 以下是用户资产库中的真实资产统计，请严格基于此列表回答！\n"
             ]
             
-            for category, cat_assets in categories.items():
+            # 先显示分类统计
+            summary_parts.append("**分类统计**:")
+            for category, cat_assets in sorted(categories.items()):
+                summary_parts.append(f"  - {category}: {len(cat_assets)} 个资产")
+            
+            # 然后每个分类列出最多 10 个资产
+            summary_parts.append("\n**资产列表**（每个分类最多显示 10 个）:")
+            for category, cat_assets in sorted(categories.items()):
                 summary_parts.append(f"\n**{category}** ({len(cat_assets)} 个):")
-                # 显示所有资产（不再限制为 5 个），确保 AI 看到完整列表
-                for asset in cat_assets:
+                # 最多显示 10 个
+                for asset in cat_assets[:10]:
                     # 从 Asset 对象获取属性
                     name = asset.name if hasattr(asset, 'name') else '未命名'
-                    asset_type = asset.asset_type.value if hasattr(asset, 'asset_type') else '未知类型'
-                    summary_parts.append(f"  - {name} ({asset_type})")
+                    package_type = asset.package_type.display_name if hasattr(asset, 'package_type') else '未知类型'
+                    summary_parts.append(f"  - {name} ({package_type})")
+                
+                # 如果超过 10 个，显示省略提示
+                if len(cat_assets) > 10:
+                    summary_parts.append(f"  ... 还有 {len(cat_assets) - 10} 个资产（可使用 search_assets 查看）")
             
             return "\n".join(summary_parts)
         
@@ -256,6 +267,67 @@ class AssetReader:
         except Exception as e:
             self.logger.error(f"获取分类列表失败: {e}", exc_info=True)
             return f"[ERROR] 获取分类列表时出错: {str(e)}"
+    
+    def recommend_assets(self, asset_names: list) -> dict:
+        """推荐资产（返回资产 ID 列表，供 UI 渲染卡片）
+        
+        Args:
+            asset_names: 资产名称列表
+            
+        Returns:
+            dict: 包含资产 ID 列表和描述的字典
+        """
+        if not self.asset_manager_logic:
+            return {
+                "success": False,
+                "message": "资产管理器未连接",
+                "asset_ids": []
+            }
+        
+        try:
+            assets = self.asset_manager_logic.get_all_assets()
+            asset_ids = []
+            found_names = []
+            not_found_names = []
+            
+            # 查找匹配的资产
+            for name in asset_names:
+                name_lower = name.lower().strip()
+                found = False
+                
+                for asset in assets:
+                    asset_name = asset.name.lower() if hasattr(asset, 'name') else ''
+                    if name_lower == asset_name or name_lower in asset_name:
+                        if hasattr(asset, 'id'):
+                            asset_ids.append(asset.id)
+                            found_names.append(asset.name)
+                            found = True
+                            break
+                
+                if not found:
+                    not_found_names.append(name)
+            
+            # 构建返回消息
+            message_parts = []
+            if found_names:
+                message_parts.append(f"✅ 找到 {len(found_names)} 个推荐资产")
+            if not_found_names:
+                message_parts.append(f"⚠️ 未找到: {', '.join(not_found_names)}")
+            
+            return {
+                "success": len(asset_ids) > 0,
+                "message": " | ".join(message_parts) if message_parts else "未找到任何资产",
+                "asset_ids": asset_ids,
+                "found_names": found_names
+            }
+        
+        except Exception as e:
+            self.logger.error(f"推荐资产失败: {e}", exc_info=True)
+            return {
+                "success": False,
+                "message": f"推荐资产时出错: {str(e)}",
+                "asset_ids": []
+            }
 
 
 

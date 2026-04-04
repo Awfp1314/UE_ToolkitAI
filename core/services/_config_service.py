@@ -17,10 +17,11 @@ class ConfigService:
     
     管理多个模块的 ConfigManager 实例，提供简化的配置访问接口
     
-    特点：
+    特点:
     - Level 1 服务，依赖 LogService 和 PathService
     - 管理多个模块的配置
     - 线程安全（ConfigManager 内部使用锁）
+    - 支持延迟保存模式（运行时只更新内存，退出时统一保存）
     """
     
     def __init__(self):
@@ -33,6 +34,9 @@ class ConfigService:
 
         # 配置管理器注册表：{module_name: ConfigManager}
         self._config_managers: Dict[str, ConfigManager] = {}
+        
+        # 脏标记：记录哪些模块的配置被修改但未保存
+        self._dirty_configs: Dict[str, Dict[str, Any]] = {}
 
         # 获取 logger（通过内部 getter 函数）
         log_service_instance = _get_log_service()
@@ -122,7 +126,7 @@ class ConfigService:
             force_reload: 是否强制重新加载
             
         Returns:
-            模块配置字典
+            模块配置字典（如果有未保存的脏配置，返回脏配置）
             
         Example:
             config = config_service.get_module_config(
@@ -131,13 +135,20 @@ class ConfigService:
             )
         """
         manager = self._get_or_create_manager(module_name, template_path)
+        
+        # 如果有脏配置，返回脏配置（最新的内存状态）
+        if module_name in self._dirty_configs:
+            self._logger.debug(f"返回脏配置（内存中的最新状态）: {module_name}")
+            return self._dirty_configs[module_name]
+        
         return manager.get_module_config(force_reload=force_reload)
     
     def save_module_config(
         self,
         module_name: str,
         config: Dict[str, Any],
-        backup_reason: str = "manual_save"
+        backup_reason: str = "manual_save",
+        immediate: bool = False
     ) -> bool:
         """保存模块配置
         
@@ -145,22 +156,64 @@ class ConfigService:
             module_name: 模块名称
             config: 配置字典
             backup_reason: 备份原因
+            immediate: 是否立即保存（True=立即写入磁盘，False=仅更新内存，退出时统一保存）
             
         Returns:
             是否保存成功
             
         Example:
-            success = config_service.save_module_config(
-                "asset_manager",
-                {"max_items": 200}
-            )
+            # 运行时更新（仅内存）
+            config_service.save_module_config("app", {"key": "value"}, immediate=False)
+            
+            # 退出时保存（写入磁盘）
+            config_service.save_module_config("app", {"key": "value"}, immediate=True)
         """
         if module_name not in self._config_managers:
             self._logger.error(f"模块 {module_name} 的 ConfigManager 不存在")
             return False
         
         manager = self._config_managers[module_name]
-        return manager.save_user_config(config, backup_reason=backup_reason)
+        
+        if immediate:
+            # 立即保存到磁盘
+            success = manager.save_user_config(config, backup_reason=backup_reason)
+            # 清除脏标记
+            if module_name in self._dirty_configs:
+                del self._dirty_configs[module_name]
+            return success
+        else:
+            # 仅更新内存，标记为脏
+            self._dirty_configs[module_name] = config
+            self._logger.debug(f"配置已更新到内存（延迟保存）: {module_name}")
+            return True
+    
+    def flush_all_configs(self, backup_reason: str = "exit_save") -> bool:
+        """保存所有脏配置到磁盘（退出时调用）
+        
+        Args:
+            backup_reason: 备份原因
+            
+        Returns:
+            是否全部保存成功
+        """
+        if not self._dirty_configs:
+            self._logger.debug("没有需要保存的配置")
+            return True
+        
+        all_success = True
+        for module_name, config in self._dirty_configs.items():
+            if module_name in self._config_managers:
+                manager = self._config_managers[module_name]
+                success = manager.save_user_config(config, backup_reason=backup_reason)
+                if success:
+                    self._logger.info(f"✅ 退出时保存配置: {module_name}")
+                else:
+                    self._logger.error(f"❌ 保存配置失败: {module_name}")
+                    all_success = False
+        
+        # 清除所有脏标记
+        self._dirty_configs.clear()
+        return all_success
     
     def update_config_value(
         self,

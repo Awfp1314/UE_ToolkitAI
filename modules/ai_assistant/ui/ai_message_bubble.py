@@ -4,9 +4,10 @@ AI回复消息气泡组件 - ChatGPT风格
 支持Markdown渲染、代码高亮和流式输出
 """
 
-from PyQt6.QtWidgets import QFrame, QVBoxLayout, QHBoxLayout, QTextBrowser, QWidget, QPushButton, QSizePolicy, QApplication
+from PyQt6.QtWidgets import QFrame, QVBoxLayout, QHBoxLayout, QTextBrowser, QWidget, QPushButton, QSizePolicy, QApplication, QLabel
 from PyQt6.QtCore import Qt, QSize, QTimer, pyqtSignal
 from PyQt6.QtGui import QPainter, QColor, QPen, QIcon, QPixmap, QPainterPath
+import re
 
 
 class _TransparentTextBrowser(QTextBrowser):
@@ -140,6 +141,9 @@ class AIMessageBubble(QFrame):
         self._render_timer.timeout.connect(self._do_render)
         self._render_timer.setSingleShot(True)
         
+        # 资产管理器逻辑引用（用于获取资产信息）
+        self.asset_manager_logic = None
+        
         self.init_ui()
     
     def init_ui(self):
@@ -224,6 +228,16 @@ class AIMessageBubble(QFrame):
         
         main_layout.addWidget(self.action_buttons_container)
         self.action_buttons_container.hide()  # 初始隐藏
+        
+        # 添加资产卡片容器（用于显示推荐的资产）
+        self.asset_cards_container = QWidget()
+        self.asset_cards_container.setObjectName("AssetCardsContainer")
+        self.asset_cards_layout = QHBoxLayout(self.asset_cards_container)
+        self.asset_cards_layout.setContentsMargins(0, 8, 0, 0)
+        self.asset_cards_layout.setSpacing(12)
+        self.asset_cards_layout.setAlignment(Qt.AlignmentFlag.AlignLeft)
+        main_layout.addWidget(self.asset_cards_container)
+        self.asset_cards_container.hide()  # 初始隐藏
         
         # 初始化显示
         if self.message:
@@ -310,8 +324,11 @@ class AIMessageBubble(QFrame):
     
     def update_content(self):
         """更新显示内容"""
+        # 解析并移除 [RECOMMEND_ASSETS] 标签
+        display_message, asset_ids = self._parse_recommend_assets(self.message)
+        
         # 生成HTML内容
-        html_body = markdown_to_html(self.message, self.theme)
+        html_body = markdown_to_html(display_message, self.theme)
         
         # 根据主题选择CSS
         if self.theme == "dark":
@@ -336,6 +353,12 @@ class AIMessageBubble(QFrame):
         self.text_browser.setHtml(full_html)
         self.text_browser.viewport().setCursor(Qt.CursorShape.IBeamCursor)
         self.adjust_height()
+        
+        # 显示资产卡片（如果有）
+        if asset_ids:
+            self._display_asset_cards(asset_ids)
+        else:
+            self.asset_cards_container.hide()
     
     def adjust_height(self):
         """自动调整高度（简化版，和旧项目一致）"""
@@ -739,3 +762,135 @@ class AIMessageBubble(QFrame):
         """显示重新生成按钮"""
         if hasattr(self, 'regenerate_button') and self.regenerate_button:
             self.regenerate_button.show()
+    
+    def set_asset_manager_logic(self, logic):
+        """设置资产管理器逻辑引用
+        
+        Args:
+            logic: asset_manager 模块的逻辑层实例
+        """
+        self.asset_manager_logic = logic
+    
+    def _parse_recommend_assets(self, message: str) -> tuple:
+        """解析消息中的 [RECOMMEND_ASSETS] 标签
+        
+        Args:
+            message: 原始消息文本
+            
+        Returns:
+            tuple: (清理后的消息, 资产ID列表)
+        """
+        # 匹配 [RECOMMEND_ASSETS]reason|asset_id1,asset_id2[/RECOMMEND_ASSETS]
+        pattern = r'\[RECOMMEND_ASSETS\](.*?)\|(.*?)\[/RECOMMEND_ASSETS\]'
+        match = re.search(pattern, message)
+        
+        if match:
+            reason = match.group(1)
+            asset_ids_str = match.group(2)
+            asset_ids = [aid.strip() for aid in asset_ids_str.split(',') if aid.strip()]
+            
+            # 移除标签，保留推荐理由
+            cleaned_message = re.sub(pattern, f'\n\n💡 {reason}\n', message)
+            return cleaned_message, asset_ids
+        
+        return message, []
+    
+    def _display_asset_cards(self, asset_ids: list):
+        """显示资产卡片
+        
+        Args:
+            asset_ids: 资产ID列表
+        """
+        # 清空现有卡片
+        while self.asset_cards_layout.count():
+            item = self.asset_cards_layout.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+        
+        if not self.asset_manager_logic:
+            # 无法获取资产信息，显示提示
+            label = QLabel("⚠️ 无法加载资产卡片（资产管理器未连接）")
+            label.setObjectName("AssetCardError")
+            self.asset_cards_layout.addWidget(label)
+            self.asset_cards_container.show()
+            return
+        
+        # 获取资产信息并创建卡片
+        from .simplified_asset_card import SimplifiedAssetCard
+        
+        try:
+            all_assets = self.asset_manager_logic.get_all_assets()
+            displayed_count = 0
+            
+            for asset_id in asset_ids:
+                # 查找资产
+                asset = None
+                for a in all_assets:
+                    if hasattr(a, 'id') and a.id == asset_id:
+                        asset = a
+                        break
+                
+                if not asset:
+                    continue
+                
+                # 创建简化卡片
+                card = SimplifiedAssetCard(
+                    name=asset.name if hasattr(asset, 'name') else '未命名',
+                    category=asset.category if hasattr(asset, 'category') else '未分类',
+                    size=asset._format_size() if hasattr(asset, '_format_size') else '未知',
+                    thumbnail_path=str(asset.thumbnail_path) if hasattr(asset, 'thumbnail_path') and asset.thumbnail_path else None,
+                    theme=self.theme,
+                    parent=self.asset_cards_container
+                )
+                
+                # 连接信号（预览和导入）
+                card.preview_clicked.connect(self._on_asset_preview)
+                card.import_clicked.connect(self._on_asset_import)
+                
+                self.asset_cards_layout.addWidget(card)
+                displayed_count += 1
+                
+                # 最多显示5个卡片
+                if displayed_count >= 5:
+                    break
+            
+            if displayed_count > 0:
+                self.asset_cards_layout.addStretch()
+                self.asset_cards_container.show()
+            else:
+                self.asset_cards_container.hide()
+        
+        except Exception as e:
+            # 显示错误提示
+            label = QLabel(f"⚠️ 加载资产卡片失败: {str(e)}")
+            label.setObjectName("AssetCardError")
+            self.asset_cards_layout.addWidget(label)
+            self.asset_cards_container.show()
+    
+    def _on_asset_preview(self, asset_name: str):
+        """处理资产预览请求
+        
+        Args:
+            asset_name: 资产名称
+        """
+        # 向上查找父组件，触发预览
+        parent = self.parent()
+        while parent:
+            if hasattr(parent, '_on_preview_asset'):
+                parent._on_preview_asset(asset_name)
+                break
+            parent = parent.parent()
+    
+    def _on_asset_import(self, asset_name: str):
+        """处理资产导入请求
+        
+        Args:
+            asset_name: 资产名称
+        """
+        # 向上查找父组件，触发导入
+        parent = self.parent()
+        while parent:
+            if hasattr(parent, '_on_import_asset'):
+                parent._on_import_asset(asset_name)
+                break
+            parent = parent.parent()

@@ -338,14 +338,15 @@ class AssetController:
             return default
 
     def save_ui_state(self, key: str, value) -> None:
-        """保存指定字段到 app_config.ui_states.asset_manager"""
+        """保存指定字段到 app_config.ui_states.asset_manager（延迟保存）"""
         try:
             from core.services import config_service
             app_config = config_service.get_module_config("app") or {}
             ui_states = app_config.setdefault("ui_states", {})
             am_state = ui_states.setdefault("asset_manager", {})
             am_state[key] = value
-            config_service.save_module_config("app", app_config)
+            # immediate=False: 仅更新内存，退出时统一保存
+            config_service.save_module_config("app", app_config, immediate=False)
         except Exception as e:
             logger.warning(f"保存 ui_state[{key}] 失败: {e}")
 
@@ -377,7 +378,7 @@ class AssetController:
         return "detailed"
 
     def save_view_mode(self, view_mode: str) -> None:
-        """保存视图模式到 app_config.ui_states.asset_manager
+        """保存视图模式到 app_config.ui_states.asset_manager（延迟保存）
         
         Args:
             view_mode: 视图模式 ("detailed" 或 "compact")
@@ -388,12 +389,13 @@ class AssetController:
             ui_states = app_config.setdefault("ui_states", {})
             am_state = ui_states.setdefault("asset_manager", {})
             am_state["view_mode"] = view_mode
-            config_service.save_module_config("app", app_config)
-            logger.debug(f"视图模式已保存到 app_config.ui_states: {view_mode}")
+            # immediate=False: 仅更新内存，退出时统一保存
+            config_service.save_module_config("app", app_config, immediate=False)
+            logger.debug(f"视图模式已更新到内存: {view_mode}")
         except Exception as e:
             logger.warning(f"保存视图模式失败: {e}")
 
-    def add_asset_sync(self, asset_info: dict) -> bool:
+    def add_asset_sync(self, asset_info: dict, progress_callback=None) -> bool:
         """同步添加资产（用于批量导入）
         
         Args:
@@ -408,6 +410,7 @@ class AssetController:
                 - archive_content_path: 压缩包内容路径（可选）
                 - original_source_path: 原始源路径（可选）
                 - archive_temp_dir: 临时解压目录（可选）
+            progress_callback: 进度回调函数 (current, total, message)
                 
         Returns:
             bool: 成功返回 True，失败返回 False
@@ -437,7 +440,7 @@ class AssetController:
                 else:
                     original_filename = Path(original_source).name
             
-            # 调用 logic 层的异步添加方法（支持 original_filename 参数）
+            # 调用 logic 层的异步添加方法（支持 original_filename 参数和进度回调）
             result = self.logic.add_asset_async(
                 asset_path=add_path,
                 asset_type=asset_info['type'],
@@ -449,7 +452,7 @@ class AssetController:
                 package_type=asset_info.get('package_type', PackageType.CONTENT),
                 plugin_folder_name=asset_info.get('plugin_folder_name', ''),
                 original_filename=original_filename,
-                progress_callback=None
+                progress_callback=progress_callback  # 传递进度回调
             )
             
             if result:

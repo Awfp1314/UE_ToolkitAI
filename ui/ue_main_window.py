@@ -58,6 +58,8 @@ class UEMainWindow(QMainWindow):
     theme_changed = pyqtSignal(str)  # 参数: theme_name ('dark' 或 'light')
     # UE 连接状态信号（后台线程 → 主线程）
     _ue_connection_changed = pyqtSignal(bool)
+    # Ollama 模型加载完成信号
+    _ollama_models_loaded = pyqtSignal(list, dict)  # (models, config)
 
     def __init__(self, module_provider=None):
         super().__init__()
@@ -76,6 +78,12 @@ class UEMainWindow(QMainWindow):
         
         # 系统托盘
         self.system_tray = None
+        
+        # 连接 Ollama 模型加载信号
+        self._ollama_models_loaded.connect(self._on_ollama_models_loaded)
+        
+        # 当前模块索引（退出时保存）
+        self._current_module_index = 0
         
         # 模块名称和键（用于懒加载，避免启动时一次性创建所有模块UI）
         self.module_names = ["我的工程", "资产库", "AI 助手", "工程配置", "作者推荐"]
@@ -98,8 +106,7 @@ class UEMainWindow(QMainWindow):
         # 初始化悬浮窗（根据配置决定是否显示）
         self._init_floating_widget()
         
-        # 启动授权状态预加载（异步，不阻塞UI）
-        self._start_license_preload()
+        # ⚡ 移除授权状态预加载，所有模块免费开放
 
     def init_ui(self):
         """初始化UI"""
@@ -278,8 +285,20 @@ class UEMainWindow(QMainWindow):
             self.content_stack.setCurrentIndex(initial_index)
         for i, btn in enumerate(self.nav_buttons):
             btn.setChecked(i == initial_index)
+        
+        # 更新副标题和模型下拉框
         if hasattr(self, "module_names") and 0 <= initial_index < len(self.module_names):
-            self.subtitle_label.setText(self.module_names[initial_index])
+            module_name = self.module_names[initial_index]
+            self.subtitle_label.setText(module_name)
+            
+            # 如果初始模块是 AI 助手，显示模型下拉框
+            if module_name == "AI 助手" and hasattr(self, 'ai_model_combo'):
+                self.ai_model_combo.setVisible(True)
+                # 延迟加载模型列表
+                from PyQt6.QtCore import QTimer
+                QTimer.singleShot(100, self._load_ai_models)
+            elif hasattr(self, 'ai_model_combo'):
+                self.ai_model_combo.setVisible(False)
 
         # 如果初始模块是资产库，触发异步加载资产
         initial_key = self.module_keys[initial_index] if hasattr(self, "module_keys") else ""
@@ -427,95 +446,9 @@ class UEMainWindow(QMainWindow):
         self._start_ue_connection_check()
 
     def _create_license_status_widget(self, parent_layout):
-        """在标题栏创建授权状态（仅试用时显示）"""
-        from core.security.license_manager import _DEV_MODE
-
-        # 容器：胶囊形状，包含状态文字 + 升级按钮
-        self._license_container = QWidget()
-        self._license_container.setObjectName("LicenseCapsule")
-        self._license_container.setFixedHeight(26)
-        cap_layout = QHBoxLayout(self._license_container)
-        cap_layout.setContentsMargins(10, 0, 4, 0)
-        cap_layout.setSpacing(6)
-
-        self.license_status_label = QLabel()
-        self.license_status_label.setObjectName("LicenseCapsuleText")
-        cap_layout.addWidget(self.license_status_label)
-
-        self.license_activate_btn = QPushButton("升级")
-        self.license_activate_btn.setObjectName("LicenseCapsuleBtn")
-        self.license_activate_btn.setFixedSize(44, 20)
-        self.license_activate_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.license_activate_btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
-        self.license_activate_btn.clicked.connect(self._on_activate_clicked)
-        cap_layout.addWidget(self.license_activate_btn)
-
-        parent_layout.addWidget(self._license_container)
-
-        # 默认隐藏，只在试用/未授权时显示
-        self._license_container.hide()
-
-        if not _DEV_MODE:
-            self._update_license_status_ui()
-
-    def _update_license_status_ui(self):
-        """根据本地授权数据更新标题栏状态"""
-        try:
-            from core.security.license_manager import get_license_status
-            import time as _time
-            from core.security.machine_id import MachineID
-            from core.security.license_crypto import LicenseCrypto
-
-            status = get_license_status()
-            
-            if status == "permanent":
-                # 永久授权 — 隐藏所有提示
-                self._license_container.hide()
-            elif status == "daily":
-                # 天卡 — 显示剩余时间
-                machine = MachineID()
-                crypto = LicenseCrypto(machine.get_machine_id())
-                data = crypto.load()
-                if data:
-                    expire = data.get("expire_time")
-                    if expire:
-                        remaining_sec = max(0, expire - _time.time())
-                        remaining_hours = int(remaining_sec / 3600)
-                        remaining_days = int(remaining_sec / 86400)
-                        if remaining_days >= 1:
-                            self.license_status_label.setText(f"剩余 {remaining_days}天")
-                        else:
-                            self.license_status_label.setText(f"剩余 {remaining_hours}小时")
-                        self._license_container.show()
-                    else:
-                        self._license_container.hide()
-                else:
-                    self._license_container.hide()
-            else:
-                # 无授权或已过期 — 隐藏（Freemium 模式不强制显示）
-                self._license_container.hide()
-        except Exception as e:
-            self.logger.warning(f"更新授权状态UI失败: {e}")
-            self._license_container.hide()
-
-    def _get_license_manager(self):
-        """获取或创建 LicenseManager 实例（缓存复用）"""
-        if not hasattr(self, '_license_manager') or self._license_manager is None:
-            from core.security.license_manager import LicenseManager
-            self._license_manager = LicenseManager()
-        return self._license_manager
-
-    def _on_activate_clicked(self):
-        """标题栏升级按钮点击"""
-        try:
-            lm = self._get_license_manager()
-            # 试用中点击升级 → 升级模式（引导输入永久码）
-            if lm._show_activation_dialog(upgrade_mode=True):
-                # 激活成功后刷新缓存的 LicenseManager（授权数据已变更）
-                self._license_manager = None
-                self._update_license_status_ui()
-        except Exception as e:
-            self.logger.error(f"激活失败: {e}", exc_info=True)
+        """在标题栏创建授权状态（已移除，所有模块免费开放）"""
+        # ⚡ 不再显示授权状态，所有功能免费开放
+        pass
 
     def create_left_panel(self, parent_layout):
         """创建左侧导航面板（文字按钮形式）"""
@@ -631,6 +564,18 @@ class UEMainWindow(QMainWindow):
         self.subtitle_label = QLabel(self.module_names[0] if self.module_names else "")
         self.subtitle_label.setObjectName("SubTitle")
         title_layout.addWidget(self.subtitle_label)
+        
+        # AI 助手模型选择下拉框（默认隐藏）
+        from PyQt6.QtWidgets import QComboBox
+        self.ai_model_combo = QComboBox()
+        self.ai_model_combo.setObjectName("AssetSortCombo")  # 使用资产管理界面的样式
+        self.ai_model_combo.setFixedHeight(36)
+        self.ai_model_combo.setMinimumWidth(180)
+        self.ai_model_combo.setMaximumWidth(250)
+        self.ai_model_combo.setPlaceholderText("加载中...")
+        self.ai_model_combo.setVisible(False)  # 默认隐藏
+        self.ai_model_combo.currentIndexChanged.connect(self._on_ai_model_changed)
+        title_layout.addWidget(self.ai_model_combo)
 
         title_layout.addStretch()
 
@@ -826,173 +771,48 @@ class UEMainWindow(QMainWindow):
         return page
 
     def switch_module(self, index):
-        """切换模块"""
-        # 检查模块访问权限
-        if not self._check_module_access(index):
-            # 授权检查失败，恢复之前选中的按钮状态
-            current_index = self.content_stack.currentIndex() if self.content_stack else 0
-            for i, btn in enumerate(self.nav_buttons):
-                btn.setChecked(i == current_index)
-            return
-        
-        # 取消所有导航按钮的选中状态
-        for btn in self.nav_buttons:
-            btn.setChecked(False)
+            """切换模块"""
+            # ⚡ 移除授权检查，所有模块免费开放
 
-        # 选中当前按钮
-        if 0 <= index < len(self.nav_buttons):
-            self.nav_buttons[index].setChecked(True)
+            # 取消所有导航按钮的选中状态
+            for btn in self.nav_buttons:
+                btn.setChecked(False)
 
-        # 先切换页面（立即响应），再异步懒加载
-        if self.content_stack is not None:
-            self.content_stack.setCurrentIndex(index)
+            # 选中当前按钮
+            if 0 <= index < len(self.nav_buttons):
+                self.nav_buttons[index].setChecked(True)
 
-        # 更新副标题为模块名称
-        if hasattr(self, "module_names") and 0 <= index < len(self.module_names):
-            module_name = self.module_names[index]
-            
-            # 如果是AI助手模块，添加当前模型名称（灰色小字）
-            if module_name == "AI 助手":
-                model_info = self._get_ai_model_name()
-                if model_info:
-                    # 使用HTML设置不同样式：标题正常，模型名称灰色小字
-                    self.subtitle_label.setText(
-                        f'{module_name}    '
-                        f'<span style="font-size: 14px; color: #888; font-weight: normal;">{model_info}</span>'
-                    )
+            # 先切换页面（立即响应），再异步懒加载
+            if self.content_stack is not None:
+                self.content_stack.setCurrentIndex(index)
+
+            # 更新副标题为模块名称
+            if hasattr(self, "module_names") and 0 <= index < len(self.module_names):
+                module_name = self.module_names[index]
+
+                # 如果是AI助手模块，显示模型下拉框
+                if module_name == "AI 助手":
+                    self.subtitle_label.setText(module_name)
+                    # 显示模型下拉框并加载模型列表
+                    if hasattr(self, 'ai_model_combo'):
+                        self.ai_model_combo.setVisible(True)
+                        # 延迟加载模型列表，避免阻塞 UI
+                        from PyQt6.QtCore import QTimer
+                        QTimer.singleShot(100, self._load_ai_models)
                 else:
                     self.subtitle_label.setText(module_name)
-            else:
-                self.subtitle_label.setText(module_name)
+                    # 隐藏模型下拉框
+                    if hasattr(self, 'ai_model_combo'):
+                        self.ai_model_combo.setVisible(False)
 
-        # 保存当前模块到配置
-        if hasattr(self, "module_keys") and 0 <= index < len(self.module_keys):
-            try:
-                from core.services import config_service
-                app_config = config_service.get_module_config("app") or {}
-                app_config.setdefault("module_state", {})["current_module"] = self.module_keys[index]
-                config_service.save_module_config("app", app_config)
-            except Exception:
-                pass
+            # 保存当前模块索引（退出时保存到配置）
+            if hasattr(self, "module_keys") and 0 <= index < len(self.module_keys):
+                self._current_module_index = index
 
-        # 首次切换到该模块时，延迟到下一个事件循环再懒加载，避免阻塞 UI
-        if index not in getattr(self, "_loaded_module_indices", set()):
-            from PyQt6.QtCore import QTimer
-            QTimer.singleShot(0, lambda idx=index: self._ensure_module_loaded(idx))
-
-    def _check_module_access(self, index: int) -> bool:
-        """检查模块访问权限
-        
-        Args:
-            index: 模块索引
-            
-        Returns:
-            True: 允许访问
-            False: 拒绝访问（弹出激活引导）
-        """
-        # 免费模块列表（索引）
-        # 0: 我的工程, 1: 资产管理, 4: 站点推荐
-        FREE_MODULE_INDICES = [0, 1, 4]
-        
-        # 如果是免费模块，直接放行
-        if index in FREE_MODULE_INDICES:
-            return True
-        
-        # 付费模块：检查授权状态
-        from core.security.license_manager import get_license_status
-        status = get_license_status()
-        
-        # 有效授权：放行
-        if status in ["permanent", "daily"]:
-            return True
-        
-        # 无授权或已过期：弹出激活引导
-        self._show_activation_guide(status)
-        return False
-    
-    def _show_activation_guide(self, license_status: str):
-        """显示激活引导对话框
-        
-        Args:
-            license_status: 当前授权状态 ("none", "expired")
-        """
-        from ui.dialogs.activation_guide_dialog import ActivationGuideDialog
-        from core.security.license_manager import LicenseManager, get_purchase_link_cached
-        
-        # 使用缓存的购买链接，避免每次都发HTTP请求
-        purchase_link = get_purchase_link_cached()
-        
-        while True:
-            dialog = ActivationGuideDialog(
-                parent=self,
-                purchase_link=purchase_link,
-                license_status=license_status
-            )
-            dialog.exec()
-            
-            if dialog.result_action != ActivationGuideDialog.RESULT_ACTIVATED:
-                # 用户取消，不做任何操作
-                return
-            
-            # 用户输入了激活码，尝试激活
-            key = dialog.get_activation_key()
-            if not key:
-                continue
-            
-            # 显示加载状态
-            dialog.set_loading(True)
-            
-            # 创建 LicenseManager 实例进行激活
-            lm = LicenseManager()
-            
-            # 尝试激活
-            if lm.activate(key):
-                # 激活成功，缓存已在 LicenseManager.activate() 中自动刷新
-                dialog.set_status("激活成功！", is_error=False)
+            # 首次切换到该模块时，延迟到下一个事件循环再懒加载，避免阻塞 UI
+            if index not in getattr(self, "_loaded_module_indices", set()):
                 from PyQt6.QtCore import QTimer
-                QTimer.singleShot(1000, dialog.accept)
-                
-                # 刷新授权状态UI
-                if hasattr(self, '_update_license_status_ui'):
-                    self._update_license_status_ui()
-                
-                return
-            else:
-                # 激活失败
-                dialog.set_loading(False)
-                dialog.set_status("激活码无效或已被使用，请检查后重试", is_error=True)
-                # 继续循环，让用户重试
-
-        # 选中当前按钮
-        if 0 <= index < len(self.nav_buttons):
-            self.nav_buttons[index].setChecked(True)
-
-        # 先切换页面（立即响应），再异步懒加载
-        if self.content_stack is not None:
-            self.content_stack.setCurrentIndex(index)
-
-        # 更新副标题为模块名称
-        if hasattr(self, "module_names") and 0 <= index < len(self.module_names):
-            module_name = self.module_names[index]
-            
-            # 如果是AI助手模块，添加当前模型名称（灰色小字）
-            if module_name == "AI 助手":
-                model_info = self._get_ai_model_name()
-                if model_info:
-                    # 使用HTML设置不同样式：标题正常，模型名称灰色小字
-                    self.subtitle_label.setText(
-                        f'{module_name}    '
-                        f'<span style="font-size: 14px; color: #888; font-weight: normal;">{model_info}</span>'
-                    )
-                else:
-                    self.subtitle_label.setText(module_name)
-            else:
-                self.subtitle_label.setText(module_name)
-
-        # 首次切换到该模块时，延迟到下一个事件循环再懒加载，避免阻塞 UI
-        if index not in getattr(self, "_loaded_module_indices", set()):
-            from PyQt6.QtCore import QTimer
-            QTimer.singleShot(0, lambda idx=index: self._ensure_module_loaded(idx))
+                QTimer.singleShot(0, lambda idx=index: self._ensure_module_loaded(idx))
         
     def _ensure_module_loaded(self, index: int) -> None:
         """确保指定索引的模块UI已加载（懒加载）
@@ -1000,17 +820,23 @@ class UEMainWindow(QMainWindow):
         在第一次切换到某个模块时，才真正创建对应的模块UI，
         避免在应用启动阶段一次性创建所有模块导致卡顿。
         """
+        self.logger.info(f"[ENTER] _ensure_module_loaded(index={index})")
+        print(f"[DEBUG] [ENTER] _ensure_module_loaded(index={index})")
+        
         # 已经加载过，直接返回
         if index in getattr(self, "_loaded_module_indices", set()):
             self.logger.debug(f"模块索引 {index} 已加载，跳过")
+            print(f"[DEBUG] 模块索引 {index} 已加载，跳过")
             return
 
         if not self.module_provider:
             self.logger.warning(f"module_provider 为 None，无法加载模块索引 {index}")
+            print(f"[ERROR] module_provider 为 None")
             return
 
         if not hasattr(self, "module_keys") or index < 0 or index >= len(self.module_keys):
             self.logger.warning(f"模块索引 {index} 超出范围或 module_keys 不存在")
+            print(f"[ERROR] 模块索引 {index} 超出范围")
             return
 
         module_key = self.module_keys[index]
@@ -1042,30 +868,67 @@ class UEMainWindow(QMainWindow):
             if self.content_stack is not None:
                 # 先移除旧的占位页
                 old_widget = self.content_stack.widget(index)
+                print(f"[DEBUG] 移除旧占位页: {old_widget}")
                 if old_widget is not None:
                     self.content_stack.removeWidget(old_widget)
                     old_widget.deleteLater()
 
                 # 在相同位置插入新的真实UI
                 self.content_stack.insertWidget(index, widget)
+                print(f"[DEBUG] 插入新 widget 到索引 {index}")
 
                 # 确保显示的是刚加载的模块
                 self.content_stack.setCurrentIndex(index)
+                print(f"[DEBUG] 设置 currentIndex 为 {index}")
                 self.logger.info(f"懒加载模块 UI 成功: {module_name}")
                 print(f"[SUCCESS] 懒加载模块 UI 成功: {module_name}")
 
             # ⚡ 只对新加载的模块 widget 刷新样式，避免全局重刷导致卡顿
+            print(f"[DEBUG] 开始刷新样式...")
             widget.style().unpolish(widget)
             widget.style().polish(widget)
             widget.update()
+            print(f"[DEBUG] 样式刷新完成")
+            
+            # ⚡ 样式刷新后，调用 widget 的 refresh_floating_button 方法（如果存在）
+            # 这个方法由 AI 助手模块的 wrapper 提供，用于重新显示浮动按钮
+            if hasattr(widget, 'refresh_floating_button'):
+                print(f"[DEBUG] 调用 refresh_floating_button 方法")
+                widget.refresh_floating_button()
+                self.logger.debug("已调用 refresh_floating_button 重新显示浮动控件")
+            else:
+                print(f"[DEBUG] widget 没有 refresh_floating_button 方法")
 
         except Exception as e:
             self.logger.error(f"懒加载模块 {module_name} 失败: {e}", exc_info=True)
+            print(f"[ERROR] 懒加载失败: {e}")
+            import traceback
+            traceback.print_exc()
             return
 
         # 记录已经加载
         if hasattr(self, "_loaded_module_indices"):
             self._loaded_module_indices.add(index)
+            print(f"[DEBUG] 已将索引 {index} 添加到 _loaded_module_indices")
+            print(f"[DEBUG] 当前已加载模块: {self._loaded_module_indices}")
+            
+            # ⚡ AI 助手模块加载完成后，显示模型下拉框
+            if module_key == "ai_assistant":
+                # 延迟更新，确保配置已完全加载
+                def _update_ai_title():
+                    if hasattr(self, '_cached_ai_model_name'):
+                        del self._cached_ai_model_name
+                        print(f"[DEBUG] 清除 AI 模型名称缓存")
+                    
+                    # 显示模型下拉框
+                    if hasattr(self, 'ai_model_combo'):
+                        self.ai_model_combo.setVisible(True)
+                        # 加载模型列表
+                        self._load_ai_models()
+                        print(f"[DEBUG] 显示 AI 模型下拉框")
+                
+                # 延迟 100ms 执行，确保模块完全初始化
+                QTimer.singleShot(100, _update_ai_title)
 
 
     def show_settings(self):
@@ -1076,6 +939,10 @@ class UEMainWindow(QMainWindow):
 
         # 更新副标题为"设置"
         self.subtitle_label.setText("设置")
+        
+        # 隐藏模型下拉框
+        if hasattr(self, 'ai_model_combo'):
+            self.ai_model_combo.setVisible(False)
 
         # 懒加载设置页面
         if self.settings_widget is None:
@@ -1295,8 +1162,272 @@ class UEMainWindow(QMainWindow):
             print(f"[WARNING] 获取AI模型名称失败: {e}")
             return ""
     
+    def _load_ai_models(self):
+        """加载 AI 助手可用模型列表（使用 config_service，避免重复创建 ConfigManager）"""
+        if not hasattr(self, 'ai_model_combo'):
+            return
+        
+        try:
+            from core.services import config_service
+            from pathlib import Path
+            
+            # 使用 config_service 获取配置（复用已有的 ConfigManager 实例）
+            template_path = Path(__file__).parent.parent / "modules" / "ai_assistant" / "config_template.json"
+            config = config_service.get_module_config("ai_assistant", template_path=template_path)
+            
+            provider = config.get("llm_provider", "api")
+            self.logger.debug(f"加载模型列表，llm_provider={provider}")
+            
+            if provider == "ollama":
+                # Ollama: 从本地服务获取模型列表
+                ollama_url = config.get("ollama_settings", {}).get("base_url", "http://localhost:11434")
+                self.logger.debug(f"Ollama 配置 - URL: {ollama_url}")
+                self._load_ollama_models_for_combo(config)
+            else:
+                # API: 从配置或缓存加载模型列表
+                api_url = config.get("api_settings", {}).get("api_url", "")
+                self.logger.debug(f"API 配置 - URL: {api_url}")
+                self._load_api_models_for_combo(config)
+                
+        except Exception as e:
+            self.logger.error(f"加载模型列表失败: {e}", exc_info=True)
+            self.ai_model_combo.clear()
+            self.ai_model_combo.addItem("加载失败")
+    
+    def _load_ollama_models_for_combo(self, config):
+        """加载 Ollama 模型列表到下拉框"""
+        from threading import Thread
+        
+        # 先显示加载中状态
+        if hasattr(self, 'ai_model_combo'):
+            self.ai_model_combo.clear()
+            self.ai_model_combo.addItem("正在连接 Ollama...")
+        
+        # 保存 config 的副本，避免作用域问题
+        ollama_url = config.get("ollama_settings", {}).get("base_url", "http://localhost:11434")
+        current_model = config.get("ollama_settings", {}).get("default_model", "")
+        
+        self.logger.info(f"[主窗口] 开始加载 Ollama 模型，URL: {ollama_url}, 当前模型: {current_model}")
+        
+        def fetch_in_background():
+            models = []
+            
+            try:
+                import requests
+                self.logger.info(f"[Ollama] 正在连接: {ollama_url}")
+                
+                session = requests.Session()
+                session.trust_env = False
+                session.proxies = {'http': None, 'https': None}
+                
+                response = session.get(f"{ollama_url}/api/tags", timeout=10)
+                if response.status_code == 200:
+                    data = response.json()
+                    models = [m.get("name", "") for m in data.get("models", []) if m.get("name")]
+                    self.logger.info(f"[Ollama] 成功获取 {len(models)} 个模型: {models}")
+                else:
+                    self.logger.error(f"[Ollama] 请求失败，状态码: {response.status_code}")
+            except requests.exceptions.ConnectionError as e:
+                self.logger.error(f"[Ollama] 连接失败: {e}")
+            except requests.exceptions.Timeout as e:
+                self.logger.error(f"[Ollama] 连接超时: {e}")
+            except Exception as e:
+                self.logger.error(f"[Ollama] 获取模型失败: {e}", exc_info=True)
+            
+            # 创建临时 config 对象用于 UI 更新
+            temp_config = {
+                "llm_provider": "ollama",
+                "ollama_settings": {
+                    "base_url": ollama_url,
+                    "default_model": current_model
+                }
+            }
+            
+            # 通过信号发送到主线程
+            self.logger.info(f"[Ollama] 准备发送信号，模型数量: {len(models)}")
+            self._ollama_models_loaded.emit(models, temp_config)
+        
+        thread = Thread(target=fetch_in_background, daemon=True)
+        thread.start()
+    
+    def _on_ollama_models_loaded(self, models, config):
+        """Ollama 模型加载完成回调（主线程）"""
+        self.logger.info(f"[主窗口] 收到 Ollama 模型加载信号，模型数量: {len(models)}")
+        
+        if models:
+            self._update_model_combo_ui(models, config)
+        else:
+            self._show_ollama_connection_error()
+    
+    def _show_ollama_connection_error(self):
+        """显示 Ollama 连接错误"""
+        if hasattr(self, 'ai_model_combo'):
+            self.ai_model_combo.blockSignals(True)
+            self.ai_model_combo.clear()
+            self.ai_model_combo.addItem("Ollama 未运行")
+            self.ai_model_combo.blockSignals(False)
+    
+    def _load_api_models_for_combo(self, config):
+        """加载 API 模型列表到下拉框（从缓存或使用默认列表）"""
+        try:
+            from pathlib import Path
+            import json
+            
+            # 尝试从缓存加载
+            cache_file = Path.home() / "AppData" / "Roaming" / "ue_toolkit" / "user_data" / "cache" / "api_models_cache.json"
+            models = []
+            
+            if cache_file.exists():
+                cache_data = json.loads(cache_file.read_text(encoding='utf-8'))
+                api_url = config.get("api_settings", {}).get("api_url", "")
+                cached_url = cache_data.get('api_url', '')
+                
+                # 只有 URL 匹配时才使用缓存
+                if cached_url == api_url:
+                    models = cache_data.get('models', [])
+            
+            # 如果没有缓存，使用默认模型列表
+            if not models:
+                api_url = config.get("api_settings", {}).get("api_url", "")
+                if "openai.com" in api_url:
+                    models = ["gpt-4o", "gpt-4o-mini", "gpt-4-turbo", "gpt-3.5-turbo"]
+                elif "deepseek.com" in api_url:
+                    models = ["deepseek-chat", "deepseek-reasoner"]
+                elif "anthropic.com" in api_url or "claude" in api_url.lower():
+                    models = ["claude-3-5-sonnet-20241022", "claude-3-5-haiku-20241022", "claude-3-opus-20240229"]
+                elif "generativelanguage.googleapis.com" in api_url or "gemini" in api_url.lower():
+                    models = ["gemini-2.0-flash-exp", "gemini-1.5-pro", "gemini-1.5-flash"]
+                else:
+                    # 自定义 API，使用配置中的模型
+                    default_model = config.get("api_settings", {}).get("default_model", "gpt-3.5-turbo")
+                    models = [default_model]
+            
+            self._update_model_combo_ui(models, config)
+            
+        except Exception as e:
+            print(f"[WARNING] 加载 API 模型失败: {e}")
+            self._update_model_combo_ui([], config)
+    
+    def _update_model_combo_ui(self, models, config):
+        """更新模型下拉框 UI（主线程）"""
+        if not hasattr(self, 'ai_model_combo'):
+            self.logger.warning("[模型下拉框] ai_model_combo 不存在")
+            return
+        
+        try:
+            self.logger.info(f"[模型下拉框] 开始更新 UI，模型数量: {len(models)}")
+            
+            # 阻止信号触发，避免在填充时触发 _on_ai_model_changed
+            self.ai_model_combo.blockSignals(True)
+            self.ai_model_combo.clear()
+            
+            if models:
+                # 获取当前配置的模型
+                provider = config.get("llm_provider", "api")
+                if provider == "ollama":
+                    current_model = config.get("ollama_settings", {}).get("default_model", "")
+                else:
+                    current_model = config.get("api_settings", {}).get("default_model", "")
+                
+                self.logger.info(f"[模型下拉框] 加载 {len(models)} 个模型，当前模型: {current_model}")
+                
+                # 添加模型到下拉框
+                for model in models:
+                    self.ai_model_combo.addItem(model)
+                
+                self.logger.info(f"[模型下拉框] 已添加 {self.ai_model_combo.count()} 个模型到下拉框")
+                
+                # 选中当前配置的模型
+                if current_model:
+                    index = self.ai_model_combo.findText(current_model)
+                    if index >= 0:
+                        self.ai_model_combo.setCurrentIndex(index)
+                        self.logger.info(f"[模型下拉框] 已选中模型: {current_model} (索引 {index})")
+                    else:
+                        # 如果找不到，选择第一个
+                        if self.ai_model_combo.count() > 0:
+                            self.ai_model_combo.setCurrentIndex(0)
+                            self.logger.info(f"[模型下拉框] 配置的模型未找到，选择第一个: {self.ai_model_combo.currentText()}")
+                elif self.ai_model_combo.count() > 0:
+                    self.ai_model_combo.setCurrentIndex(0)
+                    self.logger.info(f"[模型下拉框] 无配置模型，选择第一个: {self.ai_model_combo.currentText()}")
+            else:
+                # 根据供应商显示不同的提示
+                provider = config.get("llm_provider", "api")
+                if provider == "ollama":
+                    self.ai_model_combo.addItem("无可用模型（请在设置中启动 Ollama）")
+                else:
+                    self.ai_model_combo.addItem("无可用模型")
+                self.logger.warning(f"[模型下拉框] 没有可用模型")
+            
+            # 恢复信号
+            self.ai_model_combo.blockSignals(False)
+            self.logger.info("[模型下拉框] UI 更新完成")
+                
+        except Exception as e:
+            self.logger.error(f"[模型下拉框] 更新失败: {e}", exc_info=True)
+            self.ai_model_combo.blockSignals(False)
+    
+    def _on_ai_model_changed(self):
+        """AI 模型切换事件"""
+        if not hasattr(self, 'ai_model_combo'):
+            return
+        
+        selected_model = self.ai_model_combo.currentText()
+        
+        # 过滤掉占位符文本和错误提示
+        invalid_texts = [
+            "加载中...", 
+            "无可用模型", 
+            "加载失败",
+            "正在连接 Ollama...",
+            "Ollama 未运行",
+            "无可用模型（请在设置中启动 Ollama）"
+        ]
+        
+        if not selected_model or selected_model in invalid_texts:
+            print(f"[模型切换] 跳过无效文本: {selected_model}")
+            return
+        
+        try:
+            from core.config.config_manager import ConfigManager
+            from pathlib import Path
+            from modules.ai_assistant.config_schema import get_ai_assistant_schema
+            
+            template_path = Path(__file__).parent.parent / "modules" / "ai_assistant" / "config_template.json"
+            config_manager = ConfigManager(
+                "ai_assistant", 
+                template_path=template_path,
+                config_schema=get_ai_assistant_schema()
+            )
+            config = config_manager.get_module_config()
+            
+            # 更新配置中的模型
+            provider = config.get("llm_provider", "api")
+            if provider == "ollama":
+                if "ollama_settings" not in config:
+                    config["ollama_settings"] = {}
+                config["ollama_settings"]["default_model"] = selected_model
+            else:
+                if "api_settings" not in config:
+                    config["api_settings"] = {}
+                config["api_settings"]["default_model"] = selected_model
+            
+            # 保存配置
+            config_manager.save_user_config_fast(config)
+            print(f"[INFO] 已切换模型到: {selected_model}")
+            
+            # 清除缓存
+            if hasattr(self, '_cached_ai_model_name'):
+                del self._cached_ai_model_name
+            
+        except Exception as e:
+            print(f"[WARNING] 保存模型配置失败: {e}")
+            import traceback
+            traceback.print_exc()
+    
     def _save_window_state(self) -> None:
-        """保存窗口位置到配置文件
+        """保存窗口位置到配置文件（退出时统一保存，包含窗口状态和当前模块）
         
         只保存窗口的位置（x, y），不保存大小，因为窗口大小是固定的。
         """
@@ -1317,13 +1448,28 @@ class UEMainWindow(QMainWindow):
                 "maximized": self.isMaximized()
             }
             
-            # 保存配置
-            config_service.save_module_config("app", app_config)
+            # 保存当前模块状态（合并到同一次保存）
+            if hasattr(self, '_current_module_index') and hasattr(self, 'module_keys'):
+                index = self._current_module_index
+                if 0 <= index < len(self.module_keys):
+                    app_config.setdefault("module_state", {})["current_module"] = self.module_keys[index]
             
-            self.logger.debug(f"窗口状态已保存: x={geometry.x()}, y={geometry.y()}")
+            # 统一保存配置（immediate=True 立即写入磁盘）
+            config_service.save_module_config("app", app_config, backup_reason="exit_save", immediate=True)
+            
+            # 保存所有运行时累积的脏配置
+            config_service.flush_all_configs(backup_reason="exit_save")
+            
+            self.logger.info(f"退出时保存所有配置完成")
             
         except Exception as e:
-            self.logger.error(f"保存窗口位置失败: {e}", exc_info=True)
+            self.logger.error(f"保存退出状态失败: {e}", exc_info=True)
+    
+    def _save_current_module_on_exit(self):
+        """退出时保存当前模块状态（已合并到 _save_window_state，此方法保留为空以兼容旧代码）"""
+        # 注意：此方法已废弃，保存逻辑已合并到 _save_window_state() 中
+        # 保留此方法是为了避免其他地方的调用出错
+        pass
     
     def _restore_window_state(self) -> None:
         """从配置文件恢复窗口位置
@@ -1540,6 +1686,9 @@ class UEMainWindow(QMainWindow):
         # 保存窗口状态
         self._save_window_state()
         
+        # 保存当前模块状态（退出时统一保存，避免运行时频繁保存）
+        self._save_current_module_on_exit()
+        
         # 如果已经在关闭过程中，直接接受事件
         if hasattr(self, '_is_closing') and self._is_closing:
             event.accept()
@@ -1643,14 +1792,15 @@ class UEMainWindow(QMainWindow):
             return None
     
     def _save_close_preference(self, preference):
-        """保存用户的关闭偏好"""
+        """保存用户的关闭偏好（immediate=False，延迟到退出时保存）"""
         try:
             from core.services import config_service
             app_config = config_service.get_module_config("app")
             if app_config:
                 app_config["close_action_preference"] = preference
-                config_service.save_module_config("app", app_config)
-                self.logger.info(f"✅ 保存关闭偏好成功: {preference}")
+                # immediate=False: 仅更新内存，退出时统一保存
+                config_service.save_module_config("app", app_config, immediate=False)
+                self.logger.debug(f"关闭偏好已更新到内存: {preference}")
             else:
                 self.logger.warning("无法获取 app 配置")
         except Exception as e:
@@ -1917,14 +2067,8 @@ class UEMainWindow(QMainWindow):
                 parent=self
             ).exec()
     
-    def _start_license_preload(self):
-        """启动授权状态预加载（异步，不阻塞UI）"""
-        try:
-            from core.security.license_manager import start_license_cache_preload
-            start_license_cache_preload()
-            self.logger.info("授权状态预加载已启动")
-        except Exception as e:
-            self.logger.warning(f"启动授权状态预加载失败: {e}")
+    # ⚡ 已移除 _start_license_preload 方法
+    # 所有模块现在免费开放，无需授权预加载
     
     def _on_manual_update_available(self, version_info: dict, app):
         """手动检查发现新版本"""

@@ -1659,6 +1659,10 @@ class AssetManagerUI(BaseModuleWidget):
                 card.preview_btn.update_button_text("不可预览")
                 card.preview_btn.setEnabled(False)
                 card.preview_btn.setCursor(Qt.CursorShape.ForbiddenCursor)
+            elif card.package_type == 'model':
+                card.preview_btn.update_button_text("不可预览")
+                card.preview_btn.setEnabled(False)
+                card.preview_btn.setCursor(Qt.CursorShape.ForbiddenCursor)
             elif card.package_type == 'project':
                 card.preview_btn.update_button_text("▶  打开项目")
         
@@ -1792,19 +1796,18 @@ class AssetManagerUI(BaseModuleWidget):
         pkg_type = getattr(preview_card, 'package_type', 'content')
         
         if pkg_type == 'plugin':
-            # 插件不可预览
+            # 插件不可预览（按钮已禁用，理论上不会到这里）
             logger.info(f"插件资产不可预览: {name}")
+            return
+        
+        if pkg_type == 'model':
+            # 3D 模型不可预览（按钮已禁用，理论上不会到这里）
+            logger.info(f"3D 模型资产不可预览: {name}")
             return
         
         if pkg_type == 'project':
             # UE 项目：直接打开 .uproject
             self._preview_project_asset(asset_id, name)
-            return
-        
-        if pkg_type == 'model':
-            # 3D 模型：禁用预览，提示使用导入功能
-            preview_card.set_error("3D 模型资产无法预览，请使用导入功能")
-            preview_card.reset_state()
             return
         
         if pkg_type == 'others':
@@ -2048,7 +2051,26 @@ class AssetManagerUI(BaseModuleWidget):
             '.mp3', '.wav', '.ogg', '.flac', '.aac', '.wma',  # 音频
         }
         MODEL_EXTENSIONS = {
-            '.fbx', '.obj', '.gltf', '.glb', '.abc', '.usd', '.usda', '.usdc',
+            # 常用格式
+            '.fbx', '.obj', '.gltf', '.glb',  # 通用格式
+            '.dae',  # Collada
+            '.stl',  # 3D 打印
+            # USD 格式
+            '.usd', '.usda', '.usdc', '.usdz',
+            # Alembic
+            '.abc',
+            # 软件专用格式
+            '.blend',  # Blender
+            '.ma', '.mb',  # Maya
+            '.max',  # 3ds Max
+            '.c4d',  # Cinema 4D
+            '.skp',  # SketchUp
+            '.3ds',  # 3D Studio
+            # 动画/角色格式
+            '.pmx', '.pmd',  # MikuMikuDance (MMD)
+            '.x',  # DirectX
+            '.ply',  # Polygon File Format
+            '.wrl', '.vrml',  # VRML
         }
         UE_EXTENSIONS = {'.uasset', '.umap'}
         
@@ -2806,6 +2828,10 @@ class AssetManagerUI(BaseModuleWidget):
                 self.logic = logic
                 self.asset_info = asset_info
             
+            def _progress_callback(self, current, total, message):
+                """进度回调，发送信号到主线程"""
+                self.progress_update.emit(current, total, message)
+            
             def run(self):
                 try:
                     # 确定实际添加路径
@@ -2854,9 +2880,6 @@ class AssetManagerUI(BaseModuleWidget):
                     logger.error(f"添加资产线程出错: {e}", exc_info=True)
                     self.error_message.emit(str(e))
                     self.finished.emit(False, None)
-            
-            def _progress_callback(self, current, total, message):
-                self.progress_update.emit(current, total, message)
         
         # 保存源路径和临时目录信息，用于完成后的清理和删除确认
         self._pending_source_path = asset_info.get('original_source_path')
@@ -2875,6 +2898,7 @@ class AssetManagerUI(BaseModuleWidget):
         
         def _on_progress_update(current, total, message):
             """更新主窗口状态栏进度"""
+            logger.info(f"📊 [进度更新] current={current}, total={total}, message='{message}'")
             if main_window:
                 # 计算进度百分比
                 if total > 0:

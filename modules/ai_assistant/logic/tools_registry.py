@@ -221,6 +221,29 @@ class ToolsRegistry:
             requires_confirmation=False
         ))
         
+        # 2.5. 推荐资产（在聊天中显示资产卡片）
+        self.register_tool(ToolDefinition(
+            name="recommend_assets",
+            description="向用户推荐资产并在聊天界面中显示资产卡片。当用户询问意见（如'我想做个恐怖游戏'、'做个跑酷游戏'）时，AI 可以推荐合适的资产并调用此工具在聊天中展示资产卡片。资产卡片支持预览和导入功能。",
+            parameters={
+                "type": "object",
+                "properties": {
+                    "asset_names": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "要推荐的资产名称列表（精确匹配资产库中的资产名称）"
+                    },
+                    "reason": {
+                        "type": "string",
+                        "description": "推荐理由（简短说明为什么推荐这些资产）"
+                    }
+                },
+                "required": ["asset_names", "reason"]
+            },
+            function=self._tool_recommend_assets,
+            requires_confirmation=False
+        ))
+        
         # 3. 搜索配置模板
         self.register_tool(ToolDefinition(
             name="search_configs",
@@ -408,6 +431,25 @@ class ToolsRegistry:
         if self.asset_reader:
             return self.asset_reader.get_asset_details(asset_name)
         return "[错误] 资产读取器未初始化"
+    
+    def _tool_recommend_assets(self, asset_names: list, reason: str) -> str:
+        """推荐资产工具实现
+        
+        返回特殊格式的字符串，包含资产 ID 列表，供 UI 层解析并渲染资产卡片
+        """
+        if not self.asset_reader:
+            return "[错误] 资产读取器未初始化"
+        
+        # 调用 asset_reader 的 recommend_assets 方法
+        result = self.asset_reader.recommend_assets(asset_names)
+        
+        if not result["success"]:
+            return f"[推荐失败] {result['message']}"
+        
+        # 返回特殊格式的字符串，包含资产 ID 列表
+        # 格式：[RECOMMEND_ASSETS]reason|asset_id1,asset_id2,asset_id3[/RECOMMEND_ASSETS]
+        asset_ids_str = ",".join(result["asset_ids"])
+        return f"[RECOMMEND_ASSETS]{reason}|{asset_ids_str}[/RECOMMEND_ASSETS]\n\n{result['message']}"
     
     def _tool_search_configs(self, keyword: str) -> str:
         """搜索配置工具实现"""

@@ -2,18 +2,21 @@
   "_version": "1.0.0",
   "llm_provider": "api",
   "api_settings": {
-    "api_url": "https://api.openai-hk.com/v1/chat/completions",
+    "api_url": "https://api.openai.com/v1/chat/completions",
     "api_key": "",
     "default_model": "gpt-3.5-turbo",
     "temperature": 0.8,
-    "timeout": 60
+    "timeout": 60,
+    "note": "请在此处配置有效的API密钥。如果没有API密钥，可以访问 https://platform.openai.com/api-keys 获取，或使用其他兼容OpenAI的API服务。"
   },
   "ollama_settings": {
     "base_url": "http://localhost:11434",
-    "model_name": "llama3",
+    "default_model": "llama3",
     "temperature": 0.9,
     "stream": true,
-    "timeout": 300
-  }
+    "timeout": 300,
+    "note": "如需使用本地Ollama，请确保Ollama服务正在运行"
+  },
+  "note": "首次使用前请在设置中配置API密钥或Ollama服务"
 }
 

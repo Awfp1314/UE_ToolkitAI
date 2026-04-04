@@ -270,8 +270,13 @@ class BatchAddThread(QThread):
                 if plugin_folder_name:
                     asset_info['plugin_folder_name'] = plugin_folder_name
                 
-                # 添加资产（同步调用）
-                success = self.controller.add_asset_sync(asset_info)
+                # 创建进度回调函数，将进度转发到信号
+                def progress_callback(current, total, message):
+                    # 转发到 progress 信号（用于更新 UI）
+                    self.progress.emit(current, total, f"{asset_name}: {message}")
+                
+                # 添加资产（同步调用，带进度回调）
+                success = self.controller.add_asset_sync(asset_info, progress_callback=progress_callback)
                 
                 if success:
                     success_count += 1
@@ -657,16 +662,23 @@ class AddAssetDialog(QDialog):
             # 如果有预填名称，使用预填名称（先规范化）
             if self.prefill_name:
                 normalized_prefill = self.clean_asset_name(self.prefill_name)
+                logger.info(f"[名称设置] 使用预填名称: {normalized_prefill}")
                 self.name_input.setText(normalized_prefill)
             else:
                 is_archive = self._is_archive or prefill_path_obj.suffix.lower() in ARCHIVE_EXTENSIONS
                 auto_name = prefill_path_obj.stem if is_archive else prefill_path_obj.name
-                auto_name = self.clean_asset_name(auto_name)
-                try:
-                    self.name_input.setText(auto_name)
-                except Exception as e:
-                    logger.warning(f"文件名编码问题: {e}")
-                    self.name_input.setText("NewAsset")
+                logger.info(f"[名称设置] 初始化: is_archive={is_archive}, auto_name={auto_name}")
+                # 如果是压缩包且文件名是 "content"，不设置名称，等待分析结果
+                if not (is_archive and auto_name.lower() == 'content'):
+                    auto_name = self.clean_asset_name(auto_name)
+                    try:
+                        logger.info(f"[名称设置] 设置初始名称: {auto_name}")
+                        self.name_input.setText(auto_name)
+                    except Exception as e:
+                        logger.warning(f"文件名编码问题: {e}")
+                        self.name_input.setText("NewAsset")
+                else:
+                    logger.info(f"[名称设置] 跳过 content 压缩包的初始名称设置，等待分析结果")
 
             # 优先应用外部传入的分析结果，避免重复分析
             if self.prefill_analysis:
@@ -1029,11 +1041,24 @@ class AddAssetDialog(QDialog):
         
         # 对于压缩包，优先使用原始文件名，不使用分析器推断的名称
         # 因为分析器可能从临时解压目录推断出不准确的名称
+        # 但如果压缩包文件名是 "content"，则使用分析器推断的名称
         if self._is_archive and self._original_source_path:
             # 保持使用压缩包原始文件名（去掉扩展名）
             if not current_name or current_name == self.asset_path.stem:
                 original_name = self._original_source_path.stem
-                cleaned_name = self.clean_asset_name(original_name)
+                logger.info(f"[名称设置] 压缩包原始文件名: {original_name}, suggested_name: {suggested_name}")
+                # 如果压缩包文件名是 "content"，必须使用分析器推断的名称
+                if original_name.lower() == 'content':
+                    if suggested_name:
+                        cleaned_name = self.clean_asset_name(suggested_name)
+                        logger.info(f"[名称设置] content 压缩包使用 suggested_name: {cleaned_name}")
+                    else:
+                        # 如果分析器也没有推断出名称，使用默认值
+                        cleaned_name = "UnnamedAsset"
+                        logger.warning(f"[名称设置] content 压缩包但 suggested_name 为空，使用默认值: {cleaned_name}")
+                else:
+                    cleaned_name = self.clean_asset_name(original_name)
+                    logger.info(f"[名称设置] 使用压缩包原始文件名: {cleaned_name}")
                 self.name_input.setText(cleaned_name)
         elif suggested_name and self.asset_path and current_name == self.asset_path.stem:
             # 非压缩包情况，使用分析结果的建议名称
@@ -1226,7 +1251,7 @@ class AddAssetDialog(QDialog):
             self,
             "选择资产文件",
             "",
-            "所有文件 (*);;模型文件 (*.fbx *.obj *.gltf);;贴图文件 (*.png *.jpg *.tga *.bmp)"
+            "所有文件 (*);;模型文件 (*.fbx *.obj *.gltf *.glb *.dae *.stl *.pmx *.pmd *.blend *.ma *.mb);;贴图文件 (*.png *.jpg *.tga *.bmp)"
         )
         
         if file_path:
@@ -1309,7 +1334,21 @@ class AddAssetDialog(QDialog):
         # 定义有效的文件扩展名
         valid_extensions = {
             # 模型
-            '.fbx', '.obj', '.gltf', '.glb', '.abc', '.usd', '.usda', '.usdc',
+            '.fbx', '.obj', '.gltf', '.glb',  # 通用格式
+            '.dae',  # Collada
+            '.stl',  # 3D 打印
+            '.usd', '.usda', '.usdc', '.usdz',  # USD 格式
+            '.abc',  # Alembic
+            '.blend',  # Blender
+            '.ma', '.mb',  # Maya
+            '.max',  # 3ds Max
+            '.c4d',  # Cinema 4D
+            '.skp',  # SketchUp
+            '.3ds',  # 3D Studio
+            '.pmx', '.pmd',  # MikuMikuDance (MMD)
+            '.x',  # DirectX
+            '.ply',  # Polygon File Format
+            '.wrl', '.vrml',  # VRML
             # 贴图
             '.png', '.jpg', '.jpeg', '.tga', '.bmp', '.exr', '.hdr', '.tif', '.tiff',
             # 音频

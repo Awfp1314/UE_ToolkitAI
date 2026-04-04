@@ -120,6 +120,9 @@ class AddAssetProgressDialog(QDialog):
             self.status_label.setText(message)
             self.file_label.setText("")
         
+        # 强制处理 UI 事件，确保进度条实时更新
+        QApplication.processEvents()
+        
         # 如果完成，更新标题和样式
         if current >= total:
             self.setWindowTitle("添加完成")

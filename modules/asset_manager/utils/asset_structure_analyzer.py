@@ -20,7 +20,28 @@ logger = get_logger(__name__)
 UE_ASSET_EXTENSIONS = {'.uasset', '.umap', '.uexp', '.ubulk'}
 
 # 原始 3D 文件扩展名
-RAW_3D_EXTENSIONS = {'.fbx', '.obj', '.gltf', '.glb', '.abc', '.usd', '.usda', '.usdc'}
+RAW_3D_EXTENSIONS = {
+    # 常用格式
+    '.fbx', '.obj', '.gltf', '.glb',  # 通用格式
+    '.dae',  # Collada
+    '.stl',  # 3D 打印
+    # USD 格式
+    '.usd', '.usda', '.usdc', '.usdz',
+    # Alembic
+    '.abc',
+    # 软件专用格式
+    '.blend',  # Blender
+    '.ma', '.mb',  # Maya
+    '.max',  # 3ds Max
+    '.c4d',  # Cinema 4D
+    '.skp',  # SketchUp
+    '.3ds',  # 3D Studio
+    # 动画/角色格式
+    '.pmx', '.pmd',  # MikuMikuDance (MMD)
+    '.x',  # DirectX
+    '.ply',  # Polygon File Format
+    '.wrl', '.vrml',  # VRML
+}
 
 # 纹理文件扩展名
 TEXTURE_EXTENSIONS = {'.png', '.jpg', '.jpeg', '.tga', '.bmp', '.exr', '.hdr', '.tif', '.tiff'}
@@ -60,6 +81,103 @@ class AssetStructureAnalyzer:
     定位 Content 文件夹用于后续添加到资产库。
     """
     
+    def _extract_nested_archives(self, root: Path) -> None:
+        """解压嵌套的压缩包（只解压一层，避免无限递归）
+        
+        Args:
+            root: 搜索根目录
+        """
+        import zipfile
+        
+        # 可选导入：py7zr 和 rarfile
+        try:
+            import py7zr
+            has_py7zr = True
+        except ImportError:
+            has_py7zr = False
+            logger.debug("[嵌套解压] py7zr 未安装，跳过 .7z 文件")
+        
+        try:
+            import rarfile
+            has_rarfile = True
+        except ImportError:
+            has_rarfile = False
+            logger.debug("[嵌套解压] rarfile 未安装，跳过 .rar 文件")
+        
+        # 根据可用的库确定支持的扩展名
+        archive_extensions = {'.zip'}
+        if has_py7zr:
+            archive_extensions.add('.7z')
+        if has_rarfile:
+            archive_extensions.add('.rar')
+        
+        archives_to_extract = []
+        
+        # 查找所有压缩包文件
+        for item in root.rglob('*'):
+            if item.is_file() and item.suffix.lower() in archive_extensions:
+                archives_to_extract.append(item)
+        
+        if not archives_to_extract:
+            return
+        
+        logger.info(f"[嵌套解压] 发现 {len(archives_to_extract)} 个嵌套压缩包")
+        
+        for archive_file in archives_to_extract:
+            try:
+                # 解压到同级目录
+                extract_dir = archive_file.parent / archive_file.stem
+                
+                # 如果目标目录已存在，跳过
+                if extract_dir.exists():
+                    logger.debug(f"[嵌套解压] 跳过已存在: {archive_file.name}")
+                    continue
+                
+                extract_dir.mkdir(parents=True, exist_ok=True)
+                logger.info(f"[嵌套解压] 解压: {archive_file.name} -> {extract_dir.name}")
+                
+                ext = archive_file.suffix.lower()
+                
+                if ext == '.zip':
+                    with zipfile.ZipFile(archive_file, 'r') as zip_ref:
+                        # 处理中文文件名
+                        for z_info in zip_ref.infolist():
+                            if z_info.is_dir():
+                                continue
+                            
+                            try:
+                                # 尝试 GBK 解码
+                                original_name = z_info.filename.encode('cp437').decode('gbk')
+                            except:
+                                original_name = z_info.filename
+                            
+                            # 清理文件名
+                            parts = original_name.split('/')
+                            cleaned_parts = [part.rstrip(' .') or '_' for part in parts]
+                            cleaned_name = '/'.join(cleaned_parts)
+                            
+                            target_path = extract_dir / cleaned_name
+                            target_path.parent.mkdir(parents=True, exist_ok=True)
+                            
+                            with zip_ref.open(z_info) as source:
+                                with open(target_path, 'wb') as target:
+                                    target.write(source.read())
+                
+                elif ext == '.7z' and has_py7zr:
+                    with py7zr.SevenZipFile(archive_file, mode='r') as z:
+                        z.extractall(path=extract_dir)
+                
+                elif ext == '.rar' and has_rarfile:
+                    with rarfile.RarFile(archive_file) as rf:
+                        rf.extractall(extract_dir)
+                
+                # 删除原压缩包文件
+                archive_file.unlink()
+                logger.info(f"[嵌套解压] 完成并删除原文件: {archive_file.name}")
+                
+            except Exception as e:
+                logger.warning(f"[嵌套解压] 失败: {archive_file.name}, 错误: {e}")
+    
     def analyze(self, extracted_dir: Path) -> AnalysisResult:
         """分析解压后的目录结构
         
@@ -77,6 +195,9 @@ class AssetStructureAnalyzer:
             )
         
         logger.info(f"开始分析目录结构: {extracted_dir}")
+        
+        # 预处理：解压嵌套的压缩包（只解压一层，避免无限递归）
+        self._extract_nested_archives(extracted_dir)
         
         # 统计文件
         total_files = list(extracted_dir.rglob('*'))
@@ -635,36 +756,71 @@ class AssetStructureAnalyzer:
         """从 Content 文件夹位置推断资产名称
         
         优先级：
-        1. Content 的父目录名（如果不是解压根目录）
-        2. Content 下的第一个子文件夹名
-        3. 解压根目录下的第一个子目录名
+        1. Content 的父目录名（如果不是解压根目录且不是 "content"）
+        2. 解压根目录的名称（如果不是临时目录）
+        3. Content 下的第一个子文件夹名
+        4. "UnnamedAsset"
         """
+        logger.info(f"[_infer_name_from_content] content_dir={content_dir}, root={root}")
         parent = content_dir.parent
+        logger.info(f"[_infer_name_from_content] parent={parent}, parent.name={parent.name}")
         
+        # 优先级 1: Content 的父目录名（排除解压根目录和 "content" 名称）
         if parent != root:
             name = parent.name
-            if name and not name.startswith('temp') and not name.startswith('.'):
+            logger.info(f"[_infer_name_from_content] 优先级1: parent != root, name={name}")
+            if name and not name.startswith('temp') and not name.startswith('.') and name.lower() != 'content':
+                logger.info(f"[_infer_name_from_content] 优先级1 通过: 返回 {name}")
                 return name
+            else:
+                logger.info(f"[_infer_name_from_content] 优先级1 未通过: name={name}, lower={name.lower() if name else None}")
+        else:
+            logger.info(f"[_infer_name_from_content] 优先级1 跳过: parent == root")
         
+        # 优先级 2: 解压根目录的名称（排除临时目录）
+        root_name = root.name
+        logger.info(f"[_infer_name_from_content] 优先级2: root_name={root_name}")
+        if root_name and not root_name.startswith('temp') and not root_name.startswith('.') and not root_name.startswith('ue_toolkit_extract'):
+            logger.info(f"[_infer_name_from_content] 优先级2 通过: 返回 {root_name}")
+            return root_name
+        else:
+            logger.info(f"[_infer_name_from_content] 优先级2 未通过")
+        
+        # 优先级 3: Content 下的第一个子文件夹名
         sub_dirs = [d for d in content_dir.iterdir() if d.is_dir() and not d.name.startswith('.')]
+        logger.info(f"[_infer_name_from_content] 优先级3: sub_dirs={[d.name for d in sub_dirs]}")
         if sub_dirs:
+            logger.info(f"[_infer_name_from_content] 优先级3 通过: 返回 {sub_dirs[0].name}")
             return sub_dirs[0].name
         
-        root_dirs = [d for d in root.iterdir() if d.is_dir() and not d.name.startswith('.')]
-        if root_dirs:
-            return root_dirs[0].name
-        
+        # 优先级 4: 默认名称
+        logger.info(f"[_infer_name_from_content] 优先级4: 返回 UnnamedAsset")
         return "UnnamedAsset"
     
     def _infer_name_from_path(self, asset_root: Path, extracted_root: Path) -> str:
-        """从资产路径推断名称"""
+        """从资产路径推断名称
+        
+        优先级：
+        1. asset_root 的名称（如果不等于 extracted_root）
+        2. extracted_root 的名称（如果不是临时目录）
+        3. "UnnamedAsset"
+        """
+        logger.info(f"[_infer_name_from_path] asset_root={asset_root}, extracted_root={extracted_root}")
+        
+        # 优先级 1: asset_root 的名称（剥皮后的结果）
         if asset_root != extracted_root:
+            logger.info(f"[_infer_name_from_path] 优先级1: asset_root != extracted_root, 返回 {asset_root.name}")
             return asset_root.name
         
-        sub_dirs = [d for d in extracted_root.iterdir() if d.is_dir() and not d.name.startswith('.')]
-        if sub_dirs:
-            return sub_dirs[0].name
+        # 优先级 2: extracted_root 的名称（如果不是临时目录）
+        root_name = extracted_root.name
+        logger.info(f"[_infer_name_from_path] 优先级2: root_name={root_name}")
+        if root_name and not root_name.startswith('temp') and not root_name.startswith('.') and not root_name.startswith('ue_toolkit_extract'):
+            logger.info(f"[_infer_name_from_path] 优先级2 通过: 返回 {root_name}")
+            return root_name
         
+        # 优先级 3: 默认名称
+        logger.info(f"[_infer_name_from_path] 优先级3: 返回 UnnamedAsset")
         return "UnnamedAsset"
     
     def _find_common_parent(self, dirs: List[Path], fallback: Path) -> Path:

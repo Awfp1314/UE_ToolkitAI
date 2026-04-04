@@ -117,32 +117,19 @@ class FileOperations:
             self._logger.warning(f"⚠️ 符号链接功能已废除，强制使用复制模式")
             use_symlink = False  # 强制改为复制模式
         
-        # 尝试使用高性能复制（大文件优先）
-        if self._fast_ops and not incremental:
-            # 快速估算大小（只检查前 100 个文件）
+        # 直接使用高性能复制（robocopy 对小文件也很快，无需判断大小）
+        if self._fast_ops:
             try:
-                file_count = 0
-                total_size = 0
-                for item in src.rglob('*'):
-                    if item.is_file():
-                        file_count += 1
-                        total_size += item.stat().st_size
-                        if file_count >= 100:
-                            # 估算总大小
-                            all_files = sum(1 for _ in src.rglob('*') if _.is_file())
-                            total_size = total_size * all_files // file_count
-                            break
-                
-                # 大于 1GB 使用高性能复制
-                if total_size > 1024 * 1024 * 1024:
-                    self._logger.info(f"🚀 检测到大目录 ({self.format_size(total_size)})，使用高性能复制")
-                    success = self._fast_ops.copy_tree_fast(src, dst, progress_callback)
-                    if success:
-                        return True
-                    else:
-                        self._logger.warning("⚠️ 高性能复制失败，降级到标准模式")
+                self._logger.info(f"🚀 尝试使用高性能复制")
+                success = self._fast_ops.copy_tree_fast(src, dst, progress_callback)
+                if success:
+                    return True
+                else:
+                    self._logger.warning("⚠️ 高性能复制失败，降级到标准模式")
             except Exception as e:
                 self._logger.warning(f"⚠️ 高性能复制异常，降级到标准模式: {e}")
+        else:
+            self._logger.warning("⚠️ 高性能文件操作未初始化，使用标准模式")
 
         # 如果使用增量复制且目标存在，使用增量模式
         if incremental and dst.exists():
@@ -206,6 +193,7 @@ class FileOperations:
                 # 2. 复制文件并报告进度（基于字节数）
                 copied_bytes = 0
                 copied_files = 0
+                update_interval = max(1, total_files // 100)  # 动态调整更新频率，最多更新100次
                 
                 for src_file, file_size in all_files:
                     # 计算相对路径
@@ -217,18 +205,21 @@ class FileOperations:
                     
                     # 复制文件
                     copied_files += 1
-                    self._logger.debug(f"📄 复制文件 [{copied_files}/{total_files}]: {src_file.name} ({self.format_size(file_size)})")
                     
-                    # 小文件（< 1MB）：直接复制
-                    if file_size < 1024 * 1024:
+                    # 小文件（< 10MB）：直接复制
+                    if file_size < 10 * 1024 * 1024:
                         shutil.copy2(str(src_file), str(dst_file))
                         copied_bytes += file_size
                         
-                        # 报告进度
-                        progress_callback(copied_bytes, total_bytes, f"正在复制: {src_file.name}")
+                        # 动态更新进度（避免过于频繁）
+                        if copied_files % update_interval == 0 or copied_files == total_files:
+                            if total_bytes == 0:
+                                progress_callback(1, 1, f"正在复制: {src_file.name}")
+                            else:
+                                progress_callback(copied_bytes, total_bytes, f"正在复制: {src_file.name}")
                     else:
-                        # 大文件（≥ 1MB）：分块复制并实时报告进度
-                        chunk_size = 1024 * 1024  # 1MB per chunk
+                        # 大文件（≥ 10MB）：分块复制并实时报告进度
+                        chunk_size = 16 * 1024 * 1024  # 16MB per chunk（提高性能）
                         file_copied_bytes = 0
                         
                         with open(src_file, 'rb') as fsrc:
@@ -242,7 +233,10 @@ class FileOperations:
                                     copied_bytes += len(chunk)
                                     
                                     # 报告进度（按字节）
-                                    progress_callback(copied_bytes, total_bytes, f"正在复制: {src_file.name}")
+                                    if total_bytes == 0:
+                                        progress_callback(1, 1, f"正在复制: {src_file.name}")
+                                    else:
+                                        progress_callback(copied_bytes, total_bytes, f"正在复制: {src_file.name}")
                         
                         # 复制元数据（修改时间等）
                         shutil.copystat(str(src_file), str(dst_file))
@@ -251,11 +245,11 @@ class FileOperations:
                     try:
                         import stat
                         dst_file.chmod(stat.S_IWRITE | stat.S_IREAD)
-                    except Exception as chmod_error:
-                        self._logger.debug(f"Failed to change file permissions: {chmod_error}")
+                    except Exception:
+                        pass  # 忽略权限修改失败
                     
-                    # 每 10 个文件或最后一个文件记录日志
-                    if copied_files % 10 == 0 or copied_files == total_files:
+                    # 每 50 个文件或最后一个文件记录日志
+                    if copied_files % 50 == 0 or copied_files == total_files:
                         progress_pct = (copied_bytes * 100) // total_bytes if total_bytes > 0 else 100
                         self._logger.info(f"📊 复制进度: {copied_files}/{total_files} 文件, {self.format_size(copied_bytes)}/{self.format_size(total_bytes)} ({progress_pct}%)")
                 

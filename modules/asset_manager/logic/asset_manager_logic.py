@@ -592,9 +592,17 @@ class AssetManagerLogic(QObject):
             step_start = time.time()
 
             def move_progress(current, total, message):
+                # 调试日志
+                logger.info(f"move_progress: current={current}, total={total}, message={message}")
+                
+                # 防止 total 为 0 导致除零错误
+                if total == 0:
+                    total = 1
+                    current = min(current, 1)
+                
                 if progress_callback and total > 0:
                     move_pct = (current / total) * 70
-                    progress_callback(10 + int(move_pct), 100, f"移动文件: {message}")
+                    progress_callback(10 + int(move_pct), 100, message)
                 else:
                     self.progress_updated.emit(current, total, message)
 
@@ -790,35 +798,21 @@ class AssetManagerLogic(QObject):
             total_items = len(items)
             logger.info(f"源路径为 Content 文件夹，复制 {total_items} 个子项到: {target_folder}")
             
-            # 预先扫描所有文件，计算总大小（用于进度映射）
-            total_bytes = 0
-            item_sizes = []
-            for item in items:
-                if item.is_dir():
-                    # 递归计算目录大小
-                    dir_size = sum(f.stat().st_size for f in item.rglob('*') if f.is_file())
-                    item_sizes.append(dir_size)
-                    total_bytes += dir_size
-                else:
-                    file_size = item.stat().st_size
-                    item_sizes.append(file_size)
-                    total_bytes += file_size
-            
-            logger.info(f"📊 统计到 {total_items} 个子项，总大小 {self._file_ops.format_size(total_bytes)}")
+            # ⚡ 不再预先扫描计算大小，直接开始复制（避免阻塞）
             
             # 复制每个子项
-            copied_bytes = 0
-            for idx, (item, item_size) in enumerate(zip(items, item_sizes), 1):
+            for idx, item in enumerate(items, 1):
                 target_item = target_folder / item.name
                 
                 # 定义子项的进度回调（映射到 10-80% 范围）
-                def item_progress(current_bytes, total_bytes_item, message):
-                    if progress_callback and total_bytes > 0:
-                        # 计算当前总进度（已复制 + 当前文件进度）
-                        current_total = copied_bytes + current_bytes
-                        # 映射到 10-80% 范围
-                        pct = (current_total / total_bytes) * 70
-                        progress_callback(10 + int(pct), 100, f"复制: {item.name}")
+                def item_progress(current, total, message):
+                    # 映射到 10-80% 范围
+                    if progress_callback:
+                        # 使用项目索引计算进度
+                        base_pct = 10 + int((idx - 1) / total_items * 70)
+                        item_pct = int(current / max(total, 1) * (70 / total_items))
+                        # 使用传入的 message，保留机械硬盘提示等信息
+                        progress_callback(base_pct + item_pct, 100, message)
                 
                 # 复制子项
                 if item.is_dir():
@@ -834,15 +828,12 @@ class AssetManagerLogic(QObject):
                     logger.error(f"复制子项失败: {item} -> {target_item}")
                     return False
                 
-                # 更新已复制字节数
-                copied_bytes += item_size
-                
                 # 报告子项完成进度
-                if progress_callback and total_bytes > 0:
-                    pct = (copied_bytes / total_bytes) * 70
-                    progress_callback(10 + int(pct), 100, f"已完成: {item.name}")
+                if progress_callback:
+                    pct = 10 + int(idx / total_items * 70)
+                    progress_callback(pct, 100, f"已完成: {item.name} ({idx}/{total_items})")
             
-            logger.info(f"✅ 成功复制 {total_items} 个子项，总大小 {self._file_ops.format_size(copied_bytes)}")
+            logger.info(f"✅ 成功复制 {total_items} 个子项")
             return True
         else:
             # 标准流程：复制整个路径到目标文件夹内
@@ -850,9 +841,17 @@ class AssetManagerLogic(QObject):
             logger.info(f"开始复制资产: {source_path} -> {target_path}")
 
             def copy_progress(current, total, message):
+                # 调试日志
+                logger.info(f"copy_progress: current={current}, total={total}, message={message}")
+                
+                # 防止 total 为 0 导致除零错误
+                if total == 0:
+                    total = 1
+                    current = min(current, 1)
+                
                 if progress_callback and total > 0:
                     copy_pct = (current / total) * 70
-                    progress_callback(10 + int(copy_pct), 100, f"复制文件: {message}")
+                    progress_callback(10 + int(copy_pct), 100, message)
                 else:
                     self.progress_updated.emit(current, total, message)
 
@@ -1345,7 +1344,28 @@ class AssetManagerLogic(QObject):
 
         # 子步骤 2: 文件扫描和解压
         sub_step_start = time.time()
-        model_extensions = {'.fbx', '.obj', '.gltf', '.glb', '.abc', '.usd', '.usda', '.usdc'}
+        model_extensions = {
+            # 常用格式
+            '.fbx', '.obj', '.gltf', '.glb',  # 通用格式
+            '.dae',  # Collada
+            '.stl',  # 3D 打印
+            # USD 格式
+            '.usd', '.usda', '.usdc', '.usdz',
+            # Alembic
+            '.abc',
+            # 软件专用格式
+            '.blend',  # Blender
+            '.ma', '.mb',  # Maya
+            '.max',  # 3ds Max
+            '.c4d',  # Cinema 4D
+            '.skp',  # SketchUp
+            '.3ds',  # 3D Studio
+            # 动画/角色格式
+            '.pmx', '.pmd',  # MikuMikuDance (MMD)
+            '.x',  # DirectX
+            '.ply',  # Polygon File Format
+            '.wrl', '.vrml',  # VRML
+        }
         texture_extensions = {'.png', '.jpg', '.jpeg', '.tga', '.bmp', '.exr', '.hdr', '.tif', '.tiff'}
 
         models = {}

@@ -60,7 +60,28 @@ SEARCH_MAX_RESULTS = 1000  # 最大搜索结果数
 # ============================================================================
 
 # 支持的资产类型
-SUPPORTED_MODEL_EXTENSIONS = ['.fbx', '.obj', '.blend', '.ma', '.mb']
+SUPPORTED_MODEL_EXTENSIONS = [
+    # 常用格式
+    '.fbx', '.obj', '.gltf', '.glb',  # 通用格式
+    '.dae',  # Collada
+    '.stl',  # 3D 打印
+    # USD 格式
+    '.usd', '.usda', '.usdc', '.usdz',
+    # Alembic
+    '.abc',
+    # 软件专用格式
+    '.blend',  # Blender
+    '.ma', '.mb',  # Maya
+    '.max',  # 3ds Max
+    '.c4d',  # Cinema 4D
+    '.skp',  # SketchUp
+    '.3ds',  # 3D Studio
+    # 动画/角色格式
+    '.pmx', '.pmd',  # MikuMikuDance (MMD)
+    '.x',  # DirectX
+    '.ply',  # Polygon File Format
+    '.wrl', '.vrml',  # VRML
+]
 SUPPORTED_TEXTURE_EXTENSIONS = ['.png', '.jpg', '.jpeg', '.tga', '.bmp', '.tif', '.tiff']
 SUPPORTED_MATERIAL_EXTENSIONS = ['.mat', '.mtl']
 SUPPORTED_AUDIO_EXTENSIONS = ['.wav', '.mp3', '.ogg', '.flac']

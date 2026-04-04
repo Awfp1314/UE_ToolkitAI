@@ -35,17 +35,41 @@ class ApiLLMClient(BaseLLMClient):
         super().__init__(config)
         
         # 从配置读取（不使用硬编码的默认值）
-        self.api_url = config.get('api_url', 'https://api.openai-hk.com/v1/chat/completions')
+        self.api_url = config.get('api_url', 'https://api.openai.com/v1/chat/completions')
         self.api_key = config.get('api_key', '')
-        self.default_model = config.get('default_model', 'gemini-2.5-flash')
+        self.default_model = config.get('default_model', 'gpt-3.5-turbo')
         self.default_temperature = config.get('temperature', 0.8)
         self.timeout = config.get('timeout', 60)
+        
+        # ⚡ 智能修正 API URL：自动补全缺失的 /v1/chat/completions 路径
+        # 常见错误：用户只填写了域名（如 https://api.deepseek.com）
+        if self.api_url and not self.api_url.endswith('/chat/completions'):
+            # 检测常见的 API 域名并自动补全路径
+            if 'deepseek.com' in self.api_url.lower():
+                if not self.api_url.endswith('/v1/chat/completions'):
+                    self.api_url = self.api_url.rstrip('/') + '/v1/chat/completions'
+                    print(f"[API_URL_FIX] Deepseek URL 自动补全: {self.api_url}")
+            elif 'openai.com' in self.api_url.lower() or 'openai-hk.com' in self.api_url.lower():
+                if not self.api_url.endswith('/v1/chat/completions'):
+                    self.api_url = self.api_url.rstrip('/') + '/v1/chat/completions'
+                    print(f"[API_URL_FIX] OpenAI URL 自动补全: {self.api_url}")
+            elif 'anthropic.com' in self.api_url.lower():
+                # Claude API 使用不同的路径
+                if not self.api_url.endswith('/v1/messages'):
+                    self.api_url = self.api_url.rstrip('/') + '/v1/messages'
+                    print(f"[API_URL_FIX] Claude URL 自动补全: {self.api_url}")
+            # 其他通用 OpenAI 兼容 API
+            elif '/v1' not in self.api_url:
+                self.api_url = self.api_url.rstrip('/') + '/v1/chat/completions'
+                print(f"[API_URL_FIX] 通用 API URL 自动补全: {self.api_url}")
         
         # 验证必需的配置
         if not self.api_key:
             raise ValueError(
                 "API Key 未配置！\n\n"
-                "请在 [设置 → AI 助手设置] 中配置 API Key。"
+                "请在 [设置 → AI 助手设置] 中配置 API Key。\n"
+                "如果没有 API Key，可以访问 https://platform.openai.com/api-keys 获取，\n"
+                "或使用其他兼容 OpenAI 的 API 服务。"
             )
         
         # 构建请求头（自动补全 Bearer 前缀，兼容各类 OpenAI 兼容 API）
@@ -120,19 +144,47 @@ class ApiLLMClient(BaseLLMClient):
                     "model": self.default_model,
                     "messages": context_messages,
                     "temperature": temperature if temperature is not None else self.default_temperature,
-                    "stream": stream
                 }
+                
+                # 检查 API 是否为 Gemini 后端
+                # 方法1: 检查 URL 中是否包含 gemini/google 关键词
+                # 方法2: 检查模型名称是否包含 gemini
+                # 方法3: 尝试发送请求，如果返回 "Unknown name 'stream'" 错误则判定为 Gemini
+                is_gemini_api = (
+                    'gemini' in self.api_url.lower() or 
+                    'google' in self.api_url.lower() or
+                    'gemini' in self.default_model.lower()
+                )
+                
+                print(f"[DEBUG] API URL: {self.api_url}")
+                print(f"[DEBUG] 模型名称: {self.default_model}")
+                print(f"[DEBUG] 是否为 Gemini API: {is_gemini_api}")
+                print(f"[DEBUG] stream 参数: {stream}")
+                
+                # 只有非 Gemini API 才在请求体中添加 stream 参数
+                if not is_gemini_api:
+                    payload["stream"] = stream
+                    print(f"[DEBUG] 已添加 stream 到请求体（非 Gemini API）")
+                else:
+                    print(f"[DEBUG] 跳过 stream 参数（Gemini API）")
                 
                 # 添加 tools 参数（如果提供）
                 if tools:
                     payload["tools"] = tools
+                
+                # 如果是 Gemini API 且需要流式，通过 URL 参数控制
+                request_url = self.api_url
+                if is_gemini_api and stream:
+                    # Gemini API 使用 alt=sse 参数启用流式
+                    separator = '&' if '?' in request_url else '?'
+                    request_url = f"{request_url}{separator}alt=sse"
                 
                 # 使用持久化Session发送请求（复用连接）
                 # ⚡ 流式请求使用 (connect_timeout, read_timeout) 元组
                 # read_timeout 防止流式连接挂住（API 不发 [DONE] 时）
                 req_timeout = (10, self.timeout) if stream else self.timeout
                 response = self._session.post(
-                    self.api_url,
+                    request_url,
                     headers=self.headers,
                     json=payload,
                     stream=stream,
@@ -151,7 +203,39 @@ class ApiLLMClient(BaseLLMClient):
                     error_msg = error_data.get('error', {}).get('message', error_text)
                 except:
                     error_msg = error_text
-                raise Exception(f"API 错误 ({response.status_code}): {error_msg}")
+                
+                # 为常见错误提供更友好的提示
+                if response.status_code == 404:
+                    friendly_msg = (
+                        f"API端点不存在 (404)。\n\n"
+                        f"可能的原因：\n"
+                        f"1. API URL配置错误: {self.api_url}\n"
+                        f"2. 该端点需要有效的API密钥\n"
+                        f"3. 服务器端点已更改或不可用\n\n"
+                        f"请在 [设置 → AI 助手设置] 中检查API URL和API密钥配置。"
+                    )
+                    raise Exception(friendly_msg)
+                elif response.status_code == 401:
+                    friendly_msg = (
+                        f"API密钥无效或过期 (401)。\n\n"
+                        f"可能的原因：\n"
+                        f"1. API密钥错误\n"
+                        f"2. API密钥已过期\n"
+                        f"3. 该API密钥没有访问权限\n\n"
+                        f"请在 [设置 → AI 助手设置] 中更新API密钥。"
+                    )
+                    raise Exception(friendly_msg)
+                elif response.status_code == 429:
+                    friendly_msg = (
+                        f"API请求频率限制 (429)。\n\n"
+                        f"可能的原因：\n"
+                        f"1. 请求过于频繁\n"
+                        f"2. API配额已用完\n\n"
+                        f"请稍后重试或检查API服务配额。"
+                    )
+                    raise Exception(friendly_msg)
+                else:
+                    raise Exception(f"API 错误 ({response.status_code}): {error_msg}")
             
             # 处理流式响应
             if stream:
@@ -388,7 +472,39 @@ class ApiLLMClient(BaseLLMClient):
                     error_msg = error_data.get('error', {}).get('message', error_text)
                 except:
                     error_msg = error_text
-                raise Exception(f"API 错误 ({response.status_code}): {error_msg}")
+                
+                # 为常见错误提供更友好的提示
+                if response.status_code == 404:
+                    friendly_msg = (
+                        f"API端点不存在 (404)。\n\n"
+                        f"可能的原因：\n"
+                        f"1. API URL配置错误: {self.api_url}\n"
+                        f"2. 该端点需要有效的API密钥\n"
+                        f"3. 服务器端点已更改或不可用\n\n"
+                        f"请在 [设置 → AI 助手设置] 中检查API URL和API密钥配置。"
+                    )
+                    raise Exception(friendly_msg)
+                elif response.status_code == 401:
+                    friendly_msg = (
+                        f"API密钥无效或过期 (401)。\n\n"
+                        f"可能的原因：\n"
+                        f"1. API密钥错误\n"
+                        f"2. API密钥已过期\n"
+                        f"3. 该API密钥没有访问权限\n\n"
+                        f"请在 [设置 → AI 助手设置] 中更新API密钥。"
+                    )
+                    raise Exception(friendly_msg)
+                elif response.status_code == 429:
+                    friendly_msg = (
+                        f"API请求频率限制 (429)。\n\n"
+                        f"可能的原因：\n"
+                        f"1. 请求过于频繁\n"
+                        f"2. API配额已用完\n\n"
+                        f"请稍后重试或检查API服务配额。"
+                    )
+                    raise Exception(friendly_msg)
+                else:
+                    raise Exception(f"API 错误 ({response.status_code}): {error_msg}")
             
             # 解析响应（防御空响应体）
             response_text = response.text or ""
@@ -550,4 +666,35 @@ class ApiLLMClient(BaseLLMClient):
         except Exception:
             # 获取模型列表失败，跳过验证放行（不阻塞用户）
             return {'valid': True, 'error': None}
+
+    @staticmethod
+    def validate_api_key(api_url: str, api_key: str, timeout: int = 10) -> dict:
+        """
+        验证 API Key 是否有效
+        
+        通过尝试获取模型列表来验证 API Key，不会消耗 token。
+        
+        Args:
+            api_url: API 的 chat completions URL
+            api_key: API 密钥
+            timeout: 超时时间
+            
+        Returns:
+            dict: {'valid': bool, 'error': str or None}
+        """
+        try:
+            models = ApiLLMClient.fetch_available_models(api_url, api_key, timeout=timeout)
+            # 如果能成功获取模型列表（即使为空），说明 API Key 有效
+            return {'valid': True, 'error': None}
+        except Exception as e:
+            error_msg = str(e)
+            # 解析常见错误
+            if '401' in error_msg or 'Unauthorized' in error_msg or 'Invalid' in error_msg:
+                return {'valid': False, 'error': 'API Key 无效或已过期'}
+            elif '403' in error_msg or 'Forbidden' in error_msg:
+                return {'valid': False, 'error': 'API Key 没有访问权限'}
+            elif 'timeout' in error_msg.lower():
+                return {'valid': False, 'error': '连接超时，请检查网络或 API URL'}
+            else:
+                return {'valid': False, 'error': f'验证失败: {error_msg}'}
 

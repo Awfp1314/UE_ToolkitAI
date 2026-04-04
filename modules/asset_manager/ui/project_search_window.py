@@ -656,6 +656,8 @@ class ProjectSearchWindow(QWidget):
                 tip_text.setText("💡 提示：资产包将直接复制到项目的 Content 目录，无需重启项目")
             elif pkg_type_str.lower() == 'project':
                 tip_text.setText("💡 提示：将导入工程资产 Content 文件夹下的资产到目标工程")
+            elif pkg_type_str.lower() == 'model':
+                tip_text.setText("💡 提示：导入模型文件时请确保工程为打开状态，模型将复制到项目目录")
             
             tip_layout.addWidget(tip_text, 1)
             
@@ -1385,10 +1387,12 @@ class ProjectSearchWindow(QWidget):
                     
                     # 判断是否为插件类型
                     is_plugin = False
+                    is_model = False
                     is_others = False
                     if self.package_type:
                         pkg_type_str = self.package_type.value if hasattr(self.package_type, 'value') else str(self.package_type)
                         is_plugin = pkg_type_str.lower() == 'plugin'
+                        is_model = pkg_type_str.lower() == 'model'
                         is_others = pkg_type_str.lower() == 'others'
                     
                     if is_plugin:
@@ -1411,6 +1415,33 @@ class ProjectSearchWindow(QWidget):
                             else:
                                 success = False
                         else:
+                            success = False
+                    
+                    elif is_model:
+                        # 模型导入逻辑：从 Models 文件夹复制到 Content 文件夹
+                        # 结构：资产名/Models/模型文件夹/Mesh/Textures/ → Content/模型文件夹/Mesh/Textures/
+                        models_folder = self.asset_path / "Models"
+                        if models_folder.exists() and models_folder.is_dir():
+                            # 获取 Models 文件夹下的第一个子文件夹（模型文件夹）
+                            model_folders = [f for f in models_folder.iterdir() if f.is_dir()]
+                            if model_folders:
+                                model_folder = model_folders[0]
+                                model_name = model_folder.name
+                                target_model = target_project / "Content" / model_name
+                                
+                                logger.info(f"模型资产导入: 从 {model_folder} 复制到 {target_model}")
+                                
+                                # 复制模型文件夹的内容到 Content/模型名/
+                                success = self.logic._file_ops.safe_copytree(
+                                    model_folder,
+                                    target_model,
+                                    progress_callback=copy_progress_wrapper
+                                )
+                            else:
+                                logger.error(f"Models 文件夹下没有找到模型文件夹: {models_folder}")
+                                success = False
+                        else:
+                            logger.error(f"Models 文件夹不存在: {models_folder}")
                             success = False
                             
                     elif is_others:

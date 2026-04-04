@@ -1357,14 +1357,15 @@ class MyProjectsUI(BaseModuleWidget):
 
     @staticmethod
     def _save_ui_state(key: str, value) -> None:
-        """保存指定字段到 app_config.ui_states.my_projects"""
+        """保存指定字段到 app_config.ui_states.my_projects（延迟保存）"""
         try:
             from core.services import config_service
             app_config = config_service.get_module_config("app") or {}
             ui_states = app_config.setdefault("ui_states", {})
             mp_state = ui_states.setdefault("my_projects", {})
             mp_state[key] = value
-            config_service.save_module_config("app", app_config)
+            # immediate=False: 仅更新内存，退出时统一保存
+            config_service.save_module_config("app", app_config, immediate=False)
         except Exception:
             pass
 

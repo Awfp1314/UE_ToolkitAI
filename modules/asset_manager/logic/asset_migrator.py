@@ -5,6 +5,7 @@
 """
 
 import os
+import shutil
 from pathlib import Path
 from typing import Optional, Callable
 from logging import Logger
@@ -65,11 +66,35 @@ class AssetMigrator:
             
             # 构建目标路径
             asset_name = getattr(asset, 'name', asset_path.name)
-            target_content_dir = target_project / "Content"
-            target_path = target_content_dir / asset_name
             
-            # 确保 Content 目录存在
-            target_content_dir.mkdir(parents=True, exist_ok=True)
+            # 根据 package_type 确定目标路径
+            package_type = getattr(asset, 'package_type', None)
+            if package_type:
+                from .asset_model import PackageType
+                
+                if package_type == PackageType.PLUGIN:
+                    # 插件类型：复制到 Plugins/ 目录
+                    # 插件包装结构：资产名/Plugins/插件原名/
+                    # 目标：Plugins/插件原名/
+                    target_base_dir = target_project / "Plugins"
+                    target_path = target_base_dir  # 直接复制到 Plugins/ 下
+                elif package_type == PackageType.MODEL:
+                    # 模型类型：复制到 Content/ 目录
+                    # 模型包装结构：资产名/Models/模型文件夹/Mesh/Textures/
+                    # 将 Models/ 下的模型文件夹直接复制到 Content/
+                    target_base_dir = target_project / "Content"
+                    target_path = target_base_dir  # 直接复制到 Content/ 下
+                else:
+                    # 其他类型（CONTENT/PROJECT/OTHERS）：复制到 Content/ 目录
+                    target_base_dir = target_project / "Content"
+                    target_path = target_base_dir / asset_name
+            else:
+                # 向后兼容：没有 package_type 的旧资产，默认复制到 Content/
+                target_base_dir = target_project / "Content"
+                target_path = target_base_dir / asset_name
+            
+            # 确保目标基础目录存在
+            target_base_dir.mkdir(parents=True, exist_ok=True)
             
             if self._mock_mode:
                 # Mock 模式：模拟迁移过程
@@ -87,23 +112,56 @@ class AssetMigrator:
             # 执行复制
             self._logger.info(f"Migrating asset: {asset_path} -> {target_path}")
 
-            # 检查资产是否使用包装结构（包含 Content 子文件夹）
-            asset_content_folder = asset_path / "Content"
-            if asset_content_folder.exists() and asset_content_folder.is_dir():
-                # 包装结构：将 Content 文件夹内的内容复制到目标工程的 Content 文件夹
-                self._logger.info(f"Detected wrapper structure, copying from {asset_content_folder} to {target_content_dir}")
+            # 根据 package_type 确定源文件夹
+            package_type = getattr(asset, 'package_type', None)
+            if package_type:
+                from .asset_model import PackageType
+                wrapper_folder_name = package_type.wrapper_folder
+                wrapper_base = asset_path / wrapper_folder_name
+                
+                self._logger.info(f"🔍 Package type: {package_type}, wrapper_folder: {wrapper_folder_name}")
+                self._logger.info(f"🔍 wrapper_base path: {wrapper_base}")
+                
+                # 对于 MODEL 类型，需要找到 Models/ 下的实际模型文件夹
+                if package_type == PackageType.MODEL and wrapper_base.exists():
+                    # Models/ 下应该有一个子文件夹（如 rust_key/）
+                    model_folders = [f for f in wrapper_base.iterdir() if f.is_dir()]
+                    self._logger.info(f"🔍 Found {len(model_folders)} model folders: {[f.name for f in model_folders]}")
+                    if model_folders:
+                        # 使用第一个找到的文件夹作为实际的模型文件夹
+                        asset_wrapper_folder = model_folders[0]
+                        self._logger.info(f"🔍 Using model folder: {asset_wrapper_folder}")
+                    else:
+                        asset_wrapper_folder = wrapper_base
+                        self._logger.info(f"🔍 No model folders found, using wrapper_base")
+                else:
+                    asset_wrapper_folder = wrapper_base
+                    self._logger.info(f"🔍 Using wrapper_base as asset_wrapper_folder")
+            else:
+                # 向后兼容：默认检查 Content 文件夹
+                wrapper_folder_name = "Content"
+                asset_wrapper_folder = asset_path / "Content"
+                self._logger.info(f"🔍 No package_type, using default Content folder")
+
+            # 检查资产是否使用包装结构
+            if asset_wrapper_folder.exists() and asset_wrapper_folder.is_dir():
+                # 包装结构：将包装文件夹内的内容复制到目标路径
+                self._logger.info(f"Detected wrapper structure ({wrapper_folder_name}), copying from {asset_wrapper_folder} to {target_path}")
+
+                # 确保目标路径的父目录存在
+                target_path.parent.mkdir(parents=True, exist_ok=True)
 
                 # 获取所有需要复制的项目
-                all_items = list(asset_content_folder.iterdir())
+                all_items = list(asset_wrapper_folder.iterdir())
                 total_items = len(all_items)
 
                 if total_items == 0:
-                    self._logger.info("Content folder is empty")
+                    self._logger.info(f"{wrapper_folder_name} folder is empty")
                     if progress_callback:
                         progress_callback(100, 100, "Migration complete (empty folder)")
                     return True
 
-                self._logger.info(f"Copying {total_items} items from Content folder")
+                self._logger.info(f"Copying {total_items} items from {wrapper_folder_name} folder")
 
                 # 预先计算总大小
                 total_bytes = 0
@@ -124,7 +182,7 @@ class AssetMigrator:
                 copied_bytes = 0
                 for idx, (item, item_size) in enumerate(zip(all_items, item_sizes), 1):
                     try:
-                        target_item = target_content_dir / item.name
+                        target_item = target_path / item.name
 
                         # 删除旧的目标（如果存在）
                         if target_item.exists():

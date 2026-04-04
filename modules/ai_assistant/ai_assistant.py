@@ -84,6 +84,9 @@ class AIAssistantModule:
             # self._preload_embedding_model_async()
             logger.info("AI 模型采用延迟加载策略（首次使用时自动加载）")
 
+            # 异步预创建 ChatWindow 并加载历史消息（避免首次点击卡顿）
+            self._preload_chat_window_async()
+
             logger.info("AI 助手模块初始化完成")
         except Exception as e:
             logger.error(f"AI 助手模块初始化失败: {e}", exc_info=True)
@@ -133,6 +136,25 @@ class AIAssistantModule:
             MessageDialog(title, f"语义模型下载失败\n\n{message}", "warning", parent=self.parent).exec()
         except Exception as e:
             logger.warning(f"显示警告对话框失败: {e}")
+
+    def _preload_chat_window_async(self):
+        """异步预创建 ChatWindow 并加载历史消息（避免首次点击卡顿）"""
+        from PyQt6.QtCore import QTimer
+        
+        def preload_task():
+            """预加载任务"""
+            try:
+                logger.info("开始异步预创建 ChatWindow...")
+                # 调用 get_widget() 会创建 ChatWindow 并触发历史消息加载
+                # 由于 ChatWindow.__init__() 中已经将 _restore_chat_history() 改为异步，
+                # 所以这里不会阻塞主线程
+                widget = self.get_widget()
+                logger.info("ChatWindow 预创建完成，历史消息正在后台加载")
+            except Exception as e:
+                logger.warning(f"ChatWindow 预加载失败（首次点击时会正常创建）: {e}")
+        
+        # 延迟 500ms 后执行，让主窗口先完成初始化
+        QTimer.singleShot(500, preload_task)
 
     def _preload_embedding_model_async(self):
         """异步预加载 embedding 模型（后台线程）
@@ -365,7 +387,7 @@ class AIAssistantModule:
             from PyQt6.QtWidgets import QWidget, QHBoxLayout
             
             # 创建包装容器
-            # 结构: VBox[ toolbar | HBox[ sidebar | left_spacer | ChatWindow | stretch ] ]
+            # 结构: VBox[ HBox[ sidebar | left_spacer | ChatWindow | stretch ] ]
             wrapper = QWidget()
             from PyQt6.QtWidgets import QVBoxLayout, QPushButton, QLabel
             from PyQt6.QtCore import Qt
@@ -401,6 +423,7 @@ class AIAssistantModule:
             sidebar_toggle_btn.setToolTip("会话列表")
             sidebar_toggle_btn.clicked.connect(self.chat_window._toggle_sidebar)
             sidebar_toggle_btn.move(4, 4)
+            sidebar_toggle_btn.setVisible(True)  # 显式设置可见
             sidebar_toggle_btn.raise_()
             self.chat_window.sidebar_toggle_btn = sidebar_toggle_btn
             
@@ -418,6 +441,25 @@ class AIAssistantModule:
                 if self.chat_window._sidebar_visible:
                     self.chat_window._position_sidebar()
             wrapper.resizeEvent = _wrapper_resize
+            
+            # wrapper showEvent 时确保按钮可见
+            original_show = wrapper.showEvent
+            def _wrapper_show(event):
+                original_show(event)
+                # 确保按钮在最上层且可见
+                if hasattr(self.chat_window, 'sidebar_toggle_btn'):
+                    self.chat_window.sidebar_toggle_btn.raise_()
+                    self.chat_window.sidebar_toggle_btn.setVisible(True)
+            wrapper.showEvent = _wrapper_show
+            
+            # 添加一个方法供外部调用，用于在样式刷新后重新显示按钮
+            def _refresh_floating_button():
+                if hasattr(self.chat_window, 'sidebar_toggle_btn'):
+                    self.chat_window.sidebar_toggle_btn.raise_()
+                    self.chat_window.sidebar_toggle_btn.setVisible(True)
+                    self.chat_window._apply_toolbar_style()
+                    logger.debug("重新显示侧边栏按钮")
+            wrapper.refresh_floating_button = _refresh_floating_button
             
             # 设置逻辑层引用（传递给ChatWindow以初始化核心组件）
             if hasattr(self.chat_window, 'set_logic_references'):

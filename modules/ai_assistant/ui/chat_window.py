@@ -24,6 +24,9 @@ from .thinking_indicator import ThinkingIndicator
 from .scroll_controller import ScrollController
 from .session_list_widget import SessionListWidget
 from ..logic.chat_controller import ChatController
+from core.logger import get_logger
+
+logger = get_logger(__name__)
 
 
 class _BlockableScrollBar(QScrollBar):
@@ -109,8 +112,8 @@ class ChatWindow(BaseModuleWidget):
         # 后台预初始化 ContextManager（避免第一次发消息卡 UI）
         self.controller.pre_initialize_async()
 
-        # 恢复上次的聊天记录到 UI
-        self._restore_chat_history()
+        # 异步恢复聊天记录，避免阻塞 UI
+        QTimer.singleShot(0, self._restore_chat_history)
 
     def _connect_controller_signals(self):
         """连接控制器信号到 UI 更新方法"""
@@ -289,6 +292,9 @@ class ChatWindow(BaseModuleWidget):
             bubble = AIMessageBubble(content, theme=self.current_theme, show_regenerate=is_last_assistant)
             if is_last_assistant:
                 bubble.regenerate_clicked.connect(self.on_regenerate_response)
+            # 设置 asset_manager_logic 引用
+            if hasattr(self, 'asset_manager_logic') and self.asset_manager_logic:
+                bubble.set_asset_manager_logic(self.asset_manager_logic)
             self.ai_bubbles.append(bubble)
         else:
             return
@@ -325,6 +331,7 @@ class ChatWindow(BaseModuleWidget):
 
     def set_logic_references(self, asset_manager_logic=None, config_tool_logic=None, site_recommendations_logic=None):
         """设置其他模块的逻辑层引用（委托给控制器）"""
+        # 委托给控制器存储（通过 @property 访问）
         self.controller.set_logic_references(
             asset_manager_logic=asset_manager_logic,
             config_tool_logic=config_tool_logic,
@@ -500,14 +507,8 @@ class ChatWindow(BaseModuleWidget):
         self.sidebar_toggle_btn.setStyleSheet(btn_style)
 
     def _update_session_title_label(self):
-        """更新工具栏上的当前会话标题"""
-        if not hasattr(self, 'session_title_label'):
-            return
-        session = self.controller.session_manager.get_current_session()
-        if session:
-            self.session_title_label.setText(session.title)
-        else:
-            self.session_title_label.setText("")
+        """更新工具栏上的当前会话标题（已废弃，标题显示在主窗口）"""
+        pass
 
     def _on_session_title_updated(self, session_id: str, new_title: str):
         """AI 生成标题后更新 UI（从后台线程通过信号调用，线程安全）"""
@@ -760,6 +761,9 @@ class ChatWindow(BaseModuleWidget):
 
             self.current_ai_bubble = AIMessageBubble("", theme=self.current_theme, show_regenerate=True)
             self.current_ai_bubble.regenerate_clicked.connect(self.on_regenerate_response)
+            # 设置 asset_manager_logic 引用
+            if hasattr(self, 'asset_manager_logic') and self.asset_manager_logic:
+                self.current_ai_bubble.set_asset_manager_logic(self.asset_manager_logic)
 
             # 新回复开始，重置滚动状态
             if self.scroll_controller:
@@ -842,6 +846,9 @@ class ChatWindow(BaseModuleWidget):
         self._hide_thinking_indicator()
 
         error_bubble = AIMessageBubble("", theme=self.current_theme, show_regenerate=False)
+        # 设置 asset_manager_logic 引用
+        if hasattr(self, 'asset_manager_logic') and self.asset_manager_logic:
+            error_bubble.set_asset_manager_logic(self.asset_manager_logic)
         self.ai_bubbles.append(error_bubble)
 
         self.message_layout.insertWidget(
@@ -900,6 +907,9 @@ class ChatWindow(BaseModuleWidget):
     def add_assistant_message(self, message: str):
         """添加助手消息（历史消息，不显示重新生成按钮）"""
         bubble = AIMessageBubble(message, theme=self.current_theme, show_regenerate=False)
+        # 设置 asset_manager_logic 引用
+        if hasattr(self, 'asset_manager_logic') and self.asset_manager_logic:
+            bubble.set_asset_manager_logic(self.asset_manager_logic)
         self.ai_bubbles.append(bubble)
 
         self.message_layout.insertWidget(
@@ -1103,6 +1113,80 @@ class ChatWindow(BaseModuleWidget):
     def _on_add_config(self):
         """处理添加配置请求"""
         print("[DEBUG] 添加配置功能待实现")
+    
+    def _on_preview_asset(self, asset_name: str):
+        """处理资产预览请求（从AI消息气泡触发）
+        
+        Args:
+            asset_name: 资产名称
+        """
+        print(f"[DEBUG] 预览资产: {asset_name}")
+        
+        if not hasattr(self, 'asset_manager_logic') or not self.asset_manager_logic:
+            print("[WARNING] 资产管理逻辑层未初始化")
+            return
+        
+        # 查找资产
+        try:
+            all_assets = self.asset_manager_logic.get_all_assets()
+            target_asset = None
+            
+            for asset in all_assets:
+                if hasattr(asset, 'name') and asset.name == asset_name:
+                    target_asset = asset
+                    break
+            
+            if not target_asset:
+                print(f"[WARNING] 未找到资产: {asset_name}")
+                return
+            
+            # 触发预览（调用资产管理器的预览功能）
+            if hasattr(self.asset_manager_logic, 'preview_asset'):
+                self.asset_manager_logic.preview_asset(target_asset)
+            else:
+                print("[WARNING] 资产管理器不支持预览功能")
+        
+        except Exception as e:
+            print(f"[ERROR] 预览资产失败: {e}")
+            import traceback
+            traceback.print_exc()
+    
+    def _on_import_asset(self, asset_name: str):
+        """处理资产导入请求（从AI消息气泡触发）
+        
+        Args:
+            asset_name: 资产名称
+        """
+        print(f"[DEBUG] 导入资产: {asset_name}")
+        
+        if not hasattr(self, 'asset_manager_logic') or not self.asset_manager_logic:
+            print("[WARNING] 资产管理逻辑层未初始化")
+            return
+        
+        # 查找资产
+        try:
+            all_assets = self.asset_manager_logic.get_all_assets()
+            target_asset = None
+            
+            for asset in all_assets:
+                if hasattr(asset, 'name') and asset.name == asset_name:
+                    target_asset = asset
+                    break
+            
+            if not target_asset:
+                print(f"[WARNING] 未找到资产: {asset_name}")
+                return
+            
+            # 触发导入（调用资产管理器的导入功能）
+            if hasattr(self.asset_manager_logic, 'import_asset'):
+                self.asset_manager_logic.import_asset(target_asset)
+            else:
+                print("[WARNING] 资产管理器不支持导入功能")
+        
+        except Exception as e:
+            print(f"[ERROR] 导入资产失败: {e}")
+            import traceback
+            traceback.print_exc()
 
     # ------------------------------------------------------------------
     # 滚动
