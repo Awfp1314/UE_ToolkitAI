@@ -1319,7 +1319,7 @@ class EditProjectDialog(QDialog):
             finally:
                 _shutil.rmtree(tmp_dir, ignore_errors=True)
         else:
-        high_risk, _ = self._scan_script_references(project_path, old_name)
+            high_risk, _ = self._scan_script_references(project_path, old_name)
         has_history = self._has_existing_redirects(project_path, old_name)
 
         if high_risk or has_history:
