@@ -1212,6 +1212,29 @@ class ProjectSearchWindow(QWidget):
             if self.mode == "select":
                 c.import_btn.setText("▶  选择此工程")
                 c.import_req.connect(self._on_select_project)  # 选择模式
+                
+                # 检查引擎版本，只允许 UE4 工程
+                version = project.get('version', 'Unknown')
+                if not version.startswith('4.'):
+                    c.import_btn.setEnabled(False)
+                    c.import_btn.setText("正在开发")
+                    c.import_btn.setToolTip("该引擎版本暂不支持，正在开发中")
+                    c.import_btn.setCursor(Qt.CursorShape.ForbiddenCursor)
+                    # 设置禁用状态的灰色样式
+                    c.import_btn.setStyleSheet("""
+                        QPushButton {
+                            background-color: #4a4a4a;
+                            color: #888888;
+                            border: none;
+                            border-radius: 4px;
+                            font-size: 12px;
+                            font-weight: 600;
+                        }
+                        QPushButton:disabled {
+                            background-color: #3a3a3a;
+                            color: #666666;
+                        }
+                    """)
             else:
                 c.import_req.connect(self._on_import_project)  # 导入模式
             

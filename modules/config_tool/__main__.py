@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 from PyQt6.QtWidgets import QWidget
-from modules.config_tool.logic.config_tool_logic import ConfigToolLogic
+from .logic.config_tool_logic import ConfigToolLogic
 from typing import Optional
 
 # 使用统一的日志系统
@@ -23,15 +23,18 @@ class ConfigToolModule:
         """初始化模块"""
         logger.info(f"初始化配置工具模块，配置目录: {config_dir}")
         self.logic = ConfigToolLogic(config_dir)
+        
+        # 初始化新的存储系统
+        from .logic.config_storage import ConfigStorage
+        self.storage = ConfigStorage()
+        
         # 注意：UI将在get_widget时创建
         logger.info("配置工具模块初始化完成")
     
     def setup_connections(self):
         """设置信号槽连接"""
-        if self.ui and hasattr(self.ui, 'add_config_button') and self.ui.add_config_button:
-            # 连接添加配置按钮的点击事件
-            self.ui.add_config_button.clicked.connect(self.ui.on_add_config_clicked)
-            logger.info("信号槽连接设置完成")
+        # 按钮已经在 UI 的 setup_ui() 中连接，这里不需要重复连接
+        logger.info("信号槽连接设置完成（按钮已在UI层连接）")
     
     def on_add_config_clicked(self):
         """添加配置按钮点击事件"""
@@ -47,21 +50,30 @@ class ConfigToolModule:
 
         if self.ui is None:
             logger.info("创建工程配置 UI")
-            from modules.config_tool.ui.config_tool_ui import ConfigToolUI
+            from .ui.config_tool_ui import ConfigToolUI
             self.ui = ConfigToolUI()
             
-            # 设置逻辑层引用
-            if self.logic:
-                self.ui.set_logic(self.logic)
-            
-            self.setup_connections()
-            
-            # 如果有逻辑数据，更新UI
-            if self.logic:
-                templates = self.logic.get_templates()
+            # 设置逻辑层引用（使用新的存储系统）
+            if hasattr(self, 'storage'):
+                # 创建一个简单的逻辑对象来传递存储引用
+                class SimpleLogic:
+                    def __init__(self, storage):
+                        self.storage = storage
+                
+                self.ui.set_logic(SimpleLogic(self.storage))
+                
+                # 加载并显示配置模板
+                templates = self.storage.list_templates()
                 if templates:
                     self.ui.config_templates = templates
                     self.ui.update_config_buttons()
+                    logger.info(f"加载了 {len(templates)} 个配置模板")
+                else:
+                    logger.info("没有配置模板，显示空状态")
+            else:
+                logger.warning("存储系统未初始化")
+            
+            self.setup_connections()
             
             logger.info("工程配置 UI 创建完成")
         else:

@@ -398,6 +398,242 @@ QComboBox#AddAssetDialogInput QAbstractItemView::item:selected {
 }
 
 
+/* ===== config_type_dialog.qss ===== */
+
+/* ===== 配置类型选择对话框样式 ===== */
+
+/* 对话框本体 */
+#ConfigTypeDialog {
+    background-color: transparent;
+}
+
+/* 主容器 */
+#ConfigTypeDialogContainer {
+    background: qlineargradient(
+        x1:0, y1:0, x2:1, y2:1,
+        stop:0 #1c1c1c,
+        stop:1 #252525
+    );
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 0px;
+}
+
+/* 标题栏 */
+#ConfigTypeDialogTitleBar {
+    background: #252525;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+#ConfigTypeDialogTitleBarText {
+    color: #ffffff;
+    font-size: 16px;
+    font-weight: 600;
+}
+
+#ConfigTypeDialogCloseButton {
+    background: transparent;
+    color: rgba(255, 255, 255, 0.7);
+    border: none;
+    border-radius: 4px;
+    font-size: 18px;
+}
+
+#ConfigTypeDialogCloseButton:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: #ffffff;
+}
+
+#ConfigTypeDialogCloseButton:pressed {
+    background: rgba(255, 255, 255, 0.15);
+}
+
+/* 内容区域 */
+#ConfigTypeDialogContent {
+    background-color: transparent;
+}
+
+#ConfigTypeDialogTitle {
+    color: #ffffff;
+    font-size: 18px;
+    font-weight: 600;
+}
+
+/* 配置类型选项卡片 */
+#ConfigTypeOption {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 8px;
+}
+
+#ConfigTypeOption:hover {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(74, 158, 255, 0.3);
+}
+
+#ConfigTypeOption[selected="true"] {
+    background: rgba(74, 158, 255, 0.15);
+    border: 2px solid #4a9eff;
+}
+
+#ConfigTypeIcon {
+    color: #4a9eff;
+    font-size: 32px;
+}
+
+#ConfigTypeTitle {
+    color: #ffffff;
+    font-size: 15px;
+    font-weight: 600;
+}
+
+#ConfigTypeDescription {
+    color: rgba(255, 255, 255, 0.6);
+    font-size: 13px;
+}
+
+/* 按钮 */
+#CancelButton {
+    background-color: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 6px;
+    color: rgba(255, 255, 255, 0.8);
+    font-size: 13px;
+}
+
+#CancelButton:hover {
+    background-color: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+#CancelButton:pressed {
+    background-color: rgba(255, 255, 255, 0.12);
+}
+
+#ConfirmButton {
+    background: #4a9eff;
+    border: none;
+    border-radius: 6px;
+    color: #ffffff;
+    font-size: 13px;
+    font-weight: 600;
+}
+
+#ConfirmButton:hover {
+    background: #5aa9ff;
+}
+
+#ConfirmButton:pressed {
+    background: #3a8eef;
+}
+
+#ConfirmButton:disabled {
+    background: rgba(74, 158, 255, 0.3);
+    color: rgba(255, 255, 255, 0.4);
+}
+
+
+/* ===== config_info_dialog.qss ===== */
+
+/* ===== 配置信息输入对话框样式 ===== */
+
+/* 对话框本体 */
+#ConfigInfoDialog {
+    background-color: transparent;
+}
+
+/* 主容器 */
+#ConfigInfoDialogContainer {
+    background: qlineargradient(
+        x1:0, y1:0, x2:1, y2:1,
+        stop:0 #1c1c1c,
+        stop:1 #252525
+    );
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 0px;
+}
+
+/* 标题栏 */
+#ConfigInfoDialogTitleBar {
+    background: #252525;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+#ConfigInfoDialogTitleBarText {
+    color: #ffffff;
+    font-size: 16px;
+    font-weight: 600;
+}
+
+#ConfigInfoDialogCloseButton {
+    background: transparent;
+    color: rgba(255, 255, 255, 0.7);
+    border: none;
+    border-radius: 4px;
+    font-size: 18px;
+}
+
+#ConfigInfoDialogCloseButton:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: #ffffff;
+}
+
+#ConfigInfoDialogCloseButton:pressed {
+    background: rgba(255, 255, 255, 0.15);
+}
+
+/* 内容区域 */
+#ConfigInfoDialogContent {
+    background-color: transparent;
+}
+
+/* 标签 */
+#SectionLabel {
+    color: rgba(255, 255, 255, 0.7);
+    font-size: 13px;
+    font-weight: 600;
+}
+
+/* 输入框 */
+#ConfigInfoInput {
+    background-color: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 6px;
+    color: #ffffff;
+    padding: 8px 12px;
+    font-size: 13px;
+}
+
+#ConfigInfoInput:focus {
+    border: 1px solid #4a9eff;
+    background-color: rgba(255, 255, 255, 0.08);
+}
+
+#ConfigInfoInput::placeholder {
+    color: rgba(255, 255, 255, 0.3);
+}
+
+/* 文本编辑框 */
+#ConfigInfoTextEdit {
+    background-color: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 6px;
+    color: #ffffff;
+    padding: 8px 12px;
+    font-size: 13px;
+}
+
+#ConfigInfoTextEdit:focus {
+    border: 1px solid #4a9eff;
+    background-color: rgba(255, 255, 255, 0.08);
+}
+
+/* 错误标签 */
+#ErrorLabel {
+    color: #ef4444;
+    font-size: 12px;
+}
+
+
 /* ===== asset_path_setup_dialog.qss ===== */
 
 /* ===== 资产库路径设置弹窗样�?===== */
