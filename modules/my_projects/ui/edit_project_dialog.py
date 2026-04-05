@@ -1215,6 +1215,51 @@ class EditProjectDialog(QDialog):
             logger.error(f"蓝图项目备份失败: {e}", exc_info=True)
             return None
 
+    def _clean_project_cache(self, project_path: Path):
+        """清理项目缓存文件（改名后必须清理，否则打包失败）
+        
+        清理策略：
+        - 必须清理：Binaries、Intermediate（包含旧项目名的编译产物）
+        - 可选清理：Saved 的部分子目录（临时文件和缓存）
+        - 必须保留：Saved/Config（编辑器配置）、Saved/Screenshots（截图）、Saved/SaveGames（存档）
+        """
+        # 必须清理的文件夹（包含旧项目名的编译产物）
+        must_clean = ['Binaries', 'Intermediate']
+        
+        # 可选清理的文件夹（不影响改名，但可能包含旧数据）
+        optional_clean = [
+            'Saved/Autosaves',      # 自动保存（可能包含旧项目名）
+            'Saved/Backup',         # 备份文件
+            'Saved/Logs',           # 日志文件
+            'Saved/Cooked',         # 烘焙内容
+            'Saved/StagedBuilds',   # 打包构建
+            'Saved/ShaderDebugInfo' # Shader 调试信息
+        ]
+        
+        # 清理必须清理的文件夹
+        for folder_name in must_clean:
+            folder = project_path / folder_name
+            if folder.exists():
+                try:
+                    logger.info(f"清理缓存文件夹: {folder}")
+                    shutil.rmtree(folder, ignore_errors=True)
+                except Exception as e:
+                    logger.warning(f"清理 {folder_name} 失败: {e}")
+                    # 不阻断流程，只记录警告
+        
+        # 清理可选清理的文件夹
+        for folder_path in optional_clean:
+            folder = project_path / folder_path
+            if folder.exists():
+                try:
+                    logger.info(f"清理可选缓存: {folder}")
+                    shutil.rmtree(folder, ignore_errors=True)
+                except Exception as e:
+                    logger.warning(f"清理 {folder_path} 失败: {e}")
+                    # 不阻断流程，只记录警告
+        
+        logger.info("项目缓存清理完成（保留了 Saved/Config、Saved/Screenshots、Saved/SaveGames）")
+
     def _scan_script_references(
         self, project_path: Path, old_name: str
     ) -> tuple[list, list]:
@@ -1792,8 +1837,8 @@ class EditProjectDialog(QDialog):
         import time
         is_cross_path = (new_path != self.project_path)
         try:
-            # ── 阶段 1/5: 创建安全备份 ──
-            self._show_stage(1, 5, "创建安全备份", "正在创建回滚点…")
+            # ── 阶段 1/6: 创建安全备份 ──
+            self._show_stage(1, 6, "创建安全备份", "正在创建回滚点…")
             backup_dir = self._backup_blueprint_project(old_path, old_name, new_name)
             if not backup_dir:
                 self._hide_stage()
@@ -1801,9 +1846,9 @@ class EditProjectDialog(QDialog):
                 return False
             self._end_stage(1)
 
-            # ── 阶段 2/5: 重命名项目目录 ──
+            # ── 阶段 2/6: 重命名项目目录 ──
             detail_2 = "正在迁移项目目录…" if is_cross_path else "正在重命名项目目录…"
-            self._show_stage(2, 5, "重命名项目目录", detail_2)
+            self._show_stage(2, 6, "重命名项目目录", detail_2)
             current_path = old_path
             if new_path != self.project_path:
                 # 跨路径移动
@@ -1856,8 +1901,8 @@ class EditProjectDialog(QDialog):
                     return False
             self._end_stage(2)
 
-            # ── 阶段 3/5: 同步项目配置 ──
-            self._show_stage(3, 5, "同步项目配置", "正在处理历史引用兼容…")
+            # ── 阶段 3/6: 同步项目配置 ──
+            self._show_stage(3, 6, "同步项目配置", "正在处理历史引用兼容…")
             if new_name != old_name:
                 self._update_engine_ini_blueprint(current_path, old_name, new_name)
                 config_dir = current_path / "Config"
@@ -1873,8 +1918,13 @@ class EditProjectDialog(QDialog):
                     return False
             self._end_stage(3)
 
-            # ── 阶段 4/5: 更新项目文件 ──
-            self._show_stage(4, 5, "更新项目文件", "正在更新项目文件…")
+            # ── 阶段 4/6: 清理缓存文件 ──
+            self._show_stage(4, 6, "清理缓存文件", "正在清理编译缓存和临时文件…")
+            self._clean_project_cache(current_path)
+            self._end_stage(4)
+
+            # ── 阶段 5/6: 更新项目文件 ──
+            self._show_stage(5, 6, "更新项目文件", "正在更新项目文件…")
             if new_name != old_name:
                 old_uproject_in_new_path = current_path / f"{old_name}.uproject"
                 new_uproject = current_path / f"{new_name}.uproject"
@@ -1889,12 +1939,12 @@ class EditProjectDialog(QDialog):
                 old_uproject_in_new_path.rename(new_uproject)
                 logger.info(f"重命名 .uproject: {old_name}.uproject → {new_name}.uproject")
             self.project_name = new_name
-            self._end_stage(4)
-
-            # ── 阶段 5/5: 完成校验 ──
-            self._show_stage(5, 5, "完成校验", "正在验证改名结果…")
-            warnings = self._verify_rename(current_path, old_name)
             self._end_stage(5)
+
+            # ── 阶段 6/6: 完成校验 ──
+            self._show_stage(6, 6, "完成校验", "正在验证改名结果…")
+            warnings = self._verify_rename(current_path, old_name)
+            self._end_stage(6)
 
             # 清理备份
             if backup_dir.exists():
