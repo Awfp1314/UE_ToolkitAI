@@ -235,6 +235,16 @@ class UpdateChecker:
                         if download_links:
                             version_info['download_links'] = download_links
                     
+                    # 如果是强制更新，保存到配置文件
+                    if version_info.get('force_update', False):
+                        logger.warning(f"Force update detected: {latest_version}")
+                        self.config['pending_force_update'] = {
+                            'version': latest_version,
+                            'version_info': version_info,
+                            'detected_at': datetime.now().isoformat()
+                        }
+                        self._save_config()
+                    
                     # 更新最后检查时间
                     self.config['last_check'] = datetime.now().isoformat()
                     self._save_config()
@@ -603,3 +613,28 @@ class UpdateChecker:
         except Exception as e:
             logger.error(f"Unexpected error during update check: {e}")
             return None
+
+    def get_pending_force_update(self) -> Optional[Dict[str, Any]]:
+        """获取待处理的强制更新信息
+        
+        Returns:
+            如果有待处理的强制更新，返回版本信息；否则返回 None
+        """
+        pending = self.config.get('pending_force_update')
+        if pending:
+            # 检查版本是否仍然需要更新
+            pending_version = pending.get('version', '')
+            if self._compare_versions(pending_version, self.current_version) > 0:
+                logger.warning(f"Found pending force update: {pending_version}")
+                return pending.get('version_info')
+            else:
+                # 版本已更新，清除标记
+                self.clear_pending_force_update()
+        return None
+    
+    def clear_pending_force_update(self) -> None:
+        """清除待处理的强制更新标记"""
+        if 'pending_force_update' in self.config:
+            del self.config['pending_force_update']
+            self._save_config()
+            logger.info("Cleared pending force update")

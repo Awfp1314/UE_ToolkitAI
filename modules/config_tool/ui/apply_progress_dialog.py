@@ -13,7 +13,7 @@
 
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel,
-    QPushButton, QWidget
+    QPushButton, QWidget, QApplication
 )
 from PyQt6.QtCore import Qt, QTimer
 
@@ -40,6 +40,111 @@ class _SpinnerLabel(QLabel):
 
     def stop(self):
         self._timer.stop()
+
+
+class _ApplyProgressController:
+    """
+    配置应用进度控制器
+    
+    驱动规则：
+    - 总最短时长 TARGET_TOTAL_S = 1.5 秒，分配到每阶段
+    - 若某阶段实际耗时超过分配时长，不等待，直接推进
+    - 进度条从 0 平滑动画到 100，全程连续（用 QTimer @60fps）
+    - 同时驱动 ApplyProgressDialog 的阶段图标切换
+    """
+    TARGET_TOTAL_S = 1.5
+
+    def __init__(self, total: int, main_window, progress_dialog):
+        self._total = total
+        self._mw = main_window
+        self._dlg = progress_dialog
+        self._current_stage = 0
+        self._stage_alloc = self.TARGET_TOTAL_S / total
+
+        # 平滑进度动画
+        self._smooth_progress = 0.0
+        self._target_progress = 0.0
+        self._anim_timer = QTimer()
+        self._anim_timer.timeout.connect(self._anim_tick)
+        self._anim_timer.start(16)  # ~60fps
+
+        self._apply_start = None
+
+    def start(self):
+        """启动控制器"""
+        import time
+        self._apply_start = time.time()
+
+    def enter_stage(self, stage: int, title: str, detail: str):
+        """进入第 stage 阶段（1-based），更新 UI"""
+        idx = stage - 1
+        self._current_stage = idx
+
+        # 目标进度：当前阶段开始位置
+        self._target_progress = (idx / self._total) * 100.0
+
+        # 驱动详情弹窗
+        if self._dlg:
+            self._dlg.set_stage_running(idx)
+
+        # 驱动主窗口状态指示器
+        if self._mw:
+            label = f"阶段 {stage}/{self._total} · {title}"
+            self._mw.show_status(label, detail, int(self._smooth_progress))
+            QApplication.processEvents()
+
+    def leave_stage(self, stage: int):
+        """完成第 stage 阶段，等待该阶段最少时长"""
+        import time
+        idx = stage - 1
+
+        # 等待该阶段最短显示时间
+        if self._apply_start is not None:
+            elapsed_total = time.time() - self._apply_start
+            expected_min = stage * self._stage_alloc
+            remaining = expected_min - elapsed_total
+            if remaining > 0:
+                deadline = time.time() + remaining
+                while time.time() < deadline:
+                    QApplication.processEvents()
+                    time.sleep(0.016)
+
+        # 驱动详情弹窗图标
+        if self._dlg:
+            self._dlg.set_stage_done(idx)
+
+        # 进度推进到本阶段结束位置
+        self._target_progress = (stage / self._total) * 100.0
+
+    def finish(self, success: bool, message: str):
+        """所有阶段完成"""
+        self._target_progress = 100.0
+        # 等动画跑到 100 再收尾
+        import time
+        deadline = time.time() + 0.3
+        while time.time() < deadline:
+            QApplication.processEvents()
+            time.sleep(0.016)
+
+        self._anim_timer.stop()
+        if self._dlg:
+            self._dlg.finish(success, message)
+        if self._mw:
+            self._mw.hide_status()
+
+    def stop(self):
+        """强制停止"""
+        self._anim_timer.stop()
+        if self._mw:
+            self._mw.hide_status()
+
+    def _anim_tick(self):
+        """60fps 平滑进度动画"""
+        if self._smooth_progress < self._target_progress:
+            step = max(0.3, min(3.0, (self._target_progress - self._smooth_progress) * 0.12))
+            self._smooth_progress = min(self._smooth_progress + step, self._target_progress)
+            if self._mw and hasattr(self._mw, 'set_status_progress_smooth'):
+                self._mw.set_status_progress_smooth(int(self._smooth_progress))
 
 
 class ApplyProgressDialog(QDialog):

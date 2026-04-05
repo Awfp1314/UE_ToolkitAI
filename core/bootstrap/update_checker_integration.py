@@ -119,6 +119,16 @@ class UpdateCheckerIntegration:
             
             self.logger.info(f"启动异步更新检查，当前版本: {current_version}")
             
+            # 首先检查是否有待处理的强制更新
+            update_checker = UpdateChecker(current_version=current_version)
+            pending_force_update = update_checker.get_pending_force_update()
+            
+            if pending_force_update:
+                # 有待处理的强制更新，即使断网也要显示
+                self.logger.warning("检测到待处理的强制更新，立即显示更新对话框")
+                self._show_update_dialog(pending_force_update, app, is_pending_force=True)
+                return
+            
             # 创建更新检查线程
             self.update_thread = UpdateCheckThread(current_version, force_check=False)
             
@@ -184,7 +194,7 @@ class UpdateCheckerIntegration:
                 parent=self.main_window
             ).exec()
     
-    def _show_update_dialog(self, version_info: dict, app: QApplication, is_manual: bool = False):
+    def _show_update_dialog(self, version_info: dict, app: QApplication, is_manual: bool = False, is_pending_force: bool = False):
         """
         显示更新对话框
         
@@ -192,6 +202,7 @@ class UpdateCheckerIntegration:
             version_info: 版本信息字典
             app: QApplication 实例
             is_manual: 是否为手动检查触发
+            is_pending_force: 是否为待处理的强制更新
         """
         try:
             self.logger.info("显示更新对话框")
@@ -219,7 +230,10 @@ class UpdateCheckerIntegration:
             # 处理用户选择
             if result == UpdateDialog.RESULT_SKIP:
                 # 用户选择跳过此版本
-                if not is_manual:
+                if force_update:
+                    # 强制更新不允许跳过，但如果用户关闭了对话框，保持标记
+                    self.logger.warning("强制更新不允许跳过，保持待处理标记")
+                elif not is_manual:
                     # 只有自动检查时才记录跳过
                     self._skip_version(version_info.get('version', ''), app.applicationVersion())
                     self.logger.info("已记录跳过版本（自动检查）")
@@ -228,6 +242,16 @@ class UpdateCheckerIntegration:
                     self.logger.info("手动检查时跳过版本，不记录到跳过列表")
                 # 清除缓存的更新信息
                 self.pending_update_info = None
+            elif result == UpdateDialog.RESULT_UPDATE:
+                # 用户选择立即更新
+                # 注意：不清除强制更新标记，因为每个版本都是独立的
+                # 标记只会在检测到当前版本已满足要求时自动清除（在 get_pending_force_update 中）
+                self.logger.info("用户选择立即更新，标记将在新版本启动时自动清除")
+            elif result == UpdateDialog.RESULT_LATER:
+                # 用户选择稍后提醒
+                if force_update:
+                    # 强制更新时选择稍后，保持标记
+                    self.logger.warning("强制更新选择稍后，保持待处理标记")
                 
         except Exception as e:
             self.logger.error(f"显示更新对话框失败: {e}", exc_info=True)
@@ -272,3 +296,4 @@ class UpdateCheckerIntegration:
             
         except Exception as e:
             self.logger.error(f"记录跳过版本失败: {e}", exc_info=True)
+

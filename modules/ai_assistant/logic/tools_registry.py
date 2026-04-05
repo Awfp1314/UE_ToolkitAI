@@ -188,13 +188,19 @@ class ToolsRegistry:
         # 1. 搜索资产
         self.register_tool(ToolDefinition(
             name="search_assets",
-            description="搜索或列出虚幻引擎资产（模型、蓝图、材质等）。如果不提供keyword，则返回所有资产列表",
+            description="""获取资产库中的资产列表。
+            
+重要规则：
+- 当用户询问"有哪些资产"、"推荐资产"、"适合的资产"时，必须不带参数调用此工具获取完整资产列表
+- 获取列表后，根据用户需求从列表中推荐合适的资产
+- 只有当用户明确提供了具体的资产名称或关键词时，才传入 keyword 参数进行精确搜索
+- 不要自己猜测关键词进行搜索，应该先获取完整列表再推荐""",
             parameters={
                 "type": "object",
                 "properties": {
                     "keyword": {
                         "type": "string",
-                        "description": "搜索关键词（可选）。如果为空，返回所有资产列表"
+                        "description": "精确搜索关键词（仅当用户明确提供资产名称时使用）。留空则返回所有资产列表"
                     }
                 },
                 "required": []  # keyword是可选的

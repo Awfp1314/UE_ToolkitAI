@@ -52,6 +52,11 @@ class FeedbackDialog(QDialog):
         desc_label.setStyleSheet("color: #888;")
         layout.addWidget(desc_label)
         
+        # QQ 交流群
+        qq_label = QLabel("官方 QQ 交流群：1048699469")
+        qq_label.setStyleSheet("color: #4a9eff; font-weight: bold;")
+        layout.addWidget(qq_label)
+        
         # 问题描述
         problem_label = QLabel("问题描述:")
         layout.addWidget(problem_label)

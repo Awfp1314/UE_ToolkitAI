@@ -1653,6 +1653,44 @@ QMainWindow {
     border: 1px solid rgba(0, 0, 0, 0.08);
     border-radius: 12px;
 }
+
+/* ===== 配置应用进度弹窗 ===== */
+#ApplyProgressContainer {
+    background: #ffffff;
+    border: 1px solid rgba(0, 0, 0, 0.08);
+    border-radius: 12px;
+}
+#ApplyProgressTitle {
+    font-size: 16px;
+    font-weight: 600;
+    color: #1a1a1a;
+}
+#ApplyProgressSummary {
+    font-size: 13px;
+    color: rgba(0, 0, 0, 0.55);
+}
+#ApplyProgressStageLabel {
+    font-size: 12px;
+    color: #666666;
+    padding: 1px 0;
+}
+#ApplyProgressResult {
+    font-size: 12px;
+    padding: 6px 10px;
+    background: rgba(0, 0, 0, 0.04);
+    border-radius: 6px;
+}
+#ApplyProgressBtnClose {
+    background: #4a9eff;
+    border: none;
+    border-radius: 6px;
+    color: #ffffff;
+    font-size: 12px;
+    font-weight: 500;
+}
+#ApplyProgressBtnClose:hover {
+    background: #5aabff;
+}
 #RenameResultTitle {
     font-size: 16px;
     font-weight: 600;

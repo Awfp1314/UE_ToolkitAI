@@ -471,6 +471,8 @@ class ConfigToolUI(QWidget):
             backup = backup_dialog.exec() == QDialog.DialogCode.Accepted
             
             # 4. 显示进度弹窗并应用配置
+            from ..ui.apply_progress_dialog import _ApplyProgressController
+            
             progress_dialog = ApplyProgressDialog(
                 config_name,
                 Path(target_project).name,
@@ -478,24 +480,54 @@ class ConfigToolUI(QWidget):
             )
             progress_dialog.show()
             
+            # 获取主窗口以显示状态指示器
+            main_window = None
+            widget = self
+            while widget:
+                if hasattr(widget, 'show_status'):
+                    main_window = widget
+                    break
+                widget = widget.parent()
+            
+            # 创建进度控制器
+            total_stages = len(ApplyProgressDialog.STAGE_NAMES)
+            controller = _ApplyProgressController(total_stages, main_window, progress_dialog)
+            
+            # 设置详情按钮回调
+            if main_window:
+                main_window.set_status_detail_callback(lambda: progress_dialog.show())
+            
+            # 启动控制器
+            controller.start()
+            
             def progress_callback(stage: int, title: str, detail: str):
-                progress_dialog.set_stage_running(stage)
-                QApplication.processEvents()
+                """进度回调，使用控制器管理平滑动画"""
+                # 进入阶段
+                controller.enter_stage(stage, title, detail)
+                
+                # 离开阶段（会自动等待最小时长）
+                controller.leave_stage(stage)
             
-            success, result_message = applier.apply_config(
-                template,
-                Path(target_project),
-                backup,
-                progress_callback
-            )
+            try:
+                success, result_message = applier.apply_config(
+                    template,
+                    Path(target_project),
+                    backup,
+                    progress_callback
+                )
+                
+                # 完成
+                controller.finish(success, result_message)
+            except Exception as e:
+                controller.stop()
+                if main_window:
+                    main_window.hide_status()
+                    main_window.set_status_detail_callback(None)
+                raise
             
-            # 标记所有阶段完成
-            for i in range(len(ApplyProgressDialog.STAGE_NAMES)):
-                progress_dialog.set_stage_done(i)
-                QApplication.processEvents()
-            
-            # 显示结果
-            progress_dialog.finish(success, result_message)
+            # 清理
+            if main_window:
+                main_window.set_status_detail_callback(None)
             
             if success:
                 self.refresh_config_list()
