@@ -1502,7 +1502,7 @@ class EditProjectDialog(QDialog):
 
             # 5. 按策略清理备份（默认保留，避免回滚后无法二次恢复）
             if cleanup_backup:
-            shutil.rmtree(backup_dir, ignore_errors=True)
+                shutil.rmtree(backup_dir, ignore_errors=True)
                 logger.info("已按策略清理蓝图改名备份")
 
             logger.info("蓝图项目已回滚到原始状态")
@@ -1816,13 +1816,13 @@ class EditProjectDialog(QDialog):
                     shutil.move(str(current_path), str(final_path))
                     current_path = final_path
                     self.project_path = str(final_path)
-                    except PermissionError:
-                        self._rollback_blueprint_project()
-                        self._show_error(
+                except PermissionError:
+                    self._rollback_blueprint_project()
+                    self._show_error(
                         "项目目录被占用，无法移动。\n\n"
                         "请先关闭 UE 编辑器、资源管理器中打开该目录的窗口，以及其它可能占用该目录的程序后重试。"
-                        )
-                        return False
+                    )
+                    return False
             elif new_name != old_name:
                 # 同路径改名
                 new_folder = current_path.parent / new_name
@@ -1847,13 +1847,13 @@ class EditProjectDialog(QDialog):
                                 time.sleep(1)
                             else:
                                 raise
-                    except PermissionError:
-                        self._rollback_blueprint_project()
-                        self._show_error(
+                except PermissionError:
+                    self._rollback_blueprint_project()
+                    self._show_error(
                         "项目目录被占用，无法重命名。\n\n"
                         "请先关闭 UE 编辑器、资源管理器中打开该目录的窗口，以及其它可能占用该目录的程序后重试。"
-                        )
-                        return False
+                    )
+                    return False
             self._end_stage(2)
 
             # ── 阶段 3/5: 同步项目配置 ──
@@ -2507,9 +2507,9 @@ class EditProjectDialog(QDialog):
             ctrl.enter_stage(stage, title, detail)
         else:
             # 降级：直接更新主窗口状态指示器
-        mw = self._get_main_window()
-        if mw:
-            label = f"阶段 {stage}/{total} · {title}"
+            mw = self._get_main_window()
+            if mw:
+                label = f"阶段 {stage}/{total} · {title}"
                 actual_progress = progress if progress >= 0 else int((stage - 1) / total * 100)
                 mw.show_status(label, detail, actual_progress)
             QApplication.processEvents()
