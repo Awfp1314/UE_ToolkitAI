@@ -100,7 +100,6 @@ class ConfigTypeDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.selected_type = None
-        self.drag_position = QPoint()
         
         self._init_ui()
     
@@ -217,38 +216,14 @@ class ConfigTypeDialog(QDialog):
         close_btn.clicked.connect(self._on_close_clicked, Qt.ConnectionType.UniqueConnection)
         layout.addWidget(close_btn)
         
-        # 使用事件过滤器而不是直接赋值
-        title_bar.installEventFilter(self)
         return title_bar
     
-    def eventFilter(self, obj, event):
-        """事件过滤器 - 处理标题栏拖动"""
-        if obj.objectName() == "ConfigTypeDialogTitleBar":
-            if event.type() == QEvent.Type.MouseButtonPress:
-                if event.button() == Qt.MouseButton.LeftButton:
-                    self.drag_position = event.globalPosition().toPoint() - self.frameGeometry().topLeft()
-                    event.accept()
-                    return True  # 拦截事件，防止传播到子控件
-            elif event.type() == QEvent.Type.MouseMove:
-                if event.buttons() == Qt.MouseButton.LeftButton and not self.drag_position.isNull():
-                    self.move(event.globalPosition().toPoint() - self.drag_position)
-                    event.accept()
-                    return True  # 拦截事件
-            elif event.type() == QEvent.Type.MouseButtonRelease:
-                if event.button() == Qt.MouseButton.LeftButton:
-                    self.drag_position = QPoint()  # 清空拖动位置
-                    # 拖动结束后强制刷新样式
-                    self.style().unpolish(self)
-                    self.style().polish(self)
-                    self.update()
-                    # 刷新所有子控件的样式
-                    for child in self.findChildren(QWidget):
-                        child.style().unpolish(child)
-                        child.style().polish(child)
-                        child.update()
-                    event.accept()
-                    return True
-        return super().eventFilter(obj, event)
+    def _on_close_clicked(self):
+        """关闭按钮被点击"""
+        logger.info("配置类型对话框关闭按钮被点击")
+        # 立即关闭对话框，防止事件传播
+        self.reject()
+        # 不需要额外处理，reject() 会关闭对话框
     
     def _on_option_clicked(self, config_type: ConfigType):
         """选项被点击"""
@@ -267,36 +242,33 @@ class ConfigTypeDialog(QDialog):
             self.type_selected.emit(self.selected_type)
             self.accept()
     
-    def _on_close_clicked(self):
-        """关闭按钮被点击"""
-        logger.info("配置类型对话框关闭按钮被点击")
-        # 立即关闭对话框，防止事件传播
-        self.reject()
-        # 不需要额外处理，reject() 会关闭对话框
-    
     def showEvent(self, event):
         """显示事件 - 在窗口显示时居中"""
         super().showEvent(event)
         logger.info("ConfigTypeDialog showEvent 被调用")
-        # 使用 QTimer 延迟到事件循环下一轮执行
-        from PyQt6.QtCore import QTimer
-        QTimer.singleShot(0, self._center_on_screen)
+        # 在对话框显示时居中
+        self._center_dialog()
     
-    def _center_on_screen(self):
-        """居中到屏幕"""
-        # 确保窗口已经显示并有正确的尺寸
+    def _center_dialog(self):
+        """居中到父窗口或屏幕"""
         self.adjustSize()
         
         if self.parent():
-            parent_geo = self.parent().geometry()
-            x = parent_geo.x() + (parent_geo.width() - self.width()) // 2
-            y = parent_geo.y() + (parent_geo.height() - self.height()) // 2
+            # 使用 mapToGlobal 获取父窗口的全局坐标
+            parent_global = self.parent().mapToGlobal(self.parent().rect().topLeft())
+            x = parent_global.x() + (self.parent().width() - self.width()) // 2
+            y = parent_global.y() + (self.parent().height() - self.height()) // 2
             self.move(x, y)
-            logger.info(f"对话框居中到父窗口: ({x}, {y})")
+            logger.info(f"对话框居中到父窗口: ({x}, {y}), 对话框尺寸: {self.width()}x{self.height()}")
         else:
             # 居中到屏幕
-            screen = self.screen().geometry()
-            x = (screen.width() - self.width()) // 2
-            y = (screen.height() - self.height()) // 2
+            from PyQt6.QtWidgets import QApplication
+            screen = QApplication.primaryScreen().availableGeometry()
+            x = screen.x() + (screen.width() - self.width()) // 2
+            y = screen.y() + (screen.height() - self.height()) // 2
             self.move(x, y)
-            logger.info(f"对话框居中到屏幕: ({x}, {y})")
+            logger.info(f"对话框居中到屏幕: ({x}, {y}), 屏幕尺寸: {screen.width()}x{screen.height()}")
+    
+    def _center_on_screen(self):
+        """兼容旧方法名"""
+        self._center_dialog()

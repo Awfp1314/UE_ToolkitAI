@@ -17,16 +17,15 @@ from pathlib import Path
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, 
     QPushButton, QScrollArea, QFrame, QGridLayout,
-    QDialog, QApplication
+    QDialog, QApplication, QMenu
 )
 from PyQt6.QtCore import Qt, pyqtSignal as Signal, QTimer
-from PyQt6.QtGui import QFont, QCursor
+from PyQt6.QtGui import QFont, QCursor, QAction
 from typing import List, Optional
 
 from core.logger import get_logger
 from .config_type_dialog import ConfigTypeDialog
 from .config_info_dialog import ConfigInfoDialog
-from .config_card import ConfigCard
 from .apply_progress_dialog import ApplyProgressDialog
 from ..logic.config_model import ConfigType, ConfigTemplate
 from modules.asset_manager.ui.message_dialog import MessageDialog
@@ -35,7 +34,134 @@ from modules.asset_manager.ui.confirm_dialog import ConfirmDialog
 logger = get_logger(__name__)
 
 
-def _open_folder_async(folder_path: Path):
+class ConfigTemplateCard(QWidget):
+    """配置模板卡片组件 - 小卡片样式"""
+    
+    apply_clicked = Signal(str)  # 应用配置信号，传递配置名称
+    delete_clicked = Signal(str)  # 删除配置信号，传递配置名称
+    
+    def __init__(self, template: ConfigTemplate, parent=None):
+        super().__init__(parent)
+        self.template = template
+        self._setup_ui()
+    
+    def _setup_ui(self):
+        """设置UI"""
+        self.setObjectName("ConfigTemplateCard")
+        self.setFixedSize(220, 120)
+        self.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        
+        # 启用右键菜单
+        self.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.customContextMenuRequested.connect(self._show_context_menu)
+        
+        layout = QVBoxLayout()
+        layout.setContentsMargins(16, 14, 16, 14)
+        layout.setSpacing(8)
+        
+        # 配置名称
+        name_label = QLabel(self.template.name)
+        name_label.setObjectName("ConfigTemplateCardName")
+        name_label.setFont(QFont("Microsoft YaHei", 11, QFont.Weight.Bold))
+        name_label.setWordWrap(True)
+        layout.addWidget(name_label)
+        
+        # 配置描述
+        if self.template.description:
+            desc_label = QLabel(self.template.description)
+            desc_label.setObjectName("ConfigTemplateCardDesc")
+            desc_label.setWordWrap(True)
+            layout.addWidget(desc_label)
+        
+        layout.addStretch()
+        
+        # 底部信息行
+        info_layout = QHBoxLayout()
+        info_layout.setContentsMargins(0, 0, 0, 0)
+        info_layout.setSpacing(8)
+        
+        # 配置类型图标
+        type_icon = "📋" if self.template.type == ConfigType.PROJECT_SETTINGS else "⚙️"
+        type_label = QLabel(type_icon)
+        type_label.setObjectName("ConfigTemplateCardInfo")
+        info_layout.addWidget(type_label)
+        
+        # UE版本
+        version_label = QLabel(f"UE {self.template.config_version}")
+        version_label.setObjectName("ConfigTemplateCardInfo")
+        info_layout.addWidget(version_label)
+        
+        info_layout.addStretch()
+        
+        layout.addLayout(info_layout)
+        self.setLayout(layout)
+        
+        # 设置工具提示
+        tooltip = f"{self.template.name}\n"
+        if self.template.description:
+            tooltip += f"{self.template.description}\n"
+        tooltip += f"类型: {self.template.type.display_name}\n"
+        tooltip += f"版本: UE {self.template.config_version}"
+        self.setToolTip(tooltip)
+    
+    def mousePressEvent(self, event):
+        """鼠标点击事件"""
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.apply_clicked.emit(self.template.name)
+            logger.info(f"点击配置模板: {self.template.name}")
+    
+    def _show_context_menu(self, pos):
+        """显示右键菜单"""
+        menu = QMenu(self)
+        menu.setObjectName("ConfigTemplateCardMenu")
+        
+        # 应用配置
+        apply_action = QAction("应用配置", self)
+        apply_action.triggered.connect(lambda: self.apply_clicked.emit(self.template.name))
+        menu.addAction(apply_action)
+        
+        menu.addSeparator()
+        
+        # 打开配置所在路径
+        open_folder_action = QAction("打开配置所在路径", self)
+        open_folder_action.triggered.connect(self._open_config_folder)
+        menu.addAction(open_folder_action)
+        
+        menu.addSeparator()
+        
+        # 删除配置
+        delete_action = QAction("删除", self)
+        delete_action.triggered.connect(lambda: self.delete_clicked.emit(self.template.name))
+        menu.addAction(delete_action)
+        
+        # 显示菜单
+        menu.exec(self.mapToGlobal(pos))
+    
+    def _open_config_folder(self):
+        """打开配置所在文件夹"""
+        import subprocess
+        import platform
+        
+        # 使用模板的 template_path 属性
+        config_dir = self.template.template_path
+        
+        if config_dir.exists():
+            try:
+                if platform.system() == "Windows":
+                    subprocess.run(["explorer", str(config_dir)])
+                elif platform.system() == "Darwin":  # macOS
+                    subprocess.run(["open", str(config_dir)])
+                else:  # Linux
+                    subprocess.run(["xdg-open", str(config_dir)])
+                logger.info(f"打开配置文件夹: {config_dir}")
+            except Exception as e:
+                logger.error(f"打开文件夹失败: {e}")
+        else:
+            logger.warning(f"配置文件夹不存在: {config_dir}")
+
+
+def _get_theme() -> str:
     """在独立线程中异步打开文件夹"""
     try:
         folder_str = str(folder_path)
@@ -69,9 +195,8 @@ class ConfigToolUI(QWidget):
         super().__init__(parent)
         self.logic = None
         self.config_templates: List[ConfigTemplate] = []
-        self.card_widgets: List[ConfigCard] = []
+        self.template_widgets: List[QWidget] = []
         self.add_config_button: Optional[QPushButton] = None
-        self.theme = _get_theme()
         self.setup_ui()
         logger.info("工程配置 UI 初始化完成")
         
@@ -154,9 +279,9 @@ class ConfigToolUI(QWidget):
     def update_config_buttons(self):
         """更新配置卡片显示"""
         # 清空现有卡片
-        for widget in self.card_widgets:
+        for widget in self.template_widgets:
             widget.deleteLater()
-        self.card_widgets.clear()
+        self.template_widgets.clear()
         
         # 清空网格布局
         while self.grid_layout.count():
@@ -172,18 +297,18 @@ class ConfigToolUI(QWidget):
         
         self.empty_label.hide()
         
-        # 每行4个卡片
-        cards_per_row = 4
+        # 每行5个小卡片
+        cards_per_row = 5
         
         for i, template in enumerate(self.config_templates):
             row = i // cards_per_row
             col = i % cards_per_row
             
-            card = ConfigCard(template, theme=self.theme)
+            card = ConfigTemplateCard(template)
             card.apply_clicked.connect(self._on_apply_clicked)
             card.delete_clicked.connect(self._on_delete_clicked)
             self.grid_layout.addWidget(card, row, col)
-            self.card_widgets.append(card)
+            self.template_widgets.append(card)
             card.show()
         
         logger.info(f"更新了 {len(self.config_templates)} 个配置卡片")
@@ -312,12 +437,19 @@ class ConfigToolUI(QWidget):
             
             logger.info(f"目标项目: {target_project}")
             
-            # 2. 版本验证
+            # 2. 创建 ConfigApplier 实例进行版本验证
             from ..logic.version_matcher import VersionMatcher
-            from ..logic.utils import get_project_version
+            from ..logic.config_applier import ConfigApplier
             
             matcher = VersionMatcher()
-            target_version = get_project_version(Path(target_project))
+            applier = ConfigApplier(self.logic.storage, matcher)
+            
+            # 获取目标项目版本
+            target_version = applier._get_project_version(Path(target_project))
+            
+            if not target_version:
+                self.show_error_message("无法获取目标项目版本")
+                return
             
             is_compatible, message = matcher.validate_version(
                 template.config_version,
@@ -345,10 +477,6 @@ class ConfigToolUI(QWidget):
                 self
             )
             progress_dialog.show()
-            
-            # 应用配置
-            from ..logic.config_applier import ConfigApplier
-            applier = ConfigApplier(self.logic.storage, matcher)
             
             def progress_callback(stage: int, title: str, detail: str):
                 progress_dialog.set_stage_running(stage)
@@ -425,6 +553,5 @@ class ConfigToolUI(QWidget):
     
     def refresh_theme(self):
         """刷新主题样式 - 在主题切换时调用"""
-        self.theme = _get_theme()
         self.update_config_buttons()
         logger.info("工程配置主题已刷新")
