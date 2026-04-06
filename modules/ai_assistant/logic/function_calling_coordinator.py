@@ -29,7 +29,22 @@ def format_tool_result(result: Dict) -> str:
     """
     if result.get('success'):
         tool_result = result.get('result', '')
-        # 如果结果是字典或列表，转为 JSON
+        
+        # 特殊处理：如果result是UE工具返回的dict（包含status字段）
+        if isinstance(tool_result, dict):
+            ue_status = tool_result.get('status')
+            if ue_status == 'success':
+                # UE工具执行成功，提取data字段
+                ue_data = tool_result.get('data', tool_result)
+                if isinstance(ue_data, (dict, list)):
+                    ue_data = json.dumps(ue_data, ensure_ascii=False, indent=2)
+                return f"工具执行成功。结果:\n{ue_data}"
+            elif ue_status == 'error':
+                # UE工具执行失败
+                ue_message = tool_result.get('message', '未知错误')
+                return f"工具执行失败。错误: {ue_message}"
+        
+        # 普通工具结果处理
         if isinstance(tool_result, (dict, list)):
             tool_result = json.dumps(tool_result, ensure_ascii=False, indent=2)
         return f"工具执行成功。结果:\n{tool_result}"

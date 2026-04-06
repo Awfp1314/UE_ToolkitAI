@@ -748,7 +748,7 @@ class ToolsRegistry:
             return result.get('preview', '[错误] 无预览')
         return "[错误] 受控工具集未初始化"
     
-    def _execute_ue_python_tool(self, tool_name: str, **kwargs) -> str:
+    def _execute_ue_python_tool(self, tool_name: str, **kwargs) -> dict:
         """
         通过RPC客户端执行虚幻引擎编辑器内的Python脚本。
         这是 Function Calling 调用虚幻引擎工具的桥梁。
@@ -758,22 +758,23 @@ class ToolsRegistry:
             **kwargs: 工具参数
             
         Returns:
-            str: JSON格式的执行结果
+            dict: 执行结果字典（直接返回dict而不是JSON字符串）
         """
         try:
             # 使用UE RPC客户端执行工具
             result = self.ue_client.execute_tool_rpc(tool_name, **kwargs)
             
-            # 将结果转换为JSON字符串返回给LLM
-            return json.dumps(result, ensure_ascii=False)
+            # 直接返回dict，让dispatch方法统一处理
+            # 不再转换为JSON字符串，避免双重包装
+            return result
             
         except Exception as e:
             self.logger.error(f"UE工具执行失败: {e}", exc_info=True)
-            # 将失败信息包装成 JSON 返回给 LLM
-            return json.dumps({
+            # 返回错误dict
+            return {
                 "status": "error", 
                 "message": f"UE工具执行器捕获到错误: {str(e)}"
-            }, ensure_ascii=False)
+            }
     
     def _register_ue_tools(self):
         """

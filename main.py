@@ -16,8 +16,8 @@ from core.bootstrap import AppBootstrap
 
 def _cleanup_temp_dir():
     """清理 PyInstaller 临时目录（静默失败，不弹窗）"""
-    # 不做任何操作，让 Windows 在下次重启时自动清理
-    # 避免退出时弹出删除失败的警告
+    # 使用 runtime_tmpdir='_UE_Toolkit' 后，PyInstaller 不会自动删除临时目录
+    # 我们在启动时清理旧的临时目录，避免退出时的删除失败警告
     pass
 
 

@@ -126,7 +126,8 @@ class ArchiveExtractor:
                 ["where", "7z.exe"],
                 capture_output=True,
                 text=True,
-                timeout=5
+                timeout=5,
+                creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == 'win32' else 0
             )
             if result.returncode == 0:
                 path = Path(result.stdout.strip().split('\n')[0])
@@ -151,7 +152,8 @@ class ArchiveExtractor:
                      f"Get-ChildItem -Path '{base_dir}' -Filter '7z.exe' -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty FullName"],
                     capture_output=True,
                     text=True,
-                    timeout=30
+                    timeout=30,
+                    creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == 'win32' else 0
                 )
                 if result.returncode == 0 and result.stdout.strip():
                     path = Path(result.stdout.strip())
@@ -553,14 +555,23 @@ class ArchiveExtractor:
                 # 不提示密码输入
                 cmd.append("-p")
             
-            # 执行解压
+            # 执行解压（隐藏命令行窗口）
+            import sys
+            startupinfo = None
+            creationflags = 0
+            
+            if sys.platform == 'win32':
+                # Windows: 隐藏命令行窗口
+                creationflags = subprocess.CREATE_NO_WINDOW
+            
             result = subprocess.run(
                 cmd,
                 capture_output=True,
                 text=True,
                 timeout=300,  # 5分钟超时
                 encoding='utf-8',
-                errors='ignore'
+                errors='ignore',
+                creationflags=creationflags
             )
             
             # 检查返回码
