@@ -832,13 +832,17 @@ class ProjectScanner(QThread):
                     ver = self._get_version(up)
                     mt = self._get_last_used_time(item, up)
                     thumb = self._get_thumbnail(item)
+                    
+                    # 读取工程分类（从 .UeToolkitconfig/project.json）
+                    category = self._get_category(item)
 
                     self.projs.append({
                         'name': item.name,
                         'path': item_str,
                         'version': ver,
                         'modified': mt.strftime("%Y-%m-%d"),
-                        'thumbnail': thumb
+                        'thumbnail': thumb,
+                        'category': category  # 添加分类字段
                     })
                     self.progress.emit(f"找到: {item.name}")
                 else:
@@ -902,6 +906,26 @@ class ProjectScanner(QThread):
         except Exception:
             pass
         return None
+
+    @staticmethod
+    def _get_category(proj_dir):
+        """从 .UeToolkitconfig/project.json 读取工程分类
+        
+        Args:
+            proj_dir: 工程目录路径
+            
+        Returns:
+            str: 分类名称，默认为"默认"
+        """
+        try:
+            config_file = proj_dir / TOOLKIT_CONFIG_DIR / PROJECT_CONFIG_FILE
+            if config_file.exists():
+                with open(config_file, "r", encoding="utf-8") as f:
+                    cfg = json.load(f)
+                    return cfg.get("category", "默认")
+        except Exception as e:
+            logger.debug(f"读取工程分类失败 {proj_dir}: {e}")
+        return "默认"
 
 
 class MyProjectsUI(BaseModuleWidget):
@@ -1079,8 +1103,11 @@ class MyProjectsUI(BaseModuleWidget):
             
             if len(valid) != len(projects):
                 logger.info(f"清理 {len(projects) - len(valid)} 个已不存在或排除的工程")
-                # 更新注册表，移除无效工程
-                self.registry.save_full_scan_result(valid)
+                # 更新注册表，移除无效工程（保留其他数据如categories）
+                data = self.registry.load_registry()
+                data["projects"] = valid
+                data["last_updated"] = datetime.now().isoformat()
+                self.registry.save_registry(data)
 
             self.all_projects = valid
             self._load_categories()
