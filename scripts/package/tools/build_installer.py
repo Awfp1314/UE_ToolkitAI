@@ -143,8 +143,8 @@ def save_log(content, log_type, tool, level="Info"):
     """
     timestamp = get_timestamp()
     
-    # 确定日志目录
-    log_dir = Path(__file__).parent.parent / "logs" / tool / level
+    # 日志目录改为项目根目录的 logs/build/
+    log_dir = project_root / "logs" / "build" / tool / level
     log_dir.mkdir(parents=True, exist_ok=True)
     
     # 生成文件名
@@ -520,7 +520,7 @@ def main():
     print("=" * 60)
     print()
     print(f"[版本] {VERSION}")
-    print(f"[日志] 日志将保存到: scripts/package/logs/")
+    print(f"[日志] 日志将保存到: logs/build/")
     print()
     
     # 步骤 1: 清理旧构建
@@ -559,7 +559,7 @@ def main():
     print("=" * 60)
     print()
     print(f"[版本] {VERSION}")
-    print(f"[日志] 查看详细日志: scripts/package/logs/")
+    print(f"[日志] 查看详细日志: logs/build/")
     
     # 显示安装包位置
     desktop = Path.home() / "Desktop"

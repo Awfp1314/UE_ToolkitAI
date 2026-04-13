@@ -67,11 +67,15 @@ pyinstaller ue_toolkit.spec --clean
 
 ## 打包日志
 
-打包过程会自动生成日志文件到 `dist/` 目录：
+打包过程会自动生成日志文件到项目根目录的 `logs/build/` 目录：
 
-- `build.log` - PyInstaller 完整构建日志
-- `build_summary.log` - 仅包含错误和警告的摘要
-- `inno_setup.log` - Inno Setup 编译日志
-- `build_error.log` / `inno_setup_error.log` - 错误日志（如果失败）
+- `logs/build/pyinstaller/` - PyInstaller 打包日志
+  - `Error/` - 错误日志
+  - `warn/` - 警告日志
+  - `Info/` - 正常日志
+- `logs/build/inno/` - Inno Setup 编译日志
+  - `Error/` - 错误日志
+  - `warn/` - 警告日志
+  - `Info/` - 正常日志
 
 控制台输出已优化，只显示关键信息和进度，详细日志请查看上述文件。
