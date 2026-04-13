@@ -32,10 +32,14 @@ ArchitecturesAllowed=x64compatible
 ; the 64-bit view of the registry.
 ArchitecturesInstallIn64BitMode=x64compatible
 ChangesAssociations=yes
-DisableProgramGroupPage=no
+; 禁用程序组页面，直接使用默认名称
+DisableProgramGroupPage=yes
 ; 始终显示目录选择页面（即使检测到旧安装也让用户可以改路径）
 DisableDirPage=no
-UsePreviousAppDir=yes
+; 升级安装时不使用旧路径，避免残留文件冲突
+UsePreviousAppDir=no
+; 设置默认程序组名称
+DefaultGroupName={#MyAppName}
 LicenseFile=License.txt
 ; Uncomment the following line to run in non administrative install mode (install for current user only.)
 ;PrivilegesRequired=lowest
@@ -76,7 +80,7 @@ Name: "main"; Description: "UE Toolkit 主程序"; Types: full compact custom; F
 Name: "sevenzip"; Description: "7-Zip 高速解压组件（推荐，提升解压速度 3-5 倍）"; Types: full; ExtraDiskSpaceRequired: 2457600
 
 [Tasks]
-Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
+Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"
 Name: "startmenuicon"; Description: "创建开始菜单快捷方式"; GroupDescription: "{cm:AdditionalIcons}"
 
 [Files]
@@ -86,8 +90,8 @@ Source: "..\dist\{#MyAppExeName}"; DestDir: "{app}"; Flags: ignoreversion; Compo
 ; NOTE: Don't use "Flags: ignoreversion" on any shared system files
 
 [InstallDelete]
-; 升级安装时先删除旧的 EXE，确保覆盖成功
-Type: files; Name: "{app}\{#MyAppExeName}"
+; 升级安装时清理整个安装目录，避免残留文件
+Type: filesandordirs; Name: "{app}\*"
 
 [Registry]
 Root: HKA; Subkey: "Software\Classes\{#MyAppAssocExt}\OpenWithProgids"; ValueType: string; ValueName: "{#MyAppAssocKey}"; ValueData: ""; Flags: uninsdeletevalue
@@ -103,18 +107,32 @@ Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: startmen
 Name: "{group}\卸载 {#MyAppName}"; Filename: "{uninstallexe}"; Tasks: startmenuicon
 Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
 
+[Run]
+; 安装完成后运行程序（默认勾选）
+Filename: "{app}\{#MyAppExeName}"; Description: "立即运行 {#MyAppName}"; Flags: nowait postinstall skipifsilent
+
 [Code]
 
 // ========== 7-Zip 检测和下载 ==========
 var
   Is7ZipInstalled: Boolean;
-  Need7ZipDownload: Boolean;
+  DocLinkLabel: TNewStaticText;
 
-// 获取卸载注册表路径
-function GetUninstallRegKey(): String;
+// 统一的注册表查询函数（避免重复代码）
+function QueryUninstallRegistry(ValueName: String): String;
+var
+  RegKey: String;
+  Value: String;
 begin
-  Result := 'Software\Microsoft\Windows\CurrentVersion\Uninstall\' +
+  Result := '';
+  RegKey := 'Software\Microsoft\Windows\CurrentVersion\Uninstall\' +
             Chr(123) + '218B94E0-0429-4AFF-9FA3-49A1100AD90F' + Chr(125) + '_is1';
+  
+  if RegQueryStringValue(HKLM64, RegKey, ValueName, Value) or
+     RegQueryStringValue(HKCU64, RegKey, ValueName, Value) or
+     RegQueryStringValue(HKLM32, RegKey, ValueName, Value) or
+     RegQueryStringValue(HKCU32, RegKey, ValueName, Value) then
+    Result := Value;
 end;
 
 // 强制结束正在运行的程序
@@ -129,47 +147,20 @@ end;
 
 // 获取旧版本的卸载程序路径
 function GetUninstallString(): String;
-var
-  UninstallStr: String;
-  RegKey: String;
 begin
-  Result := '';
-  RegKey := GetUninstallRegKey();
-  if not RegQueryStringValue(HKLM64, RegKey, 'UninstallString', UninstallStr) then
-    if not RegQueryStringValue(HKCU64, RegKey, 'UninstallString', UninstallStr) then
-      if not RegQueryStringValue(HKLM32, RegKey, 'UninstallString', UninstallStr) then
-        RegQueryStringValue(HKCU32, RegKey, 'UninstallString', UninstallStr);
-  Result := UninstallStr;
+  Result := QueryUninstallRegistry('UninstallString');
 end;
 
 // 获取旧版本的安装路径
 function GetOldInstallDir(): String;
-var
-  InstallDir: String;
-  RegKey: String;
 begin
-  Result := '';
-  RegKey := GetUninstallRegKey();
-  if not RegQueryStringValue(HKLM64, RegKey, 'InstallLocation', InstallDir) then
-    if not RegQueryStringValue(HKCU64, RegKey, 'InstallLocation', InstallDir) then
-      if not RegQueryStringValue(HKLM32, RegKey, 'InstallLocation', InstallDir) then
-        RegQueryStringValue(HKCU32, RegKey, 'InstallLocation', InstallDir);
-  Result := InstallDir;
+  Result := QueryUninstallRegistry('InstallLocation');
 end;
 
 // 获取旧版本号
 function GetOldVersion(): String;
-var
-  OldVersion: String;
-  RegKey: String;
 begin
-  Result := '';
-  RegKey := GetUninstallRegKey();
-  if not RegQueryStringValue(HKLM64, RegKey, 'DisplayVersion', OldVersion) then
-    if not RegQueryStringValue(HKCU64, RegKey, 'DisplayVersion', OldVersion) then
-      if not RegQueryStringValue(HKLM32, RegKey, 'DisplayVersion', OldVersion) then
-        RegQueryStringValue(HKCU32, RegKey, 'DisplayVersion', OldVersion);
-  Result := OldVersion;
+  Result := QueryUninstallRegistry('DisplayVersion');
 end;
 
 // 静默卸载旧版本
@@ -193,27 +184,18 @@ begin
   end;
 end;
 
-// 检测系统是否已安装 7-Zip
+// 检测系统是否已安装 7-Zip（简化版）
 function Check7ZipInstalled(): Boolean;
 var
-  RegValue: String;
+  RegPath: String;
 begin
   Result := False;
   
-  // 检查注册表（64位）
-  if RegQueryStringValue(HKLM64, 'SOFTWARE\7-Zip', 'Path', RegValue) then
+  // 检查注册表
+  if RegQueryStringValue(HKLM64, 'SOFTWARE\7-Zip', 'Path', RegPath) or
+     RegQueryStringValue(HKLM32, 'SOFTWARE\7-Zip', 'Path', RegPath) then
   begin
-    if FileExists(RegValue + '7z.exe') then
-    begin
-      Result := True;
-      Exit;
-    end;
-  end;
-  
-  // 检查注册表（32位）
-  if RegQueryStringValue(HKLM32, 'SOFTWARE\7-Zip', 'Path', RegValue) then
-  begin
-    if FileExists(RegValue + '7z.exe') then
+    if FileExists(RegPath + '7z.exe') then
     begin
       Result := True;
       Exit;
@@ -221,16 +203,10 @@ begin
   end;
   
   // 检查默认安装路径
-  if FileExists(ExpandConstant('{pf}\7-Zip\7z.exe')) then
+  if FileExists(ExpandConstant('{pf}\7-Zip\7z.exe')) or
+     FileExists(ExpandConstant('{pf32}\7-Zip\7z.exe')) then
   begin
     Result := True;
-    Exit;
-  end;
-  
-  if FileExists(ExpandConstant('{pf32}\7-Zip\7z.exe')) then
-  begin
-    Result := True;
-    Exit;
   end;
 end;
 
@@ -279,7 +255,7 @@ begin
 end;
 
 // 在组件选择页面显示 7-Zip 状态
-procedure UpdateComponentsList(Sender: TWizardPage);
+procedure UpdateComponentsList();
 var
   CompIndex: Integer;
 begin
@@ -307,6 +283,45 @@ begin
   end;
 end;
 
+// 递归删除目录及其所有内容
+procedure DeleteDirectoryRecursive(DirPath: String);
+var
+  FindRec: TFindRec;
+  FilePath: String;
+begin
+  if not DirExists(DirPath) then
+    Exit;
+    
+  // 删除目录中的所有文件和子目录
+  if FindFirst(DirPath + '\*', FindRec) then
+  begin
+    try
+      repeat
+        if (FindRec.Name <> '.') and (FindRec.Name <> '..') then
+        begin
+          FilePath := DirPath + '\' + FindRec.Name;
+          
+          if FindRec.Attributes and FILE_ATTRIBUTE_DIRECTORY <> 0 then
+          begin
+            // 递归删除子目录
+            DeleteDirectoryRecursive(FilePath);
+          end
+          else
+          begin
+            // 删除文件（忽略只读属性错误）
+            DeleteFile(FilePath);
+          end;
+        end;
+      until not FindNext(FindRec);
+    finally
+      FindClose(FindRec);
+    end;
+  end;
+  
+  // 删除空目录
+  RemoveDir(DirPath);
+end;
+
 // 初始化安装向导
 function InitializeSetup(): Boolean;
 var
@@ -317,7 +332,6 @@ begin
   
   // 检测 7-Zip 是否已安装
   Is7ZipInstalled := Check7ZipInstalled();
-  Need7ZipDownload := False;
   
   // 强制结束正在运行的程序
   KillRunningApp();
@@ -338,16 +352,27 @@ begin
       Exit;
     end;
 
+    // 静默卸载旧版本
     UninstallOldVersion();
-    if (OldDir <> '') and FileExists(OldDir + '\{#MyAppExeName}') then
-      DeleteFile(OldDir + '\{#MyAppExeName}');
-    if OldDir <> '' then
-      RemoveDir(OldDir);
+    
+    // 彻底清理旧安装目录
+    if (OldDir <> '') and DirExists(OldDir) then
+    begin
+      DeleteDirectoryRecursive(OldDir);
+    end;
 
     MsgBox('旧版本已卸载完成。' + #13#10#13#10 +
            '点击确定继续安装新版本。',
            mbInformation, MB_OK);
   end;
+end;
+
+// 文档链接点击事件
+procedure DocLinkLabelClick(Sender: TObject);
+var
+  ErrorCode: Integer;
+begin
+  ShellExec('open', 'https://www.unrealenginetookit.top/docs', '', '', SW_SHOW, ewNoWait, ErrorCode);
 end;
 
 // 页面切换事件
@@ -356,7 +381,21 @@ begin
   // 在组件选择页面更新 7-Zip 状态
   if CurPageID = wpSelectComponents then
   begin
-    UpdateComponentsList(nil);
+    UpdateComponentsList();
+  end;
+  
+  // 在完成页面添加文档链接
+  if CurPageID = wpFinished then
+  begin
+    DocLinkLabel := TNewStaticText.Create(WizardForm);
+    DocLinkLabel.Parent := WizardForm.FinishedPage;
+    DocLinkLabel.Caption := '查看在线文档';
+    DocLinkLabel.Cursor := crHand;
+    DocLinkLabel.OnClick := @DocLinkLabelClick;
+    DocLinkLabel.Font.Color := clBlue;
+    DocLinkLabel.Font.Style := [fsUnderline];
+    DocLinkLabel.Left := WizardForm.RunList.Left;
+    DocLinkLabel.Top := WizardForm.RunList.Top + WizardForm.RunList.Height + 8;
   end;
 end;
 
