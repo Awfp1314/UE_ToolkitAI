@@ -9,6 +9,8 @@
 #define MyAppAssocName MyAppName + " File"
 #define MyAppAssocExt ".myp"
 #define MyAppAssocKey StringChange(MyAppAssocName, " ", "") + MyAppAssocExt
+#define DesktopPath GetEnv("USERPROFILE") + "\Desktop"
+#define MyAppAssocKey StringChange(MyAppAssocName, " ", "") + MyAppAssocExt
 
 [Setup]
 ; NOTE: The value of AppId uniquely identifies this application. Do not use the same AppId value in installers for other applications.
@@ -44,7 +46,7 @@ LicenseFile=License.txt
 ; Uncomment the following line to run in non administrative install mode (install for current user only.)
 ;PrivilegesRequired=lowest
 ; 输出目录设置为桌面
-OutputDir=userdocs:Desktop
+OutputDir={#DesktopPath}
 OutputBaseFilename=UE_Toolkit_Setup_v{#MyAppVersion}
 SetupIconFile=..\..\..\resources\tubiao.ico
 SolidCompression=yes
