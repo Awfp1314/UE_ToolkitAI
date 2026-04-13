@@ -579,12 +579,12 @@ class ChatInputBox(QWidget):
     
     def _on_add_asset(self):
         """添加资产"""
-        print("[DEBUG] 点击了添加资产")
+        # print("[DEBUG] 点击了添加资产")  # 打包时自动注释
         self.add_asset_signal.emit()
     
     def _on_add_config(self):
         """添加配置（已禁用）"""
-        print("[DEBUG] 点击了添加配置")
+        # print("[DEBUG] 点击了添加配置")  # 打包时自动注释
         self.add_config_signal.emit()
     
     def update_theme(self):

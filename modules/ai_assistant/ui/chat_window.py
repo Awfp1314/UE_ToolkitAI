@@ -930,7 +930,7 @@ class ChatWindow(BaseModuleWidget):
     def on_regenerate_response(self):
         """重新生成AI回答"""
         try:
-            print("[DEBUG] 重新生成回答")
+            # print("[DEBUG] 重新生成回答")  # 打包时自动注释
 
             # UI：移除最后一个 AI 气泡
             if self.ai_bubbles:
@@ -973,7 +973,7 @@ class ChatWindow(BaseModuleWidget):
 
     def _on_add_asset(self):
         """处理添加资产请求"""
-        print("[DEBUG] 打开资产选择窗口")
+        # print("[DEBUG] 打开资产选择窗口")  # 打包时自动注释
 
         if not self.controller.asset_manager_logic:
             print("[WARNING] 资产管理逻辑层未初始化")
@@ -1112,7 +1112,7 @@ class ChatWindow(BaseModuleWidget):
 
     def _on_add_config(self):
         """处理添加配置请求"""
-        print("[DEBUG] 添加配置功能待实现")
+        # print("[DEBUG] 添加配置功能待实现")  # 打包时自动注释
     
     def _on_preview_asset(self, asset_name: str):
         """处理资产预览请求（从AI消息气泡触发）
@@ -1120,7 +1120,7 @@ class ChatWindow(BaseModuleWidget):
         Args:
             asset_name: 资产名称
         """
-        print(f"[DEBUG] 预览资产: {asset_name}")
+        # print(f"[DEBUG] 预览资产: {asset_name}")  # 打包时自动注释
         
         if not hasattr(self, 'asset_manager_logic') or not self.asset_manager_logic:
             print("[WARNING] 资产管理逻辑层未初始化")
@@ -1157,7 +1157,7 @@ class ChatWindow(BaseModuleWidget):
         Args:
             asset_name: 资产名称
         """
-        print(f"[DEBUG] 导入资产: {asset_name}")
+        # print(f"[DEBUG] 导入资产: {asset_name}")  # 打包时自动注释
         
         if not hasattr(self, 'asset_manager_logic') or not self.asset_manager_logic:
             print("[WARNING] 资产管理逻辑层未初始化")

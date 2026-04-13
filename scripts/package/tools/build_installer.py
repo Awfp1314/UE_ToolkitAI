@@ -223,31 +223,65 @@ def pre_build_checks():
                     with open(py_file, 'r', encoding='utf-8') as f:
                         content = f.read()
                     
-                    # 注释掉 DEBUG 打印
-                    new_content = re.sub(
-                        r'^(\s*)(print\s*\([^)]*\[?DEBUG\]?[^)]*\))',
-                        r'\1# \2  # 打包时自动注释',
-                        content,
-                        flags=re.MULTILINE
-                    )
+                    lines = content.split('\n')
+                    modified = False
+                    i = 0
                     
-                    # 注释掉 pdb
-                    new_content = re.sub(
-                        r'^(\s*)(import\s+pdb|pdb\.set_trace\(\))',
-                        r'\1# \2  # 打包时自动注释',
-                        new_content,
-                        flags=re.MULTILINE
-                    )
+                    while i < len(lines):
+                        line = lines[i]
+                        stripped = line.strip()
+                        
+                        # 检测需要注释的调试代码
+                        should_comment = False
+                        if re.search(r'print\s*\([^)]*\[?DEBUG\]?[^)]*\)', stripped):
+                            should_comment = True
+                        elif re.search(r'import\s+pdb|pdb\.set_trace\(\)', stripped):
+                            should_comment = True
+                        elif re.search(r'breakpoint\s*\(\s*\)', stripped):
+                            should_comment = True
+                        
+                        if should_comment and not stripped.startswith('#'):
+                            # 获取缩进
+                            indent = len(line) - len(line.lstrip())
+                            indent_str = line[:indent]
+                            
+                            # 注释该行
+                            lines[i] = f"{indent_str}# {stripped}  # 打包时自动注释"
+                            modified = True
+                            
+                            # 检查是否会导致空代码块
+                            # 向前查找是否在 if/elif/else/for/while/try/except/finally/with/def/class 块中
+                            if i > 0:
+                                # 查找前一个非空行
+                                prev_idx = i - 1
+                                while prev_idx >= 0 and not lines[prev_idx].strip():
+                                    prev_idx -= 1
+                                
+                                if prev_idx >= 0:
+                                    prev_line = lines[prev_idx].strip()
+                                    # 检查是否是控制结构的开始（以冒号结尾）
+                                    if prev_line.endswith(':'):
+                                        # 检查下一个非空行的缩进
+                                        next_idx = i + 1
+                                        while next_idx < len(lines) and not lines[next_idx].strip():
+                                            next_idx += 1
+                                        
+                                        # 如果下一行缩进更小或到文件末尾，说明这是块中的最后一条语句
+                                        if next_idx >= len(lines):
+                                            need_pass = True
+                                        else:
+                                            next_indent = len(lines[next_idx]) - len(lines[next_idx].lstrip())
+                                            need_pass = next_indent <= indent
+                                        
+                                        if need_pass:
+                                            # 在注释行后添加 pass
+                                            lines.insert(i + 1, f"{indent_str}pass  # 保持语法正确")
+                                            i += 1  # 跳过新插入的 pass 行
+                        
+                        i += 1
                     
-                    # 注释掉 breakpoint
-                    new_content = re.sub(
-                        r'^(\s*)(breakpoint\s*\(\s*\))',
-                        r'\1# \2  # 打包时自动注释',
-                        new_content,
-                        flags=re.MULTILINE
-                    )
-                    
-                    if new_content != content:
+                    if modified:
+                        new_content = '\n'.join(lines)
                         with open(py_file, 'w', encoding='utf-8') as f:
                             f.write(new_content)
                         fixed_count += 1

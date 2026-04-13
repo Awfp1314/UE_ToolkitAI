@@ -124,10 +124,10 @@ class ChatController(QObject):
         site_recommendations_logic=None,
     ):
         """设置其他模块的逻辑层引用（延迟初始化策略）"""
-        print(f"[DEBUG] ========== ChatController.set_logic_references 被调用 ==========")
-        print(f"[DEBUG] asset_manager_logic: {asset_manager_logic}")
-        print(f"[DEBUG] config_tool_logic: {config_tool_logic}")
-        print(f"[DEBUG] site_recommendations_logic: {site_recommendations_logic}")
+        # print(f"[DEBUG] ========== ChatController.set_logic_references 被调用 ==========")  # 打包时自动注释
+        # print(f"[DEBUG] asset_manager_logic: {asset_manager_logic}")  # 打包时自动注释
+        # print(f"[DEBUG] config_tool_logic: {config_tool_logic}")  # 打包时自动注释
+        # print(f"[DEBUG] site_recommendations_logic: {site_recommendations_logic}")  # 打包时自动注释
 
         self.asset_manager_logic = asset_manager_logic
         self.config_tool_logic = config_tool_logic
@@ -135,7 +135,7 @@ class ChatController(QObject):
 
         # 如果已有 ContextManager，热更新引用
         if self.context_manager is not None:
-            print("[DEBUG] 热更新 ContextManager 内部引用...")
+            # print("[DEBUG] 热更新 ContextManager 内部引用...")  # 打包时自动注释
             if hasattr(self.context_manager, 'asset_reader'):
                 self.context_manager.asset_reader.asset_manager_logic = asset_manager_logic
             if hasattr(self.context_manager, 'config_reader'):
@@ -143,21 +143,23 @@ class ChatController(QObject):
             if hasattr(self.context_manager, 'site_reader'):
                 self.context_manager.site_reader.site_logic = site_recommendations_logic
         else:
-            print("[DEBUG] 逻辑层引用已保存，ContextManager 将在首次对话时初始化")
+            # print("[DEBUG] 逻辑层引用已保存，ContextManager 将在首次对话时初始化")  # 打包时自动注释
+            pass  # 保持语法正确
 
         # 如果已有 ToolsRegistry，热更新 readers
         if self.tools_registry is not None:
-            print("[DEBUG] 热更新 ToolsRegistry 内部引用...")
+            # print("[DEBUG] 热更新 ToolsRegistry 内部引用...")  # 打包时自动注释
+            pass  # 保持语法正确
             try:
                 from ..logic.asset_reader import AssetReader
                 from ..logic.config_reader import ConfigReader
 
                 if asset_manager_logic:
                     self.tools_registry.asset_reader = AssetReader(asset_manager_logic)
-                    print("[DEBUG] ToolsRegistry.asset_reader 已更新")
+                    # print("[DEBUG] ToolsRegistry.asset_reader 已更新")  # 打包时自动注释
                 if config_tool_logic:
                     self.tools_registry.config_reader = ConfigReader(config_tool_logic)
-                    print("[DEBUG] ToolsRegistry.config_reader 已更新")
+                    # print("[DEBUG] ToolsRegistry.config_reader 已更新")  # 打包时自动注释
             except Exception as e:
                 print(f"[WARNING] 热更新 ToolsRegistry 失败: {e}")
 
@@ -173,13 +175,13 @@ class ChatController(QObject):
 
         def _do_init():
             try:
-                print("[DEBUG] 后台预初始化开始...")
+                # print("[DEBUG] 后台预初始化开始...")  # 打包时自动注释
                 # 预检查 AI 模型可用性（涉及模块导入和文件检查）
                 self._ensure_ai_model_available()
                 # 预初始化 ContextManager + ToolsRegistry
                 self._ensure_context_manager_initialized()
                 self._pre_init_done = True
-                print("[DEBUG] 后台预初始化完成 ✓")
+                # print("[DEBUG] 后台预初始化完成 ✓")  # 打包时自动注释
             except Exception as e:
                 print(f"[WARNING] 后台预初始化失败: {e}")
             finally:
@@ -285,7 +287,7 @@ class ChatController(QObject):
                 if self.context_manager is not None:
                     return
 
-                print("[DEBUG] 开始延迟初始化 ContextManager...")
+                # print("[DEBUG] 开始延迟初始化 ContextManager...")  # 打包时自动注释
 
                 def api_client_factory(messages, model="gemini-2.5-flash"):
                     return APIClient(messages, model=model)
@@ -325,7 +327,7 @@ class ChatController(QObject):
         logger = get_logger(__name__)
 
         try:
-            print("[DEBUG] 开始初始化 ToolsRegistry...")
+            # print("[DEBUG] 开始初始化 ToolsRegistry...")  # 打包时自动注释
 
             from ..logic.asset_reader import AssetReader
             from ..logic.config_reader import ConfigReader
@@ -364,7 +366,7 @@ class ChatController(QObject):
 
         # 1. 构建系统提示词
         system_prompt = self._build_system_prompt_with_identity()
-        print(f"[DEBUG] 系统提示词长度: {len(system_prompt)} 字符")
+        # print(f"[DEBUG] 系统提示词长度: {len(system_prompt)} 字符")  # 打包时自动注释
 
         request_messages.append({"role": "system", "content": system_prompt})
 
@@ -388,34 +390,35 @@ class ChatController(QObject):
 
         # 3. 获取工具定义
         tools = None
-        print(f"[DEBUG] ========== 准备获取工具定义 ==========")
-        print(f"[DEBUG] self.tools_registry: {self.tools_registry}")
+        # print(f"[DEBUG] ========== 准备获取工具定义 ==========")  # 打包时自动注释
+        # print(f"[DEBUG] self.tools_registry: {self.tools_registry}")  # 打包时自动注释
 
         if self.tools_registry:
             try:
                 tools = self.tools_registry.openai_tool_schemas()
                 if tools:
                     for i, tool in enumerate(tools[:3]):
-                        print(f"[DEBUG]   工具{i+1}: {tool.get('function', {}).get('name')}")
+                        # print(f"[DEBUG]   工具{i+1}: {tool.get('function', {}).get('name')}")  # 打包时自动注释
+                        pass  # 保持语法正确
             except Exception as e:
                 print(f"[WARNING] 获取工具定义失败: {e}")
                 import traceback
                 traceback.print_exc()
 
-        print(f"[DEBUG] 发送消息数量: {len(request_messages)}, 工具数量: {len(tools) if tools else 0}")
+        # print(f"[DEBUG] 发送消息数量: {len(request_messages)}, 工具数量: {len(tools) if tools else 0}")  # 打包时自动注释
 
         for i, msg in enumerate(request_messages):
             role = msg.get("role", "unknown")
             content = msg.get("content", "")
             preview = content[:100] if isinstance(content, str) else str(content)[:100]
-            print(f"[DEBUG] 消息[{i}] {role}: {preview}...")
+            # print(f"[DEBUG] 消息[{i}] {role}: {preview}...")  # 打包时自动注释
 
         # 4. 发起请求
         if tools and self.tools_registry:
-            print(f"[DEBUG] 启用 Function Calling 协调器")
+            # print(f"[DEBUG] 启用 Function Calling 协调器")  # 打包时自动注释
             self._start_with_coordinator(request_messages, tools)
         else:
-            print(f"[DEBUG] 启动普通 API 请求...")
+            # print(f"[DEBUG] 启动普通 API 请求...")  # 打包时自动注释
             self.current_api_client = APIClient(request_messages, tools=None)
 
             self.current_api_client.chunk_received.connect(self._on_chunk_received)
@@ -442,17 +445,17 @@ class ChatController(QObject):
             config = config_manager.get_module_config()
 
             provider = config.get("llm_provider", "unknown")
-            print(f"[DEBUG] 当前LLM供应商: {provider}")
+            # print(f"[DEBUG] 当前LLM供应商: {provider}")  # 打包时自动注释
             if provider == "api":
                 api_config = config.get("api_settings", {})
-                print(f"[DEBUG] API URL: {api_config.get('api_url')}")
-                print(f"[DEBUG] API 模型: {api_config.get('default_model')}")
+                # print(f"[DEBUG] API URL: {api_config.get('api_url')}")  # 打包时自动注释
+                # print(f"[DEBUG] API 模型: {api_config.get('default_model')}")  # 打包时自动注释
             elif provider == "ollama":
                 ollama_config = config.get("ollama_settings", {})
-                print(f"[DEBUG] Ollama URL: {ollama_config.get('base_url')}")
-                print(f"[DEBUG] Ollama 模型: {ollama_config.get('default_model')}")
+                # print(f"[DEBUG] Ollama URL: {ollama_config.get('base_url')}")  # 打包时自动注释
+                # print(f"[DEBUG] Ollama 模型: {ollama_config.get('default_model')}")  # 打包时自动注释
 
-            print(f"[DEBUG] 开始创建LLM客户端...")
+            # print(f"[DEBUG] 开始创建LLM客户端...")  # 打包时自动注释
             llm_client = create_llm_client(config)
 
             self.current_coordinator = FunctionCallingCoordinator(
@@ -468,7 +471,7 @@ class ChatController(QObject):
             self.current_coordinator.request_finished.connect(self._on_request_finished)
             self.current_coordinator.error_occurred.connect(self._on_error_occurred)
 
-            print(f"[DEBUG] 启动 Function Calling 协调器...")
+            # print(f"[DEBUG] 启动 Function Calling 协调器...")  # 打包时自动注释
             self.current_coordinator.start()
 
         except Exception as e:
@@ -573,27 +576,27 @@ class ChatController(QObject):
         """
         try:
             if not self.session_manager:
-                print(f"[DEBUG] AI 命名跳过: session_manager 不存在")
+                # print(f"[DEBUG] AI 命名跳过: session_manager 不存在")  # 打包时自动注释
                 return
 
             session_id = self.session_manager.current_session_id
             if not session_id:
-                print(f"[DEBUG] AI 命名跳过: 无当前会话")
+                # print(f"[DEBUG] AI 命名跳过: 无当前会话")  # 打包时自动注释
                 return
 
             current_session = self.session_manager.get_current_session()
             if not current_session:
-                print(f"[DEBUG] AI 命名跳过: 无法获取当前会话对象")
+                # print(f"[DEBUG] AI 命名跳过: 无法获取当前会话对象")  # 打包时自动注释
                 return
 
             # 只在有足够对话内容时生成（至少2轮 = 4条消息）
             if len(all_messages) < 4:
-                print(f"[DEBUG] AI 命名跳过: 消息数不足 ({len(all_messages)} < 4)")
+                # print(f"[DEBUG] AI 命名跳过: 消息数不足 ({len(all_messages)} < 4)")  # 打包时自动注释
                 return
 
             # 已被 AI 命名过或用户手动改过，跳过
             if current_session.ai_titled:
-                print(f"[DEBUG] AI 命名跳过: 已被 AI 命名过")
+                # print(f"[DEBUG] AI 命名跳过: 已被 AI 命名过")  # 打包时自动注释
                 return
 
             print(f"[INFO] 尝试用 AI 生成会话标题（消息数: {len(all_messages)}）...")
@@ -604,7 +607,7 @@ class ChatController(QObject):
                 return
                 
             if new_title == current_session.title:
-                print(f"[DEBUG] AI 生成标题与当前标题相同，跳过更新")
+                # print(f"[DEBUG] AI 生成标题与当前标题相同，跳过更新")  # 打包时自动注释
                 return
             
             current_session.ai_titled = True
@@ -715,10 +718,10 @@ class ChatController(QObject):
         is_identity_change = any(kw in message_lower for kw in identity_keywords)
 
         if is_identity_change:
-            print(f"[DEBUG] 检测到身份设定变更，立即更新系统提示词")
+            # print(f"[DEBUG] 检测到身份设定变更，立即更新系统提示词")  # 打包时自动注释
 
             new_system_prompt = self._build_system_prompt_with_new_identity(user_message)
 
             # 委托给 MessageManager 更新系统提示词
             self.message_manager.update_system_prompt(new_system_prompt)
-            print(f"[DEBUG] 系统提示词已更新，新身份将在下次对话中生效")
+            # print(f"[DEBUG] 系统提示词已更新，新身份将在下次对话中生效")  # 打包时自动注释

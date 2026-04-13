@@ -136,7 +136,7 @@ class FunctionCallingCoordinator(QObject):
                 if iteration == 0:
                     # 第一轮：用流式请求，同时检测 tool_calls 和输出文本
                     # 这样纯文本回复时第一个 token 就能立即显示
-                    print("[DEBUG] [第一轮] 使用流式请求（带工具检测）")
+                    # print("[DEBUG] [第一轮] 使用流式请求（带工具检测）")  # 打包时自动注释
                     response_data = self._call_llm_streaming_with_tools(self.messages, tools, cancel_token)
                 else:
                     # 工具调用后的后续轮次：用非流式检测是否还有 tool_calls
@@ -148,7 +148,7 @@ class FunctionCallingCoordinator(QObject):
                 # 检查响应类型
                 if response_data['type'] == 'stream_fallback':
                     # 流式回退：模型不支持工具，直接使用流式输出
-                    print("[DEBUG] [主循环] 收到stream_fallback标记，开始流式输出")
+                    # print("[DEBUG] [主循环] 收到stream_fallback标记，开始流式输出")  # 打包时自动注释
                     try:
                         self._stream_final_response(self.messages, tools=None)
                     except Exception as stream_error:
@@ -214,7 +214,7 @@ class FunctionCallingCoordinator(QObject):
                     
                     # 工具执行完毕，用流式请求获取最终回复（接续已有的气泡）
                     # 不再进入下一轮循环，直接流式输出最终回复
-                    print("[DEBUG] 工具执行完毕，流式获取最终回复")
+                    # print("[DEBUG] 工具执行完毕，流式获取最终回复")  # 打包时自动注释
                     try:
                         self._stream_final_response(self.messages, tools=None)
                     except Exception as stream_error:
@@ -227,7 +227,7 @@ class FunctionCallingCoordinator(QObject):
                     content = response_data.get('content', '')
                     usage = response_data.get('usage')
                     
-                    print(f"[DEBUG] [流式输出] 收到content响应，长度: {len(content)}, iteration: {iteration}")
+                    # print(f"[DEBUG] [流式输出] 收到content响应，长度: {len(content)}, iteration: {iteration}")  # 打包时自动注释
                     
                     if response_data.get('already_streamed'):
                         # 第一轮流式已经直接输出了，不需要再处理
@@ -237,7 +237,7 @@ class FunctionCallingCoordinator(QObject):
                         self._emit_content_with_typing(content)
                     else:
                         # content 为空，回退到流式重新请求
-                        print("[DEBUG] [content为空] 回退到流式输出重新请求")
+                        # print("[DEBUG] [content为空] 回退到流式输出重新请求")  # 打包时自动注释
                         try:
                             self._stream_final_response(self.messages, tools=None)
                         except Exception as stream_error:
@@ -463,7 +463,7 @@ class FunctionCallingCoordinator(QObject):
 
                 # ⚡ 回退到无工具模式：使用流式API实现快速响应
                 self.logger.info("[FunctionCalling] 回退到流式模式（无工具）...")
-                print("[DEBUG] [回退] 返回stream_fallback标记，将使用流式输出")
+                # print("[DEBUG] [回退] 返回stream_fallback标记，将使用流式输出")  # 打包时自动注释
                 
                 # 返回一个特殊标记，告诉主循环使用流式输出
                 return {
@@ -501,7 +501,7 @@ class FunctionCallingCoordinator(QObject):
         ⚠️ 修复说明：移除了重试逻辑，避免重复 API 调用
         如果模型不支持工具，应该在初始化时检测，而不是在运行时重试
         """
-        print(f"[DEBUG] [流式输出] 开始流式输出，tools={tools}")
+        # print(f"[DEBUG] [流式输出] 开始流式输出，tools={tools}")  # 打包时自动注释
         self.logger.info(f"[流式输出] 开始流式输出最终响应，消息数:{len(messages)}")
         
         chunk_count = 0
@@ -509,7 +509,7 @@ class FunctionCallingCoordinator(QObject):
         # 原因：重试逻辑会导致重复 API 调用，浪费 Token
         for chunk in self.llm_client.generate_response(messages, stream=True, tools=tools):
             if self._should_stop:
-                print(f"[DEBUG] [流式输出] 收到停止信号，已输出{chunk_count}个chunk")
+                # print(f"[DEBUG] [流式输出] 收到停止信号，已输出{chunk_count}个chunk")  # 打包时自动注释
                 break
             
             chunk_count += 1
@@ -529,7 +529,7 @@ class FunctionCallingCoordinator(QObject):
                 # 字符串类型（向后兼容）
                 self.chunk_received.emit(str(chunk))
         
-        print(f"[DEBUG] [流式输出] 完成！共输出{chunk_count}个chunk")
+        # print(f"[DEBUG] [流式输出] 完成！共输出{chunk_count}个chunk")  # 打包时自动注释
         self.logger.info(f"[流式输出] 流式输出完成，共{chunk_count}个chunk")
         self.request_finished.emit()
     

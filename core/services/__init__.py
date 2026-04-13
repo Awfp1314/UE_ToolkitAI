@@ -158,7 +158,8 @@ def _get_log_service() -> 'LogService':
         _service_states['log'] = ServiceState.INITIALIZING
 
         if is_debug_enabled():
-            print("[DEBUG] 正在初始化 LogService...")
+            # print("[DEBUG] 正在初始化 LogService...")  # 打包时自动注释
+            pass  # 保持语法正确
 
         from core.services._log_service import LogService
         _log_service = LogService()
@@ -166,7 +167,8 @@ def _get_log_service() -> 'LogService':
         _service_states['log'] = ServiceState.INITIALIZED
 
         if is_debug_enabled():
-            print("[DEBUG] LogService 初始化完成")
+            # print("[DEBUG] LogService 初始化完成")  # 打包时自动注释
+            pass  # 保持语法正确
 
     return _log_service
 
@@ -184,7 +186,8 @@ def _get_path_service() -> 'PathService':
         _service_states['path'] = ServiceState.INITIALIZING
 
         if is_debug_enabled():
-            print("[DEBUG] 正在初始化 PathService...")
+            # print("[DEBUG] 正在初始化 PathService...")  # 打包时自动注释
+            pass  # 保持语法正确
 
         from core.services._path_service import PathService
         _path_service = PathService()
@@ -192,7 +195,8 @@ def _get_path_service() -> 'PathService':
         _service_states['path'] = ServiceState.INITIALIZED
 
         if is_debug_enabled():
-            print("[DEBUG] PathService 初始化完成")
+            # print("[DEBUG] PathService 初始化完成")  # 打包时自动注释
+            pass  # 保持语法正确
 
     return _path_service
 
