@@ -219,8 +219,7 @@ class SmartPrefetcher:
         
         cached = self.cache.get(pattern.name)
         if cached:
-        
-        return cached
+            return cached
     
     def _execute_prefetch(self, pattern: DialogPattern) -> Optional[Dict]:
         """

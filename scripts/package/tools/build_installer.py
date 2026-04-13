@@ -121,7 +121,7 @@ def pre_build_checks():
     # ========== 1. 环境模式检查 ==========
     print("[检查 1/5] 环境模式检查...")
     
-    # 检查是否有调试代码
+    # 检查是否有调试代码（使用 Python 原生方法，避免依赖 grep）
     debug_patterns = [
         (r'print\s*\(\s*["\'].*DEBUG.*["\']', '发现 DEBUG 打印语句'),
         (r'logger\.debug\s*\(.*\[DEBUG\]', '发现 [DEBUG] 日志'),
@@ -130,30 +130,41 @@ def pre_build_checks():
     ]
     
     debug_files = []
-    for pattern, desc in debug_patterns:
-        try:
-            result = subprocess.run(
-                ['grep', '-r', '-n', '--include=*.py', '-E', pattern, 
-                 str(project_root / 'core'), 
-                 str(project_root / 'modules'), 
-                 str(project_root / 'ui')],
-                capture_output=True,
-                text=True,
-                timeout=10
-            )
-            if result.returncode == 0 and result.stdout.strip():
-                debug_files.append((desc, result.stdout.strip().split('\n')[:3]))  # 只显示前3个
-        except (subprocess.TimeoutExpired, FileNotFoundError):
-            # grep 不可用或超时，跳过
-            pass
+    search_dirs = [
+        project_root / 'core',
+        project_root / 'modules',
+        project_root / 'ui',
+    ]
+    
+    for search_dir in search_dirs:
+        if not search_dir.exists():
+            continue
+            
+        for py_file in search_dir.rglob("*.py"):
+            # 跳过缓存目录
+            if '__pycache__' in py_file.parts:
+                continue
+            
+            try:
+                with open(py_file, 'r', encoding='utf-8', errors='ignore') as f:
+                    content = f.read()
+                    
+                for pattern, desc in debug_patterns:
+                    if re.search(pattern, content):
+                        debug_files.append((desc, str(py_file.relative_to(project_root))))
+                        break  # 每个文件只记录一次
+                        
+            except Exception:
+                # 忽略无法读取的文件
+                pass
     
     if debug_files:
         warnings.append("发现调试代码")
         print("   [警告] 发现以下调试代码：")
-        for desc, files in debug_files:
-            print(f"      - {desc}")
-            for file in files[:2]:  # 只显示前2个文件
-                print(f"        {file[:100]}")  # 截断过长的行
+        for desc, file in debug_files[:5]:  # 只显示前5个
+            print(f"      - {desc}: {file}")
+        if len(debug_files) > 5:
+            print(f"      ... 还有 {len(debug_files) - 5} 个文件")
     else:
         print("   [通过] 未发现明显的调试代码")
     
@@ -163,15 +174,19 @@ def pre_build_checks():
     requirements_file = project_root / "requirements.txt"
     if requirements_file.exists():
         try:
-            # 检查关键依赖
-            critical_deps = ['PyQt6', 'requests', 'Pillow']
+            # 检查关键依赖（使用正确的导入名称）
+            critical_deps = [
+                ('PyQt6', 'PyQt6'),
+                ('requests', 'requests'),
+                ('Pillow', 'PIL'),  # Pillow 的导入名是 PIL
+            ]
             missing_deps = []
             
-            for dep in critical_deps:
+            for dep_name, import_name in critical_deps:
                 try:
-                    __import__(dep.lower().replace('-', '_'))
+                    __import__(import_name)
                 except ImportError:
-                    missing_deps.append(dep)
+                    missing_deps.append(dep_name)
             
             if missing_deps:
                 print(f"   [错误] 缺少关键依赖: {', '.join(missing_deps)}")
@@ -274,14 +289,14 @@ def pre_build_checks():
     print()
     print("=" * 60)
     if all_passed and not warnings:
-        print("[结果] ✓ 所有检查通过，可以开始打包")
+        print("[结果] 所有检查通过，可以开始打包")
     elif all_passed and warnings:
-        print(f"[结果] ⚠ 检查通过但有 {len(warnings)} 个警告")
+        print(f"[结果] 检查通过但有 {len(warnings)} 个警告")
         print("\n警告列表：")
         for i, warning in enumerate(warnings, 1):
             print(f"  {i}. {warning}")
     else:
-        print("[结果] ✗ 检查失败，请修复错误后再打包")
+        print("[结果] 检查失败，请修复错误后再打包")
     print("=" * 60)
     print()
     
