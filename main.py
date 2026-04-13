@@ -135,6 +135,15 @@ def main():
         except Exception:
             pass
     
+    # 确保工作目录正确（特别是在安装程序"立即运行"时）
+    if getattr(sys, 'frozen', False):
+        # 打包环境：设置工作目录为 exe 所在目录
+        exe_dir = Path(sys.executable).parent
+        os.chdir(exe_dir)
+    else:
+        # 开发环境：设置工作目录为项目根目录
+        os.chdir(project_root)
+    
     # 注册退出时的清理函数
     atexit.register(_cleanup_temp_dir)
     
