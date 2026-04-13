@@ -1,0 +1,13 @@
+{
+  "enabled": true,
+  "name": "自动版本管理与提交",
+  "description": "在用户发送消息后，自动分析本次代码变更类型（重大变更/新功能/bug修复），按照语义化版本规范更新 version.py 和 UeToolkitpack.iss 中的版本号，然后生成规范的 Git 提交信息并提交代码",
+  "version": "1",
+  "when": {
+    "type": "agentStop"
+  },
+  "then": {
+    "type": "askAgent",
+    "prompt": "分析本次代码变更并执行以下操作：\n\n1. 检查 Git 状态，如果有未提交的更改，分析变更类型：\n   - 重大变更/不兼容的 API 修改 → 更新主版本号（MAJOR）\n   - 新功能/向后兼容的改进 → 更新次版本号（MINOR）\n   - Bug 修复/小改进/文档更新 → 更新修订号（PATCH）\n\n2. 如果需要更新版本号：\n   - 更新 version.py 中的 VERSION 常量\n   - 更新 packaging/UeToolkitpack.iss 中的 MyAppVersion 定义\n\n3. 生成规范的 Git 提交信息（使用中文）：\n   - 格式：[类型] 简短描述\n   - 类型：feat（新功能）、fix（修复）、refactor（重构）、docs（文档）、style（格式）、perf（性能）、test（测试）、chore（构建/工具）\n   - 如果更新了版本号，在提交信息中注明新版本号\n\n4. 执行 Git 提交：\n   - git add .\n   - git commit -m \"提交信息\"\n\n注意：只在有实际代码变更时执行，如果只是咨询或讨论则跳过。"
+  }
+}

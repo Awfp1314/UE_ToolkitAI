@@ -1,0 +1,13 @@
+{
+  "enabled": true,
+  "name": "更新 SKILL 文档",
+  "description": "当 Python 源文件或配置文件修改后，自动检查是否影响 SKILL 文档内容，如有影响则更新 .kiro/skills/SKILL.md",
+  "version": "1",
+  "when": {
+    "type": "agentStop"
+  },
+  "then": {
+    "type": "askAgent",
+    "prompt": "检查刚才的代码修改是否影响到 .kiro/skills/SKILL.md 文档中描述的功能、规范或使用方法。如果有影响，请更新 SKILL.md 文档以保持文档与代码的一致性。重点关注：1) 新增或修改的功能 2) 代码规范的变化 3) API 或接口的改动 4) 配置项的变更"
+  }
+}
