@@ -62,23 +62,109 @@ def build_exe():
     
     print(f"🔨 运行 PyInstaller...")
     print(f"   配置文件: {spec_file.name}")
+    print(f"   正在打包，请稍候...")
     print()
     
     try:
+        # 捕获 PyInstaller 输出
         result = subprocess.run(
             [sys.executable, "-m", "PyInstaller", str(spec_file), "--clean"],
             cwd=project_root,
-            check=True
+            check=True,
+            capture_output=True,
+            text=True,
+            encoding='utf-8',
+            errors='replace'
         )
         
-        print()
+        # 解析输出，提取错误和警告
+        errors = []
+        warnings = []
+        
+        for line in result.stdout.splitlines() + result.stderr.splitlines():
+            line_lower = line.lower()
+            if 'error' in line_lower or 'failed' in line_lower:
+                errors.append(line)
+            elif 'warning' in line_lower or 'warn' in line_lower:
+                warnings.append(line)
+        
+        # 保存完整日志到文件
+        log_file = project_root / "dist" / "build.log"
+        log_file.parent.mkdir(exist_ok=True)
+        with open(log_file, 'w', encoding='utf-8') as f:
+            f.write("=" * 80 + "\n")
+            f.write("PyInstaller 完整构建日志\n")
+            f.write("=" * 80 + "\n\n")
+            f.write(result.stdout)
+            if result.stderr:
+                f.write("\n" + "=" * 80 + "\n")
+                f.write("标准错误输出\n")
+                f.write("=" * 80 + "\n\n")
+                f.write(result.stderr)
+        
+        # 生成错误和警告摘要日志
+        summary_log = project_root / "dist" / "build_summary.log"
+        with open(summary_log, 'w', encoding='utf-8') as f:
+            f.write("=" * 80 + "\n")
+            f.write("PyInstaller 构建摘要（仅错误和警告）\n")
+            f.write("=" * 80 + "\n\n")
+            
+            if errors:
+                f.write("❌ 错误:\n")
+                f.write("-" * 80 + "\n")
+                for error in errors:
+                    f.write(error + "\n")
+                f.write("\n")
+            
+            if warnings:
+                f.write("⚠️  警告:\n")
+                f.write("-" * 80 + "\n")
+                for warning in warnings:
+                    f.write(warning + "\n")
+                f.write("\n")
+            
+            if not errors and not warnings:
+                f.write("✅ 没有错误或警告\n")
+        
         print("✅ EXE 打包完成")
+        
+        # 显示摘要
+        if errors:
+            print(f"   ⚠️  发现 {len(errors)} 个错误")
+        if warnings:
+            print(f"   ⚠️  发现 {len(warnings)} 个警告")
+        
+        if errors or warnings:
+            print(f"   📄 详细日志: dist/build_summary.log")
+            print(f"   📄 完整日志: dist/build.log")
+        
         return True
         
     except subprocess.CalledProcessError as e:
         print()
-        print(f"❌ PyInstaller 打包失败: {e}")
+        print(f"❌ PyInstaller 打包失败")
+        
+        # 保存错误日志
+        log_file = project_root / "dist" / "build_error.log"
+        log_file.parent.mkdir(exist_ok=True)
+        with open(log_file, 'w', encoding='utf-8') as f:
+            f.write("=" * 80 + "\n")
+            f.write("PyInstaller 错误日志\n")
+            f.write("=" * 80 + "\n\n")
+            f.write(f"返回码: {e.returncode}\n\n")
+            if e.stdout:
+                f.write("标准输出:\n")
+                f.write("-" * 80 + "\n")
+                f.write(e.stdout)
+                f.write("\n\n")
+            if e.stderr:
+                f.write("标准错误:\n")
+                f.write("-" * 80 + "\n")
+                f.write(e.stderr)
+        
+        print(f"   📄 错误日志: dist/build_error.log")
         return False
+        
     except FileNotFoundError:
         print()
         print("❌ 错误: 找不到 pyinstaller 命令")
@@ -126,6 +212,7 @@ def build_installer():
     print(f"🔨 运行 Inno Setup 编译器...")
     print(f"   编译器: {iscc_exe}")
     print(f"   脚本: {iss_file.name}")
+    print(f"   正在编译，请稍候...")
     print()
     
     try:
@@ -138,9 +225,21 @@ def build_installer():
             errors='replace'
         )
         
-        print(result.stdout)
-        print()
+        # 保存 Inno Setup 日志
+        inno_log = project_root / "dist" / "inno_setup.log"
+        with open(inno_log, 'w', encoding='utf-8') as f:
+            f.write("=" * 80 + "\n")
+            f.write("Inno Setup 编译日志\n")
+            f.write("=" * 80 + "\n\n")
+            f.write(result.stdout)
+            if result.stderr:
+                f.write("\n" + "=" * 80 + "\n")
+                f.write("标准错误输出\n")
+                f.write("=" * 80 + "\n\n")
+                f.write(result.stderr)
+        
         print("✅ 安装包编译完成")
+        print(f"   📄 编译日志: dist/inno_setup.log")
         
         # 显示输出文件位置
         output_dir = project_root / "dist"
@@ -156,8 +255,26 @@ def build_installer():
         
     except subprocess.CalledProcessError as e:
         print()
-        print(f"❌ Inno Setup 编译失败:")
-        print(e.stderr)
+        print(f"❌ Inno Setup 编译失败")
+        
+        # 保存错误日志
+        error_log = project_root / "dist" / "inno_setup_error.log"
+        with open(error_log, 'w', encoding='utf-8') as f:
+            f.write("=" * 80 + "\n")
+            f.write("Inno Setup 错误日志\n")
+            f.write("=" * 80 + "\n\n")
+            f.write(f"返回码: {e.returncode}\n\n")
+            if e.stdout:
+                f.write("标准输出:\n")
+                f.write("-" * 80 + "\n")
+                f.write(e.stdout)
+                f.write("\n\n")
+            if e.stderr:
+                f.write("标准错误:\n")
+                f.write("-" * 80 + "\n")
+                f.write(e.stderr)
+        
+        print(f"   📄 错误日志: dist/inno_setup_error.log")
         return False
 
 

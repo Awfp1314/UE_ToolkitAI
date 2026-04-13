@@ -57,3 +57,14 @@ pyinstaller ue_toolkit.spec --clean
 - 版本号由 Kiro Hook 自动管理，无需手动同步
 - PyInstaller 配置已优化，排除了未使用的大型库
 - 所有配置模板会自动打包
+
+## 打包日志
+
+打包过程会自动生成日志文件到 `dist/` 目录：
+
+- `build.log` - PyInstaller 完整构建日志
+- `build_summary.log` - 仅包含错误和警告的摘要
+- `inno_setup.log` - Inno Setup 编译日志
+- `build_error.log` / `inno_setup_error.log` - 错误日志（如果失败）
+
+控制台输出已优化，只显示关键信息和进度，详细日志请查看上述文件。
