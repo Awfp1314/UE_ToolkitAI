@@ -5,8 +5,15 @@
 - `build_installer.py` / `build_installer.bat` - 一键打包脚本
 - `ue_toolkit.spec` - PyInstaller 打包配置
 - `UeToolkitpack.iss` - Inno Setup 安装包配置
-- `runtime_hook_encoding.py` - 运行时钩子（修复编码问题）
+- `runtime_hook_encoding.py` - 运行时钩子（修复打包后程序的编码问题）
 - `License.txt` - 用户许可协议
+
+**runtime_hook_encoding.py 说明**：
+这是 PyInstaller 的运行时钩子，在打包后的 EXE 启动时自动执行，用于：
+
+- 修复 Windows 中文编码问题（设置 UTF-8）
+- 禁用 PyInstaller 临时目录清理（避免退出警告）
+- 不能合并到打包脚本，因为它是在 EXE 运行时执行的
 
 ## 打包流程
 
