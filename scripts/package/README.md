@@ -26,6 +26,12 @@ build_installer.bat
 
 执行步骤：
 
+0. **打包前检查**（自动）
+   - 环境模式检查（调试代码检测）
+   - 依赖检查（关键库是否安装）
+   - 代码质量检查（语法错误检测）
+   - 版本号检查（version.py 与 UeToolkitpack.iss 一致性）
+   - 配置文件检查（必要文件是否存在）
 1. 清理旧构建文件（build/、dist/）
 2. 运行 PyInstaller 打包 EXE
 3. 调用 Inno Setup 编译安装包

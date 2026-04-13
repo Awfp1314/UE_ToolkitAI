@@ -103,6 +103,191 @@ def print_header(text):
     print()
 
 
+def pre_build_checks():
+    """打包前检查
+    
+    检查项：
+    1. 环境模式检查（开发/生产）
+    2. 依赖检查
+    3. 代码质量检查
+    4. 版本号检查
+    5. 配置文件检查
+    """
+    print_header("打包前检查")
+    
+    all_passed = True
+    warnings = []
+    
+    # ========== 1. 环境模式检查 ==========
+    print("[检查 1/5] 环境模式检查...")
+    
+    # 检查是否有调试代码
+    debug_patterns = [
+        (r'print\s*\(\s*["\'].*DEBUG.*["\']', '发现 DEBUG 打印语句'),
+        (r'logger\.debug\s*\(.*\[DEBUG\]', '发现 [DEBUG] 日志'),
+        (r'import\s+pdb|pdb\.set_trace', '发现 pdb 调试代码'),
+        (r'breakpoint\s*\(', '发现 breakpoint 调试代码'),
+    ]
+    
+    debug_files = []
+    for pattern, desc in debug_patterns:
+        try:
+            result = subprocess.run(
+                ['grep', '-r', '-n', '--include=*.py', '-E', pattern, 
+                 str(project_root / 'core'), 
+                 str(project_root / 'modules'), 
+                 str(project_root / 'ui')],
+                capture_output=True,
+                text=True,
+                timeout=10
+            )
+            if result.returncode == 0 and result.stdout.strip():
+                debug_files.append((desc, result.stdout.strip().split('\n')[:3]))  # 只显示前3个
+        except (subprocess.TimeoutExpired, FileNotFoundError):
+            # grep 不可用或超时，跳过
+            pass
+    
+    if debug_files:
+        warnings.append("发现调试代码")
+        print("   [警告] 发现以下调试代码：")
+        for desc, files in debug_files:
+            print(f"      - {desc}")
+            for file in files[:2]:  # 只显示前2个文件
+                print(f"        {file[:100]}")  # 截断过长的行
+    else:
+        print("   [通过] 未发现明显的调试代码")
+    
+    # ========== 2. 依赖检查 ==========
+    print("\n[检查 2/5] 依赖检查...")
+    
+    requirements_file = project_root / "requirements.txt"
+    if requirements_file.exists():
+        try:
+            # 检查关键依赖
+            critical_deps = ['PyQt6', 'requests', 'Pillow']
+            missing_deps = []
+            
+            for dep in critical_deps:
+                try:
+                    __import__(dep.lower().replace('-', '_'))
+                except ImportError:
+                    missing_deps.append(dep)
+            
+            if missing_deps:
+                print(f"   [错误] 缺少关键依赖: {', '.join(missing_deps)}")
+                all_passed = False
+            else:
+                print("   [通过] 关键依赖已安装")
+        except Exception as e:
+            warnings.append(f"依赖检查失败: {e}")
+            print(f"   [警告] 依赖检查失败: {e}")
+    else:
+        warnings.append("未找到 requirements.txt")
+        print("   [警告] 未找到 requirements.txt")
+    
+    # ========== 3. 代码质量检查 ==========
+    print("\n[检查 3/5] 代码质量检查...")
+    
+    # 检查是否有语法错误
+    syntax_errors = []
+    for py_file in project_root.rglob("*.py"):
+        # 跳过虚拟环境和缓存目录
+        if any(part in py_file.parts for part in ['venv', '__pycache__', '.git', 'build', 'dist']):
+            continue
+        
+        try:
+            with open(py_file, 'r', encoding='utf-8') as f:
+                compile(f.read(), str(py_file), 'exec')
+        except SyntaxError as e:
+            syntax_errors.append((py_file, str(e)))
+            if len(syntax_errors) >= 5:  # 最多显示5个
+                break
+    
+    if syntax_errors:
+        print("   [错误] 发现语法错误：")
+        for file, error in syntax_errors[:3]:
+            print(f"      - {file.relative_to(project_root)}: {error[:80]}")
+        all_passed = False
+    else:
+        print("   [通过] 未发现语法错误")
+    
+    # ========== 4. 版本号检查 ==========
+    print("\n[检查 4/5] 版本号检查...")
+    
+    # 检查 version.py
+    version_file = project_root / "version.py"
+    if version_file.exists():
+        print(f"   [信息] 当前版本: {VERSION}")
+        
+        # 检查版本号格式
+        if not re.match(r'^\d+\.\d+\.\d+$', VERSION):
+            warnings.append(f"版本号格式不规范: {VERSION}")
+            print(f"   [警告] 版本号格式不规范: {VERSION} (应为 X.Y.Z)")
+        else:
+            print("   [通过] 版本号格式正确")
+        
+        # 检查 UeToolkitpack.iss 中的版本号是否一致
+        iss_file = project_root / "scripts" / "package" / "config" / "UeToolkitpack.iss"
+        if iss_file.exists():
+            with open(iss_file, 'r', encoding='utf-8') as f:
+                iss_content = f.read()
+                iss_version_match = re.search(r'#define MyAppVersion "([^"]+)"', iss_content)
+                if iss_version_match:
+                    iss_version = iss_version_match.group(1)
+                    if iss_version != VERSION:
+                        warnings.append(f"版本号不一致: version.py={VERSION}, UeToolkitpack.iss={iss_version}")
+                        print(f"   [警告] 版本号不一致")
+                        print(f"      version.py: {VERSION}")
+                        print(f"      UeToolkitpack.iss: {iss_version}")
+                    else:
+                        print("   [通过] 版本号一致")
+    else:
+        print("   [错误] 未找到 version.py")
+        all_passed = False
+    
+    # ========== 5. 配置文件检查 ==========
+    print("\n[检查 5/5] 配置文件检查...")
+    
+    # 检查必要的配置文件
+    required_files = [
+        ("scripts/package/config/ue_toolkit.spec", "PyInstaller 配置"),
+        ("scripts/package/config/UeToolkitpack.iss", "Inno Setup 配置"),
+        ("scripts/package/config/runtime_hook_encoding.py", "运行时钩子"),
+        ("resources/tubiao.ico", "应用图标"),
+    ]
+    
+    missing_files = []
+    for file_path, desc in required_files:
+        full_path = project_root / file_path
+        if not full_path.exists():
+            missing_files.append((file_path, desc))
+    
+    if missing_files:
+        print("   [错误] 缺少必要文件：")
+        for file_path, desc in missing_files:
+            print(f"      - {desc}: {file_path}")
+        all_passed = False
+    else:
+        print("   [通过] 所有必要文件存在")
+    
+    # ========== 检查总结 ==========
+    print()
+    print("=" * 60)
+    if all_passed and not warnings:
+        print("[结果] ✓ 所有检查通过，可以开始打包")
+    elif all_passed and warnings:
+        print(f"[结果] ⚠ 检查通过但有 {len(warnings)} 个警告")
+        print("\n警告列表：")
+        for i, warning in enumerate(warnings, 1):
+            print(f"  {i}. {warning}")
+    else:
+        print("[结果] ✗ 检查失败，请修复错误后再打包")
+    print("=" * 60)
+    print()
+    
+    return all_passed, warnings
+
+
 def get_timestamp():
     """获取当前时间戳，格式: YYYYMMDD_HHMMSS"""
     return datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -522,6 +707,22 @@ def main():
     print(f"[版本] {VERSION}")
     print(f"[日志] 日志将保存到: logs/build/")
     print()
+    
+    # 步骤 0: 打包前检查
+    passed, warnings = pre_build_checks()
+    
+    if not passed:
+        print()
+        print("[错误] 打包前检查未通过，请修复错误后重试")
+        return False
+    
+    if warnings:
+        print()
+        response = input(f"检查发现 {len(warnings)} 个警告，是否继续打包? (y/n): ").strip().lower()
+        if response not in ['y', 'yes', '是']:
+            print()
+            print("[取消] 已取消打包")
+            return True
     
     # 步骤 1: 清理旧构建
     if not clean_build():

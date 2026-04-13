@@ -36,7 +36,7 @@ def _get_server_url():
 
 # 开发模式：服务器未就绪时设为 True，跳过所有联网验证
 # ⚠️ 发布前务必改为 False
-_DEV_MODE = True
+_DEV_MODE = False
 
 # Timeout constants (seconds)
 _FULL_CHECK_TIMEOUT = 8
