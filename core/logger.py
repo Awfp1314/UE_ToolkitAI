@@ -221,38 +221,81 @@ class Logger:
     def _setup_handlers(self):
         """配置日志处理器
         
+        双日志策略：
+        1. 开发环境：同时输出到项目根目录 logs/runtime/ 和用户目录
+        2. 打包环境：只输出到用户目录（避免权限问题）
+        
         改进的编码处理：
         1. 使用自定义UTF8StreamHandler而不修改全局sys.stdout/stderr
         2. 保存原始流的引用，确保其他库不受影响
         3. 使用backslashreplace错误处理，保留无法编码字符的信息
         """
+        import sys
+        from pathlib import Path
+        
+        # 判断是否为打包环境
+        is_frozen = getattr(sys, 'frozen', False)
+        
         try:
-            logs_dir = self.path_utils.get_user_logs_dir()
-            log_file_path = logs_dir / "ue_toolkit.log"
+            # 1. 用户目录日志（始终创建，主要日志）
+            user_logs_dir = self.path_utils.get_user_logs_dir()
+            user_log_file = user_logs_dir / "ue_toolkit.log"
+            user_logs_dir.mkdir(parents=True, exist_ok=True)
             
-            # 确保日志目录存在
-            logs_dir.mkdir(parents=True, exist_ok=True)
-            
-            file_handler = logging.handlers.RotatingFileHandler(
-                log_file_path,
+            user_file_handler = logging.handlers.RotatingFileHandler(
+                user_log_file,
                 maxBytes=10*1024*1024,  # 10MB
                 backupCount=5,
                 encoding='utf-8'
             )
-            file_handler.setLevel(logging.DEBUG)
-            file_handler.setFormatter(self.formatter)
-            self.logger.addHandler(file_handler)
+            user_file_handler.setLevel(logging.DEBUG)
+            user_file_handler.setFormatter(self.formatter)
+            self.logger.addHandler(user_file_handler)
+            self._file_handler = user_file_handler
             
-            # 使用自定义的UTF8StreamHandler，不修改全局sys.stdout
+            self.logger.info(f"用户日志文件: {user_log_file}")
+            
+            # 2. 项目目录日志（仅开发环境）
+            if not is_frozen:
+                try:
+                    # 获取项目根目录
+                    if hasattr(sys, '_MEIPASS'):
+                        # 理论上不会进入这里，因为 frozen=False
+                        project_root = Path(sys._MEIPASS).parent
+                    else:
+                        # 开发环境：从当前文件向上查找项目根目录
+                        current_file = Path(__file__).resolve()
+                        # logger.py 在 core/ 目录下，向上一级是项目根目录
+                        project_root = current_file.parent.parent
+                    
+                    project_logs_dir = project_root / "logs" / "runtime"
+                    project_logs_dir.mkdir(parents=True, exist_ok=True)
+                    
+                    project_log_file = project_logs_dir / "ue_toolkit.log"
+                    
+                    project_file_handler = logging.handlers.RotatingFileHandler(
+                        project_log_file,
+                        maxBytes=10*1024*1024,  # 10MB
+                        backupCount=5,
+                        encoding='utf-8'
+                    )
+                    project_file_handler.setLevel(logging.DEBUG)
+                    project_file_handler.setFormatter(self.formatter)
+                    self.logger.addHandler(project_file_handler)
+                    self._project_file_handler = project_file_handler
+                    
+                    self.logger.info(f"项目日志文件: {project_log_file}")
+                    
+                except Exception as e:
+                    # 项目目录日志创建失败不影响主流程
+                    safe_print(f"提示: 无法创建项目目录日志: {e}")
+            
+            # 3. 控制台输出
             console_handler = UTF8StreamHandler(sys.stdout)
             console_handler.setLevel(self._get_console_level())
             console_handler.setFormatter(self.formatter)
             self.logger.addHandler(console_handler)
-            
-            self._file_handler = file_handler
             self._console_handler = console_handler
-            
-            self.logger.info(f"日志文件路径: {log_file_path}")
             
         except PermissionError as e:
             # 权限错误
