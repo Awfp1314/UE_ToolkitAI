@@ -108,6 +108,8 @@ Name: "{group}\卸载 {#MyAppName}"; Filename: "{uninstallexe}"; Tasks: startmen
 Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
 
 [Run]
+; 打开在线文档（默认勾选）
+Filename: "https://www.unrealenginetookit.top/docs"; Description: "查看在线文档"; Flags: shellexec postinstall skipifsilent
 ; 安装完成后运行程序（默认勾选）
 Filename: "{app}\{#MyAppExeName}"; Description: "立即运行 {#MyAppName}"; Flags: nowait postinstall skipifsilent
 
@@ -116,7 +118,6 @@ Filename: "{app}\{#MyAppExeName}"; Description: "立即运行 {#MyAppName}"; Fla
 // ========== 7-Zip 检测和下载 ==========
 var
   Is7ZipInstalled: Boolean;
-  DocLinkLabel: TNewStaticText;
 
 // 统一的注册表查询函数（避免重复代码）
 function QueryUninstallRegistry(ValueName: String): String;
@@ -367,14 +368,6 @@ begin
   end;
 end;
 
-// 文档链接点击事件
-procedure DocLinkLabelClick(Sender: TObject);
-var
-  ErrorCode: Integer;
-begin
-  ShellExec('open', 'https://www.unrealenginetookit.top/docs', '', '', SW_SHOW, ewNoWait, ErrorCode);
-end;
-
 // 页面切换事件
 procedure CurPageChanged(CurPageID: Integer);
 begin
@@ -382,20 +375,6 @@ begin
   if CurPageID = wpSelectComponents then
   begin
     UpdateComponentsList();
-  end;
-  
-  // 在完成页面添加文档链接
-  if CurPageID = wpFinished then
-  begin
-    DocLinkLabel := TNewStaticText.Create(WizardForm);
-    DocLinkLabel.Parent := WizardForm.FinishedPage;
-    DocLinkLabel.Caption := '查看在线文档';
-    DocLinkLabel.Cursor := crHand;
-    DocLinkLabel.OnClick := @DocLinkLabelClick;
-    DocLinkLabel.Font.Color := clBlue;
-    DocLinkLabel.Font.Style := [fsUnderline];
-    DocLinkLabel.Left := WizardForm.RunList.Left;
-    DocLinkLabel.Top := WizardForm.RunList.Top + WizardForm.RunList.Height + 8;
   end;
 end;
 
