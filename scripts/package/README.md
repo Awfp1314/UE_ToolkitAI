@@ -30,10 +30,10 @@ build_installer.bat
 2. 运行 PyInstaller 打包 EXE
 3. 调用 Inno Setup 编译安装包
 
-输出文件（都在 dist/ 目录）：
+输出文件：
 
 - `dist/UE_Toolkit.exe` - 单文件可执行程序
-- `dist/UE_Toolkit_Setup_v{版本}.exe` - 安装包
+- `桌面/UE_Toolkit_Setup_v{版本}.exe` - 安装包
 
 ### 方式二：分步执行
 

@@ -43,8 +43,8 @@ DefaultGroupName={#MyAppName}
 LicenseFile=License.txt
 ; Uncomment the following line to run in non administrative install mode (install for current user only.)
 ;PrivilegesRequired=lowest
-; 输出目录改为项目根目录的 dist 文件夹
-OutputDir=..\..\..\dist
+; 输出目录设置为桌面
+OutputDir=userdocs:Desktop
 OutputBaseFilename=UE_Toolkit_Setup_v{#MyAppVersion}
 SetupIconFile=..\..\..\resources\tubiao.ico
 SolidCompression=yes

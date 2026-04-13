@@ -119,7 +119,7 @@ scripts/package/tools/build_installer.bat
 **输出文件**：
 
 - `dist/UE_Toolkit.exe` - 单文件可执行程序
-- `dist/UE_Toolkit_Setup_v{版本}.exe` - 安装包
+- `桌面/UE_Toolkit_Setup_v{版本}.exe` - 安装包
 
 ### 打包配置
 

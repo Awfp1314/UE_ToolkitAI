@@ -163,15 +163,10 @@ scripts/package/tools/build_installer.bat
 1. **打包 EXE**：`pyinstaller scripts/package/config/ue_toolkit.spec --clean`
 2. **编译安装包**：使用 Inno Setup 打开 `scripts/package/config/UeToolkitpack.iss` 并编译
 
-**输出文件**（都在 dist/ 目录）：
+**输出文件**（EXE 在 dist/ 目录，安装包在桌面）：
 
 - `dist/UE_Toolkit.exe` - 单文件可执行程序
-- `dist/UE_Toolkit_Setup_v{版本}.exe` - 安装包
-
-输出文件：
-
-- `dist/UE_Toolkit.exe` - 单文件可执行程序
-- `dist/UE_Toolkit_Setup_v{版本}.exe` - 安装包（输出到 dist/ 目录）
+- `桌面/UE_Toolkit_Setup_v{版本}.exe` - 安装包
 
 ### 打包配置
 
