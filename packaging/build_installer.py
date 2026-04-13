@@ -4,18 +4,15 @@
 自动化打包脚本 - 一键生成安装包
 
 步骤:
-0. 清理上次构建产物（build/、dist/、packaging/Output/）
-1. 从 version.py 读取版本号
-2. 更新 UeToolkitpack.iss 中的版本号
-3. 运行 PyInstaller 打包 EXE
-4. 调用 Inno Setup 编译安装包
+1. 清理上次构建产物（build/、dist/、packaging/Output/）
+2. 运行 PyInstaller 打包 EXE
+3. 调用 Inno Setup 编译安装包
 """
 
 import sys
 import shutil
 import subprocess
 from pathlib import Path
-import re
 
 # 添加项目根目录到 Python 路径
 project_root = Path(__file__).parent.parent
@@ -31,7 +28,6 @@ def clean_build():
     dirs_to_clean = [
         project_root / "build",
         project_root / "dist",
-        Path(__file__).parent / "Output",
     ]
 
     cleaned = False
@@ -49,41 +45,12 @@ def clean_build():
     return True
 
 
-def update_iss_version():
-    """更新 Inno Setup 脚本中的版本号"""
-    
-    iss_file = Path(__file__).parent / "UeToolkitpack.iss"
-    
-    if not iss_file.exists():
-        print(f"❌ 错误: 找不到文件 {iss_file}")
-        return False
-    
-    print(f"📖 读取文件: {iss_file.name}")
-    with open(iss_file, 'r', encoding='utf-8') as f:
-        content = f.read()
-    
-    old_version_match = re.search(r'#define MyAppVersion "([^"]+)"', content)
-    old_version = old_version_match.group(1) if old_version_match else "未知"
-    
-    content = re.sub(
-        r'(#define MyAppVersion ")([^"]+)(")',
-        rf'\g<1>{VERSION}\g<3>',
-        content
-    )
-    
-    with open(iss_file, 'w', encoding='utf-8') as f:
-        f.write(content)
-    
-    print(f"✅ 版本号已更新: {old_version} → {VERSION}")
-    return True
-
-
 def build_exe():
     """使用 PyInstaller 打包 EXE"""
     
     print()
     print("=" * 60)
-    print("步骤 3/4: 打包 EXE 文件")
+    print("步骤 2/3: 打包 EXE 文件")
     print("=" * 60)
     print()
     
@@ -124,7 +91,7 @@ def build_installer():
     
     print()
     print("=" * 60)
-    print("步骤 4/4: 编译安装包")
+    print("步骤 3/3: 编译安装包")
     print("=" * 60)
     print()
     
@@ -176,9 +143,9 @@ def build_installer():
         print("✅ 安装包编译完成")
         
         # 显示输出文件位置
-        output_dir = Path(__file__).parent / "Output"
+        output_dir = project_root / "dist"
         if output_dir.exists():
-            output_files = list(output_dir.glob("*.exe"))
+            output_files = list(output_dir.glob("*Setup*.exe"))
             if output_files:
                 print()
                 print("📦 安装包位置:")
@@ -206,22 +173,10 @@ def main():
     
     # 步骤 1: 清理旧构建
     print("=" * 60)
-    print("步骤 1/4: 清理旧构建文件")
+    print("步骤 1/3: 清理旧构建文件")
     print("=" * 60)
     print()
     clean_build()
-    
-    # 步骤 2: 更新版本号
-    print()
-    print("=" * 60)
-    print("步骤 2/4: 更新 Inno Setup 版本号")
-    print("=" * 60)
-    print()
-    
-    if not update_iss_version():
-        print()
-        print("❌ 更新版本号失败")
-        return False
     
     # 询问是否继续打包
     print()
@@ -231,13 +186,13 @@ def main():
         print("⏸️  已取消打包")
         return True
     
-    # 步骤 3: 打包 EXE
+    # 步骤 2: 打包 EXE
     if not build_exe():
         print()
         print("❌ EXE 打包失败")
         return False
     
-    # 步骤 4: 编译安装包
+    # 步骤 3: 编译安装包
     if not build_installer():
         print()
         print("⚠️  安装包编译未完成")
@@ -251,7 +206,7 @@ def main():
     print()
     print(f"✅ 版本: {VERSION}")
     print(f"✅ EXE 文件: dist/UE_Toolkit.exe")
-    print(f"✅ 安装包: packaging/Output/UE_Toolkit_Setup_v{VERSION}.exe")
+    print(f"✅ 安装包: dist/UE_Toolkit_Setup_v{VERSION}.exe")
     print()
     
     return True

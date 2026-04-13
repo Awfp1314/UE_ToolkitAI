@@ -39,6 +39,8 @@ UsePreviousAppDir=yes
 LicenseFile=License.txt
 ; Uncomment the following line to run in non administrative install mode (install for current user only.)
 ;PrivilegesRequired=lowest
+; 输出目录改为 dist（与 PyInstaller 输出在同一目录）
+OutputDir=..\dist
 OutputBaseFilename=UE_Toolkit_Setup_v{#MyAppVersion}
 SetupIconFile=..\resources\tubiao.ico
 SolidCompression=yes

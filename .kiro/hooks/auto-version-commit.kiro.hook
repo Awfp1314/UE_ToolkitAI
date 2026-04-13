@@ -1,13 +1,13 @@
 {
   "enabled": true,
-  "name": "自动版本管理与提交",
-  "description": "在用户发送消息后，自动分析本次代码变更类型（重大变更/新功能/bug修复），按照语义化版本规范更新 version.py 和 UeToolkitpack.iss 中的版本号，然后生成规范的 Git 提交信息并提交代码",
-  "version": "1",
+  "name": "智能版本管理与提交",
+  "description": "智能分析代码变更并在用户验收成功后自动提交代码。功能性变更会更新版本号，非功能性变更只提交不更新版本号。",
+  "version": "6",
   "when": {
-    "type": "userTriggered"
+    "type": "agentStop"
   },
   "then": {
     "type": "askAgent",
-    "prompt": "分析本次代码变更并执行以下操作：\n\n1. 检查 Git 状态，如果有未提交的更改，分析变更类型：\n   - 重大变更/不兼容的 API 修改 → 更新主版本号（MAJOR）\n   - 新功能/向后兼容的改进 → 更新次版本号（MINOR）\n   - Bug 修复/小改进/文档更新 → 更新修订号（PATCH）\n\n2. 如果需要更新版本号：\n   - 更新 version.py 中的 VERSION 常量\n   - 更新 packaging/UeToolkitpack.iss 中的 MyAppVersion 定义\n\n3. 生成规范的 Git 提交信息（使用中文）：\n   - 格式：[类型] 简短描述\n   - 类型：feat（新功能）、fix（修复）、refactor（重构）、docs（文档）、style（格式）、perf（性能）、test（测试）、chore（构建/工具）\n   - 如果更新了版本号，在提交信息中注明新版本号\n\n4. 执行 Git 提交：\n   - git add .\n   - git commit -m \"提交信息\"\n\n注意：只在有实际代码变更时执行，如果只是咨询或讨论则跳过。"
+    "prompt": "基于对话上下文，静默判断是否需要提交代码。\n\n立即回复 understood 的情况：\n- 用户只是咨询、讨论，你未修改文件\n- 用户未验收（说有问题、不对、继续、优化等）\n- 对话刚开始\n\n需要提交的情况（必须同时满足）：\n1. 你修改了文件\n2. 用户已验收（说没问题、可以、好的、完成了，或提出新需求）\n\n如果需要提交：\n1. 使用 git status 检查变更，无变更则回复 understood\n2. 判断变更类型：\n   - 功能性（core/modules/ui 下的 .py 或 manifest.json）：更新版本号到 version.py 和 packaging/UeToolkitpack.iss，提交格式 [类型] 描述 v版本号\n   - 非功能性（.md、.kiro/、打包脚本等）：不更新版本号，提交格式 [类型] 描述\n3. 执行 git add . 和 git commit -m 提交信息\n\n注意：不要输出判断过程，直接执行或回复 understood。"
   }
 }
