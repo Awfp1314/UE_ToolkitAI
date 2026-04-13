@@ -112,9 +112,6 @@ Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: de
 [Run]
 ; 打开在线文档（默认勾选）
 Filename: "https://www.unrealenginetookit.top/docs"; Description: "查看在线文档"; Flags: shellexec postinstall skipifsilent
-; 安装完成后运行程序（默认勾选）
-; 添加 WorkingDir 确保工作目录正确
-Filename: "{app}\{#MyAppExeName}"; Description: "立即运行 {#MyAppName}"; WorkingDir: "{app}"; Flags: nowait postinstall skipifsilent
 
 [Code]
 
