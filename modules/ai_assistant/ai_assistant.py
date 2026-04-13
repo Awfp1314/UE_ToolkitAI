@@ -386,16 +386,19 @@ class AIAssistantModule:
             from modules.ai_assistant.ui.session_list_widget import SessionListWidget
             from PyQt6.QtWidgets import QWidget, QHBoxLayout
             
-            # 创建包装容器
+            # 创建包装容器（不设置 parent，由调用方设置）
             # 结构: VBox[ HBox[ sidebar | left_spacer | ChatWindow | stretch ] ]
             wrapper = QWidget()
-            from PyQt6.QtWidgets import QVBoxLayout, QPushButton, QLabel
+            # 设置窗口标志，确保不会被当作独立窗口
             from PyQt6.QtCore import Qt
+            wrapper.setWindowFlags(Qt.WindowType.Widget)
+            
+            from PyQt6.QtWidgets import QVBoxLayout, QPushButton, QLabel
             outer_layout = QVBoxLayout(wrapper)
             outer_layout.setContentsMargins(0, 0, 0, 0)
             outer_layout.setSpacing(0)
             
-            self.chat_window = ChatWindow()
+            self.chat_window = ChatWindow(wrapper)  # 设置 wrapper 为 parent
             
             # ===== 聊天区居中 =====
             h_container = QWidget()
