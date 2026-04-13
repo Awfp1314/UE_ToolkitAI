@@ -109,7 +109,21 @@ modules/<module_name>/
 
 ```bash
 scripts/package/tools/build_installer.bat
+# 或：python scripts/package/tools/build_installer.py
 ```
+
+**打包前自动检查**（6 项）：
+
+1. License 配置检查（\_DEV_MODE 必须为 False）
+2. 调试代码检查（可选自动注释 DEBUG 打印）
+3. 依赖检查（PyQt6、requests、Pillow）
+4. 代码质量检查（语法错误）
+5. 版本号检查（格式和一致性）
+6. 配置文件检查（必要文件存在性）
+
+检查失败会阻止打包，确保代码处于生产就绪状态。
+
+**自动执行流程**：清理旧构建 → 打包 EXE → 编译安装包 → 清理临时文件
 
 **方式二：分步执行**
 
@@ -118,8 +132,9 @@ scripts/package/tools/build_installer.bat
 
 **输出文件**：
 
-- `dist/UE_Toolkit.exe` - 单文件可执行程序
-- `桌面/UE_Toolkit_Setup_v{版本}.exe` - 安装包
+- `dist/UE_Toolkit.exe` - 单文件可执行程序（临时，打包后自动清理）
+- `桌面/UE_Toolkit_Setup_v{版本}.exe` - 安装包（最终产物）
+- `logs/build/` - 打包日志（pyinstaller/ 和 inno/ 子目录）
 
 ### 打包配置
 
