@@ -43,10 +43,10 @@ DefaultGroupName={#MyAppName}
 LicenseFile=License.txt
 ; Uncomment the following line to run in non administrative install mode (install for current user only.)
 ;PrivilegesRequired=lowest
-; 输出目录改为 dist（与 PyInstaller 输出在同一目录）
-OutputDir=..\dist
+; 输出目录改为项目根目录的 dist 文件夹
+OutputDir=..\..\..\dist
 OutputBaseFilename=UE_Toolkit_Setup_v{#MyAppVersion}
-SetupIconFile=..\resources\tubiao.ico
+SetupIconFile=..\..\..\resources\tubiao.ico
 SolidCompression=yes
 WizardStyle=modern
 
@@ -86,7 +86,7 @@ Name: "startmenuicon"; Description: "创建开始菜单快捷方式"; GroupDescr
 [Files]
 ; 单文件模式：EXE直接在dist目录下
 ; ignoreversion: 总是覆盖旧版本文件，不检查版本号
-Source: "..\dist\{#MyAppExeName}"; DestDir: "{app}"; Flags: ignoreversion; Components: main
+Source: "..\..\..\dist\{#MyAppExeName}"; DestDir: "{app}"; Flags: ignoreversion; Components: main
 ; NOTE: Don't use "Flags: ignoreversion" on any shared system files
 
 [InstallDelete]

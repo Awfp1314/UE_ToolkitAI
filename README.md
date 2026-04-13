@@ -171,7 +171,7 @@
 ### 打包为安装包
 
 ```bash
-python -m PyInstaller packaging/ue_toolkit.spec
+python -m PyInstaller scripts/package/config/ue_toolkit.spec
 ```
 
 > 注意：请使用 `python -m PyInstaller` 而非直接调用 `pyinstaller` 命令。

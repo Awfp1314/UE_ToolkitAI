@@ -12,7 +12,6 @@ env/
 # IDE
 .vscode/
 .idea/
-.kiro/
 *.swp
 *.swo
 *~
@@ -36,7 +35,6 @@ tempCodeRunnerFile.py
 # 构建输出
 build/
 dist/
-packaging/Output/
 
 # 用户数据
 user_data/

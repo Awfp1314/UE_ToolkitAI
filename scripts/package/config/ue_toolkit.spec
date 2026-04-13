@@ -10,7 +10,9 @@ from PyInstaller.utils.hooks import collect_data_files, collect_submodules
 
 # 获取spec文件所在目录的父目录（项目根目录）
 spec_dir = os.path.dirname(os.path.abspath(SPEC))
-spec_root = os.path.dirname(spec_dir)
+# spec_dir = scripts/package/config
+# 项目根目录应该是spec_dir的父目录的父目录的父目录
+spec_root = os.path.dirname(os.path.dirname(os.path.dirname(spec_dir)))
 
 # 收集所有需要的数据文件
 datas = [

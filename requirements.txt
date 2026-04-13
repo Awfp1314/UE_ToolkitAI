@@ -43,12 +43,12 @@ PyYAML>=6.0
 # - ❌ 语义意图识别 - 不可用（未使用的功能）
 # - ❌ FAISS 向量记忆 - 不可用（未使用的功能）
 # 
-# 如需在打包后使用这些功能，请修改 packaging/ue_toolkit.spec：
+# 如需在打包后使用这些功能，请修改 scripts/package/config/ue_toolkit.spec：
 # 1. 从 excludes 列表移除相关库
 # 2. 添加到 hiddenimports 列表
 # 3. 恢复 collect_data_files 调用
 # 
-# 参考备份文件：packaging/ue_toolkit.spec.backup
+# 参考备份文件：scripts/package/config/ue_toolkit.spec.backup
 # ====================================================
 
 # NumPy 版本锁定（FAISS 需要 1.x）
