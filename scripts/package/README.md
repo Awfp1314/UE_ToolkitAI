@@ -27,7 +27,8 @@ build_installer.bat
 执行步骤：
 
 0. **打包前检查**（自动）
-   - 环境模式检查（调试代码检测）
+   - License 配置检查（\_DEV_MODE 自动改为 False）
+   - 调试代码检查（可选自动注释）
    - 依赖检查（关键库是否安装）
    - 代码质量检查（语法错误检测）
    - 版本号检查（version.py 与 UeToolkitpack.iss 一致性）

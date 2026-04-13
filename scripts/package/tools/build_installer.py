@@ -107,26 +107,69 @@ def pre_build_checks():
     """打包前检查
     
     检查项：
-    1. 环境模式检查（开发/生产）
-    2. 依赖检查
-    3. 代码质量检查
-    4. 版本号检查
-    5. 配置文件检查
+    1. License 配置检查（_DEV_MODE 等）
+    2. 环境模式检查（调试代码）
+    3. 依赖检查
+    4. 代码质量检查
+    5. 版本号检查
+    6. 配置文件检查
     """
     print_header("打包前检查")
     
     all_passed = True
     warnings = []
+    auto_fixed = []
     
-    # ========== 1. 环境模式检查 ==========
-    print("[检查 1/5] 环境模式检查...")
+    # ========== 1. License 配置检查 ==========
+    print("[检查 1/6] License 配置检查...")
     
-    # 检查是否有调试代码（使用 Python 原生方法，避免依赖 grep）
+    license_file = project_root / "core" / "security" / "license_manager.py"
+    if license_file.exists():
+        try:
+            with open(license_file, 'r', encoding='utf-8') as f:
+                content = f.read()
+            
+            # 检查 _DEV_MODE
+            dev_mode_match = re.search(r'_DEV_MODE\s*=\s*(True|False)', content)
+            if dev_mode_match:
+                dev_mode_value = dev_mode_match.group(1)
+                if dev_mode_value == 'True':
+                    print("   [警告] _DEV_MODE = True（开发模式）")
+                    print("   [修复] 自动改为 False（生产模式）")
+                    
+                    # 自动修复
+                    new_content = re.sub(
+                        r'_DEV_MODE\s*=\s*True',
+                        '_DEV_MODE = False',
+                        content
+                    )
+                    with open(license_file, 'w', encoding='utf-8') as f:
+                        f.write(new_content)
+                    
+                    auto_fixed.append("License: _DEV_MODE 改为 False")
+                    print("   [通过] 已自动修复为生产模式")
+                else:
+                    print("   [通过] _DEV_MODE = False（生产模式）")
+            else:
+                warnings.append("未找到 _DEV_MODE 配置")
+                print("   [警告] 未找到 _DEV_MODE 配置")
+                
+        except Exception as e:
+            warnings.append(f"License 检查失败: {e}")
+            print(f"   [警告] License 检查失败: {e}")
+    else:
+        warnings.append("未找到 license_manager.py")
+        print("   [警告] 未找到 license_manager.py")
+    
+    # ========== 2. 环境模式检查（调试代码）==========
+    print("\n[检查 2/6] 调试代码检查...")
+    
+    # 检查是否有调试代码
     debug_patterns = [
-        (r'print\s*\(\s*["\'].*DEBUG.*["\']', '发现 DEBUG 打印语句'),
-        (r'logger\.debug\s*\(.*\[DEBUG\]', '发现 [DEBUG] 日志'),
-        (r'import\s+pdb|pdb\.set_trace', '发现 pdb 调试代码'),
-        (r'breakpoint\s*\(', '发现 breakpoint 调试代码'),
+        (r'print\s*\(\s*["\'].*\[?DEBUG\]?.*["\']', 'DEBUG 打印语句', r'print\s*\([^)]*\[?DEBUG\]?[^)]*\)'),
+        (r'logger\.debug\s*\(.*\[DEBUG\]', '[DEBUG] 日志', None),  # 这个保留，是正常的
+        (r'import\s+pdb|pdb\.set_trace', 'pdb 调试', r'(import\s+pdb|pdb\.set_trace\(\))'),
+        (r'breakpoint\s*\(', 'breakpoint 调试', r'breakpoint\s*\(\s*\)'),
     ]
     
     debug_files = []
@@ -148,37 +191,90 @@ def pre_build_checks():
             try:
                 with open(py_file, 'r', encoding='utf-8', errors='ignore') as f:
                     content = f.read()
-                    
-                for pattern, desc in debug_patterns:
+                
+                file_has_debug = False
+                for pattern, desc, remove_pattern in debug_patterns:
                     if re.search(pattern, content):
-                        debug_files.append((desc, str(py_file.relative_to(project_root))))
-                        break  # 每个文件只记录一次
+                        # 跳过正常的 logger.debug（不含 [DEBUG]）
+                        if 'logger.debug' in pattern and '[DEBUG]' not in content:
+                            continue
+                        
+                        debug_files.append((desc, str(py_file.relative_to(project_root)), py_file))
+                        file_has_debug = True
+                        break
                         
             except Exception:
-                # 忽略无法读取的文件
                 pass
     
     if debug_files:
-        warnings.append("发现调试代码")
-        print("   [警告] 发现以下调试代码：")
-        for desc, file in debug_files[:5]:  # 只显示前5个
+        print(f"   [警告] 发现 {len(debug_files)} 个文件包含调试代码")
+        for desc, file, _ in debug_files[:5]:
             print(f"      - {desc}: {file}")
         if len(debug_files) > 5:
             print(f"      ... 还有 {len(debug_files) - 5} 个文件")
+        
+        # 询问是否自动注释
+        print()
+        response = input("   是否自动注释这些调试代码? (y/n): ").strip().lower()
+        if response in ['y', 'yes', '是']:
+            fixed_count = 0
+            for desc, file, py_file in debug_files:
+                try:
+                    with open(py_file, 'r', encoding='utf-8') as f:
+                        content = f.read()
+                    
+                    # 注释掉 DEBUG 打印
+                    new_content = re.sub(
+                        r'^(\s*)(print\s*\([^)]*\[?DEBUG\]?[^)]*\))',
+                        r'\1# \2  # 打包时自动注释',
+                        content,
+                        flags=re.MULTILINE
+                    )
+                    
+                    # 注释掉 pdb
+                    new_content = re.sub(
+                        r'^(\s*)(import\s+pdb|pdb\.set_trace\(\))',
+                        r'\1# \2  # 打包时自动注释',
+                        new_content,
+                        flags=re.MULTILINE
+                    )
+                    
+                    # 注释掉 breakpoint
+                    new_content = re.sub(
+                        r'^(\s*)(breakpoint\s*\(\s*\))',
+                        r'\1# \2  # 打包时自动注释',
+                        new_content,
+                        flags=re.MULTILINE
+                    )
+                    
+                    if new_content != content:
+                        with open(py_file, 'w', encoding='utf-8') as f:
+                            f.write(new_content)
+                        fixed_count += 1
+                        
+                except Exception as e:
+                    print(f"      [失败] 无法修复 {file}: {e}")
+            
+            if fixed_count > 0:
+                auto_fixed.append(f"注释了 {fixed_count} 个文件的调试代码")
+                print(f"   [完成] 已自动注释 {fixed_count} 个文件的调试代码")
+            else:
+                print("   [跳过] 未修复任何文件")
+        else:
+            warnings.append("存在调试代码")
     else:
-        print("   [通过] 未发现明显的调试代码")
+        print("   [通过] 未发现调试代码")
     
-    # ========== 2. 依赖检查 ==========
-    print("\n[检查 2/5] 依赖检查...")
+    # ========== 3. 依赖检查 ==========
+    print("\n[检查 3/6] 依赖检查...")
     
     requirements_file = project_root / "requirements.txt"
     if requirements_file.exists():
         try:
-            # 检查关键依赖（使用正确的导入名称）
             critical_deps = [
                 ('PyQt6', 'PyQt6'),
                 ('requests', 'requests'),
-                ('Pillow', 'PIL'),  # Pillow 的导入名是 PIL
+                ('Pillow', 'PIL'),
             ]
             missing_deps = []
             
@@ -200,13 +296,11 @@ def pre_build_checks():
         warnings.append("未找到 requirements.txt")
         print("   [警告] 未找到 requirements.txt")
     
-    # ========== 3. 代码质量检查 ==========
-    print("\n[检查 3/5] 代码质量检查...")
+    # ========== 4. 代码质量检查 ==========
+    print("\n[检查 4/6] 代码质量检查...")
     
-    # 检查是否有语法错误
     syntax_errors = []
     for py_file in project_root.rglob("*.py"):
-        # 跳过虚拟环境和缓存目录
         if any(part in py_file.parts for part in ['venv', '__pycache__', '.git', 'build', 'dist']):
             continue
         
@@ -215,7 +309,7 @@ def pre_build_checks():
                 compile(f.read(), str(py_file), 'exec')
         except SyntaxError as e:
             syntax_errors.append((py_file, str(e)))
-            if len(syntax_errors) >= 5:  # 最多显示5个
+            if len(syntax_errors) >= 5:
                 break
     
     if syntax_errors:
@@ -226,22 +320,19 @@ def pre_build_checks():
     else:
         print("   [通过] 未发现语法错误")
     
-    # ========== 4. 版本号检查 ==========
-    print("\n[检查 4/5] 版本号检查...")
+    # ========== 5. 版本号检查 ==========
+    print("\n[检查 5/6] 版本号检查...")
     
-    # 检查 version.py
     version_file = project_root / "version.py"
     if version_file.exists():
         print(f"   [信息] 当前版本: {VERSION}")
         
-        # 检查版本号格式
         if not re.match(r'^\d+\.\d+\.\d+$', VERSION):
             warnings.append(f"版本号格式不规范: {VERSION}")
             print(f"   [警告] 版本号格式不规范: {VERSION} (应为 X.Y.Z)")
         else:
             print("   [通过] 版本号格式正确")
         
-        # 检查 UeToolkitpack.iss 中的版本号是否一致
         iss_file = project_root / "scripts" / "package" / "config" / "UeToolkitpack.iss"
         if iss_file.exists():
             with open(iss_file, 'r', encoding='utf-8') as f:
@@ -250,20 +341,17 @@ def pre_build_checks():
                 if iss_version_match:
                     iss_version = iss_version_match.group(1)
                     if iss_version != VERSION:
-                        warnings.append(f"版本号不一致: version.py={VERSION}, UeToolkitpack.iss={iss_version}")
-                        print(f"   [警告] 版本号不一致")
-                        print(f"      version.py: {VERSION}")
-                        print(f"      UeToolkitpack.iss: {iss_version}")
+                        warnings.append(f"版本号不一致")
+                        print(f"   [警告] 版本号不一致: version.py={VERSION}, iss={iss_version}")
                     else:
                         print("   [通过] 版本号一致")
     else:
         print("   [错误] 未找到 version.py")
         all_passed = False
     
-    # ========== 5. 配置文件检查 ==========
-    print("\n[检查 5/5] 配置文件检查...")
+    # ========== 6. 配置文件检查 ==========
+    print("\n[检查 6/6] 配置文件检查...")
     
-    # 检查必要的配置文件
     required_files = [
         ("scripts/package/config/ue_toolkit.spec", "PyInstaller 配置"),
         ("scripts/package/config/UeToolkitpack.iss", "Inno Setup 配置"),
@@ -288,6 +376,13 @@ def pre_build_checks():
     # ========== 检查总结 ==========
     print()
     print("=" * 60)
+    
+    if auto_fixed:
+        print("[自动修复] 已修复以下问题：")
+        for fix in auto_fixed:
+            print(f"  - {fix}")
+        print()
+    
     if all_passed and not warnings:
         print("[结果] 所有检查通过，可以开始打包")
     elif all_passed and warnings:
