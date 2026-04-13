@@ -4,7 +4,7 @@
   "description": "在用户发送消息后，自动分析本次代码变更类型（重大变更/新功能/bug修复），按照语义化版本规范更新 version.py 和 UeToolkitpack.iss 中的版本号，然后生成规范的 Git 提交信息并提交代码",
   "version": "1",
   "when": {
-    "type": "agentStop"
+    "type": "userTriggered"
   },
   "then": {
     "type": "askAgent",
