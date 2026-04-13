@@ -211,10 +211,26 @@ class ProjectCategoryDialog(QDialog):
             if dialog.exec() != QDialog.DialogCode.Accepted:
                 return
         
-        # 移动工程到默认分类
+        # 移动工程到默认分类（同时更新注册表和工程配置文件）
+        from modules.my_projects.logic.project_registry import TOOLKIT_CONFIG_DIR, PROJECT_CONFIG_FILE
+        import json
+        from pathlib import Path
+        
         for proj in projects:
             if proj.get("category") == category_name:
                 proj["category"] = "默认"
+                
+                # 同步更新工程目录下的配置文件
+                config_file = Path(proj["path"]) / TOOLKIT_CONFIG_DIR / PROJECT_CONFIG_FILE
+                if config_file.exists():
+                    try:
+                        with open(config_file, "r", encoding="utf-8") as f:
+                            cfg = json.load(f)
+                        cfg["category"] = "默认"
+                        with open(config_file, "w", encoding="utf-8") as f:
+                            json.dump(cfg, f, ensure_ascii=False, indent=2)
+                    except Exception as e:
+                        logger.warning(f"更新工程配置失败 {proj['path']}: {e}")
         
         # 删除分类
         categories = data.get("categories", [])

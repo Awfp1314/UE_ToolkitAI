@@ -155,10 +155,13 @@ class ProjectRegistry:
 
     def save_full_scan_result(self, projects: List[Dict[str, Any]]) -> None:
         """首次全量扫描后保存结果"""
+        # 加载现有注册表以保留用户创建的分类
+        existing_data = self.load_registry()
+        existing_categories = existing_data.get("categories", ["默认"])
+        
         data = self._empty_registry()
         data["projects"] = projects
-        data["categories"] = ["默认"]
-        data["last_full_scan"] = datetime.now().isoformat()
+        data["categories"] = existing_categories  # 保留现有分类
         data["last_full_scan"] = datetime.now().isoformat()
         data["last_updated"] = datetime.now().isoformat()
         self.save_registry(data)
