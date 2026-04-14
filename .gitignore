@@ -53,3 +53,13 @@ backup/
 
 # Docs（只保留 README）
 docs/
+
+# Plugins 相关
+Plugins/*/Binaries/
+Plugins/*/Intermediate/
+Plugins/*/DerivedDataCache/
+Plugins/*/Saved/
+Plugins/*/Build/
+Plugins/*/*.zip
+Plugins/*/*.rar
+Plugins/*/*.7z

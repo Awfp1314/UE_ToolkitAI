@@ -15,6 +15,7 @@ keywords: python, pyqt6, ue toolkit, 模块化, 线程安全
 - `core/` - 核心层，提供日志、配置、服务等基础设施
 - `modules/` - 功能模块层，各模块独立，通过 `manifest.json` 自动发现
 - `ui/` - 全局 UI 组件
+- `Plugins/` - UE 插件（BlueprintAITools），支持 UE 5.4 和 5.6
 
 依赖规则：
 
