@@ -8,13 +8,19 @@
 #include "JsonObjectConverter.h"
 #include "Serialization/JsonSerializer.h"
 #include "Serialization/JsonWriter.h"
-#include "Subsystems/AssetEditorSubsystem.h"
 #include "Editor.h"
 #include "Toolkits/AssetEditorToolkit.h"
 #include "UnrealEdGlobals.h"
 #include "Editor/UnrealEdEngine.h"
 #include "Editor/UnrealEdTypes.h"
 #include "Selection.h"  // 修复：正确的 USelection 头文件路径
+
+// UE 版本兼容性：UE5 使用 UAssetEditorSubsystem，UE4 使用 FAssetEditorManager
+#if ENGINE_MAJOR_VERSION >= 5
+	#include "Subsystems/AssetEditorSubsystem.h"
+#else
+	#include "Toolkits/AssetEditorManager.h"
+#endif
 
 // ========== 蓝图读取接口实现 ==========
 
@@ -26,13 +32,22 @@ UBlueprint* UBlueprintAIToolsLibrary::GetCurrentOpenBlueprint()
 		return nullptr;
 	}
 
+	// UE 版本兼容性处理
+	TArray<UObject*> EditedAssets;
+	
+#if ENGINE_MAJOR_VERSION >= 5
+	// UE5: 使用 UAssetEditorSubsystem
 	UAssetEditorSubsystem* AssetEditorSubsystem = GEditor->GetEditorSubsystem<UAssetEditorSubsystem>();
 	if (!AssetEditorSubsystem)
 	{
 		return nullptr;
 	}
-
-	TArray<UObject*> EditedAssets = AssetEditorSubsystem->GetAllEditedAssets();
+	EditedAssets = AssetEditorSubsystem->GetAllEditedAssets();
+#else
+	// UE4: 使用 FAssetEditorManager
+	FAssetEditorManager& AssetEditorManager = FAssetEditorManager::Get();
+	EditedAssets = AssetEditorManager.GetAllEditedAssets();
+#endif
 
 	TArray<UBlueprint*> OpenBlueprints;
 	for (UObject* Asset : EditedAssets)
@@ -646,14 +661,22 @@ FString UBlueprintAIToolsLibrary::GetSelectedNodes(UBlueprint* Blueprint)
 	
 	TArray<TSharedPtr<FJsonValue>> SelectedNodesArray;
 
-	// 方法 1：尝试通过 AssetEditorSubsystem 获取编辑器实例
+	// 方法 1：尝试通过编辑器 API 获取编辑器实例
 	if (GEditor)
 	{
+#if ENGINE_MAJOR_VERSION >= 5
+		// UE5: 使用 UAssetEditorSubsystem
 		UAssetEditorSubsystem* AssetEditorSubsystem = GEditor->GetEditorSubsystem<UAssetEditorSubsystem>();
 		if (AssetEditorSubsystem)
 		{
 			IAssetEditorInstance* EditorInstance = AssetEditorSubsystem->FindEditorForAsset(Blueprint, false);
 			if (EditorInstance)
+#else
+		// UE4: 使用 FAssetEditorManager
+		FAssetEditorManager& AssetEditorManager = FAssetEditorManager::Get();
+		TSharedPtr<IAssetEditorInstance> EditorInstance = AssetEditorManager.FindEditorForAsset(Blueprint, false);
+		if (EditorInstance.IsValid())
+#endif
 			{
 				// 尝试获取选中的对象（通用方法）
 				TArray<UObject*> SelectedObjects;
@@ -674,7 +697,12 @@ FString UBlueprintAIToolsLibrary::GetSelectedNodes(UBlueprint* Blueprint)
 					}
 				}
 			}
+#if ENGINE_MAJOR_VERSION < 5
+		// UE4 需要关闭条件块
 		}
+#else
+		}
+#endif
 	}
 
 	// 注意：UE5 中 UEdGraphNode 不再有 bSelected 成员变量

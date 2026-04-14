@@ -68,11 +68,11 @@ YourProject/
 
 ## 📋 版本对照表
 
-| 插件版本 | UE 版本   | Ticker API | Python 支持 | 推荐度     |
-| -------- | --------- | ---------- | ----------- | ---------- |
-| UE426    | 4.26-4.27 | FTicker    | 基础        | ⭐⭐⭐     |
-| UE50     | 5.0-5.3   | FTSTicker  | 改进        | ⭐⭐⭐⭐   |
-| UE54     | 5.4+      | FTSTicker  | 完整        | ⭐⭐⭐⭐⭐ |
+| 插件版本 | UE 版本   | Ticker API | Editor API            | Python 支持 | 推荐度     |
+| -------- | --------- | ---------- | --------------------- | ----------- | ---------- |
+| UE426    | 4.26-4.27 | FTicker    | FAssetEditorManager   | 基础        | ⭐⭐⭐     |
+| UE50     | 5.0-5.3   | FTSTicker  | UAssetEditorSubsystem | 改进        | ⭐⭐⭐⭐   |
+| UE54     | 5.4+      | FTSTicker  | UAssetEditorSubsystem | 完整        | ⭐⭐⭐⭐⭐ |
 
 ---
 
@@ -104,6 +104,7 @@ YourProject/
 - **不要混用版本**：每个项目只使用一个版本
 - **引擎版本匹配**：选择与你的 UE 版本最接近的插件版本
 - **向后兼容**：高版本插件通常兼容低版本引擎（同一大版本内）
+- **API 差异**：插件通过条件编译自动适配不同版本的 UE API，无需手动修改
 
 ### 编译要求
 
@@ -185,6 +186,13 @@ YourProject/
 ---
 
 ## 🔄 更新日志
+
+### v3.0.1 (2025-01-XX)
+
+- ✅ 优化 UE 版本兼容性：通过条件编译支持 UE4 和 UE5 的不同 API
+- ✅ UE 4.26/4.27：使用 `FAssetEditorManager` API
+- ✅ UE 5.0+：使用 `UAssetEditorSubsystem` API
+- ✅ 所有版本共享相同的核心功能代码
 
 ### v3.0 (2025-11-07)
 
