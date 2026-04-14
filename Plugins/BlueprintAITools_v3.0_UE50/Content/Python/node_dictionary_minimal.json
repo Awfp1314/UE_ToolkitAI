@@ -1,0 +1,38 @@
+{
+  "version": "minimal-test",
+  "description": "最小化字典 - 测试 AI 是否真的需要详细信息",
+  "note": "只保留最关键的信息，节省 95% token",
+  
+  "class_names": {
+    "Branch": "K2Node_IfThenElse",
+    "Sequence": "K2Node_ExecutionSequence",
+    "ForLoop": "K2Node_MacroInstance",
+    "ForEachLoop": "K2Node_MacroInstance",
+    "CallFunction": "K2Node_CallFunction",
+    "VariableGet": "K2Node_VariableGet",
+    "VariableSet": "K2Node_VariableSet",
+    "Event": "K2Node_Event",
+    "CustomEvent": "K2Node_CustomEvent",
+    "InputAction": "K2Node_InputAction",
+    "Cast": "K2Node_DynamicCast",
+    "Timeline": "K2Node_Timeline"
+  },
+  
+  "common_errors": [
+    "Delay 的 Completed Pin 未连接导致后续逻辑不执行",
+    "Branch 的 True/False 分支未连接导致逻辑中断",
+    "Cast 后未处理 Cast Failed 分支可能导致空指针",
+    "在 Tick 中调用 GetAllActorsOfClass 导致严重性能问题",
+    "在 ForEachLoop 中修改数组本身（Add/Remove）导致迭代错误",
+    "ActorBeginOverlap 不触发通常是 Collision 设置问题",
+    "打开 UI 菜单忘记切换 SetInputMode 导致无法点击"
+  ],
+  
+  "quick_tips": {
+    "ai_movement": "使用 MoveToActor 而非 SetActorLocation",
+    "ui_input": "打开菜单时必须调用 SetInputMode UIOnly 和 ShowMouseCursor",
+    "performance": "避免在 Tick 中执行复杂操作，改用 Timer 或事件驱动",
+    "validation": "访问对象前务必用 IsValid 检查"
+  }
+}
+

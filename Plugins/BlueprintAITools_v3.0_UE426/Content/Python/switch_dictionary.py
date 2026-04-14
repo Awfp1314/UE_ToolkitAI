@@ -54,7 +54,7 @@ def switch_dictionary(mode):
     # 显示当前文件大小
     size = os.path.getsize(current_dict)
     tokens = size // 3
-    print("[完成] 当前字典: {} 字节 (~{} tokens)".format(size, tokens))
+    print(f"[完成] 当前字典: {size} 字节 (~{tokens} tokens)")
     print("\n重启 UE 编辑器和 ue_toolkits 使更改生效")
     return True
 
@@ -71,8 +71,8 @@ def show_info():
         print("=" * 60)
         print("当前节点字典状态")
         print("=" * 60)
-        print("文件大小: {:,} 字节 ({:.2f} KB)".format(size, size/1024))
-        print("预估 token: ~{:,}".format(tokens))
+        print(f"文件大小: {size:,} 字节 ({size/1024:.2f} KB)")
+        print(f"预估 token: ~{tokens:,}")
         print()
         
         # 读取版本信息
@@ -81,12 +81,12 @@ def show_info():
             with open(current_dict, 'r', encoding='utf-8') as f:
                 data = json.load(f)
                 version = data.get('version', 'unknown')
-                print("当前版本: {}".format(version))
-
+                print(f"当前版本: {version}")
+                
                 if 'categories' in data:
-                    print("分类数量: {}".format(len(data['categories'])))
+                    print(f"分类数量: {len(data['categories'])}")
                 elif 'class_names' in data:
-                    print("类名映射: {} 个".format(len(data['class_names'])))
+                    print(f"类名映射: {len(data['class_names'])} 个")
         except:
             pass
         
