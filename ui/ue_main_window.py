@@ -297,8 +297,14 @@ class UEMainWindow(QMainWindow):
                 # 延迟加载模型列表
                 from PyQt6.QtCore import QTimer
                 QTimer.singleShot(100, self._load_ai_models)
+                # 显示 UE 连接状态
+                if hasattr(self, '_ue_status_container'):
+                    self._ue_status_container.setVisible(True)
             elif hasattr(self, 'ai_model_combo'):
                 self.ai_model_combo.setVisible(False)
+                # 隐藏 UE 连接状态
+                if hasattr(self, '_ue_status_container'):
+                    self._ue_status_container.setVisible(False)
 
         # 如果初始模块是资产库，触发异步加载资产
         initial_key = self.module_keys[initial_index] if hasattr(self, "module_keys") else ""
@@ -361,18 +367,6 @@ class UEMainWindow(QMainWindow):
         layout.addWidget(self.titlebar_label)
 
         layout.addStretch()
-
-        # UE 插件连接状态指示器
-        self._ue_status_dot = QLabel("●")
-        self._ue_status_dot.setStyleSheet("color: #666666; font-size: 9px;")
-        self._ue_status_dot.setFixedWidth(10)
-        layout.addWidget(self._ue_status_dot)
-        
-        self._ue_status_label = QLabel("UE 未连接")
-        self._ue_status_label.setStyleSheet("color: rgba(255,255,255,0.35); font-size: 11px;")
-        layout.addWidget(self._ue_status_label)
-        
-        layout.addSpacing(8)
 
         # 授权状态标签 + 激活按钮
         self._create_license_status_widget(layout)
@@ -576,6 +570,24 @@ class UEMainWindow(QMainWindow):
         self.ai_model_combo.setVisible(False)  # 默认隐藏
         self.ai_model_combo.currentIndexChanged.connect(self._on_ai_model_changed)
         title_layout.addWidget(self.ai_model_combo)
+        
+        # UE 插件连接状态指示器（放在模型选择右边，默认隐藏）
+        self._ue_status_container = QWidget()
+        ue_status_layout = QHBoxLayout(self._ue_status_container)
+        ue_status_layout.setContentsMargins(12, 0, 0, 0)
+        ue_status_layout.setSpacing(6)
+        
+        self._ue_status_dot = QLabel("●")
+        self._ue_status_dot.setStyleSheet("color: #666666; font-size: 10px;")
+        self._ue_status_dot.setFixedWidth(10)
+        ue_status_layout.addWidget(self._ue_status_dot)
+        
+        self._ue_status_label = QLabel("UE 未连接")
+        self._ue_status_label.setStyleSheet("color: #888888; font-size: 11px;")
+        ue_status_layout.addWidget(self._ue_status_label)
+        
+        self._ue_status_container.setVisible(False)  # 默认隐藏，只在 AI 助手模块显示
+        title_layout.addWidget(self._ue_status_container)
 
         title_layout.addStretch()
 
@@ -799,11 +811,17 @@ class UEMainWindow(QMainWindow):
                         # 延迟加载模型列表，避免阻塞 UI
                         from PyQt6.QtCore import QTimer
                         QTimer.singleShot(100, self._load_ai_models)
+                    # 显示 UE 连接状态
+                    if hasattr(self, '_ue_status_container'):
+                        self._ue_status_container.setVisible(True)
                 else:
                     self.subtitle_label.setText(module_name)
                     # 隐藏模型下拉框
                     if hasattr(self, 'ai_model_combo'):
                         self.ai_model_combo.setVisible(False)
+                    # 隐藏 UE 连接状态
+                    if hasattr(self, '_ue_status_container'):
+                        self._ue_status_container.setVisible(False)
 
             # 保存当前模块索引（退出时保存到配置）
             if hasattr(self, "module_keys") and 0 <= index < len(self.module_keys):
