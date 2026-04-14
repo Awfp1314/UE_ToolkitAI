@@ -108,13 +108,23 @@ class ProjectRegistry:
     # ── 工程操作 ──
 
     def clear_registry(self) -> bool:
-        """清理注册表缓存，强制重新扫描"""
+        """清理注册表缓存，强制重新扫描（保留分类列表）"""
         try:
             if self._registry_path.exists():
-                # 先备份再删除
+                # 先备份
                 self._create_backup()
-                self._registry_path.unlink()
-                logger.info("注册表缓存已清理，将强制重新扫描")
+                
+                # 加载现有数据，保留分类列表
+                existing_data = self.load_registry()
+                existing_categories = existing_data.get("categories", ["默认"])
+                
+                # 创建新的空注册表，但保留分类
+                data = self._empty_registry()
+                data["categories"] = existing_categories
+                
+                # 保存（这会清空工程列表，但保留分类）
+                self.save_registry(data)
+                logger.info(f"注册表缓存已清理（保留 {len(existing_categories)} 个分类），将强制重新扫描")
                 return True
         except Exception as e:
             logger.error(f"清理注册表缓存失败: {e}")
@@ -155,26 +165,37 @@ class ProjectRegistry:
 
     def save_full_scan_result(self, projects: List[Dict[str, Any]]) -> None:
         """首次全量扫描后保存结果"""
-        # 加载现有注册表以保留用户创建的分类
+        # 加载现有注册表以保留用户创建的分类和工程分类信息
         existing_data = self.load_registry()
         existing_categories = existing_data.get("categories", ["默认"])
+        existing_projects = {p["path"]: p for p in existing_data.get("projects", [])}
+        
+        # 合并扫描结果和现有数据，保留已有工程的分类信息
+        merged_projects = []
+        for proj in projects:
+            proj_path = proj["path"]
+            if proj_path in existing_projects:
+                # 保留现有工程的分类信息
+                existing_proj = existing_projects[proj_path]
+                proj["category"] = existing_proj.get("category", proj.get("category", "默认"))
+            merged_projects.append(proj)
         
         data = self._empty_registry()
-        data["projects"] = projects
+        data["projects"] = merged_projects
         data["categories"] = existing_categories  # 保留现有分类
         data["last_full_scan"] = datetime.now().isoformat()
         data["last_updated"] = datetime.now().isoformat()
         self.save_registry(data)
 
         # 为每个工程创建 .UeToolkitconfig
-        for proj in projects:
+        for proj in merged_projects:
             self._ensure_toolkit_config(proj)
 
     # ── 每个工程的 .UeToolkitconfig ──
 
     @staticmethod
     def _ensure_toolkit_config(proj: Dict[str, Any]) -> None:
-        """确保工程目录下有 .UeToolkitconfig/project.json"""
+        """确保工程目录下有 .UeToolkitconfig/project.json，并保留现有分类信息"""
         try:
             proj_path = Path(proj["path"])
             if not proj_path.exists():
@@ -183,9 +204,22 @@ class ProjectRegistry:
             config_dir = proj_path / TOOLKIT_CONFIG_DIR
             config_file = config_dir / PROJECT_CONFIG_FILE
 
+            # 如果配置文件已存在，读取并更新（保留现有分类）
             if config_file.exists():
+                try:
+                    with open(config_file, "r", encoding="utf-8") as f:
+                        existing_config = json.load(f)
+                    # 只有当工程数据中有明确的分类时才更新，否则保留配置文件中的分类
+                    if "category" in proj and proj["category"] != existing_config.get("category"):
+                        existing_config["category"] = proj["category"]
+                        existing_config["path"] = proj["path"]  # 更新路径（可能改名）
+                        with open(config_file, "w", encoding="utf-8") as f:
+                            json.dump(existing_config, f, ensure_ascii=False, indent=2)
+                except Exception as e:
+                    logger.warning(f"更新工程配置失败 {proj.get('path')}: {e}")
                 return
 
+            # 配置文件不存在，创建新的
             config_dir.mkdir(parents=True, exist_ok=True)
 
             config = {

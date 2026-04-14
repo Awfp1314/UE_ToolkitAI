@@ -4,7 +4,7 @@
 	"VersionName": "1.0",
 	"FriendlyName": "BlueprintAITools",
 	"EngineVersion": "5.4.0",
-	"Description": "蓝图分析和理解插件 - 支持 UE 5.4+",
+	"Description": "蓝图分析和理解插件 - 专为 UE 5.4 编译",
 	"Category": "Other",
 	"CreatedBy": "Hutao",
 	"CreatedByURL": "",

@@ -6,73 +6,64 @@
 
 ## 📦 可用版本
 
-### 1. UE 4.26+ 版本
+每个版本都是为特定的 UE 版本编译，确保最佳兼容性：
 
-**目录**：`BlueprintAITools_v3.0_UE426/`  
-**支持引擎**：UE 4.26, 4.27  
-**特点**：
-
-- 使用 UE4 的 FTicker API
-- 兼容 UE4 的 Python 插件
-- 核心功能与 UE5 版本一致
-
-### 2. UE 5.0+ 版本
-
-**目录**：`BlueprintAITools_v3.0_UE50/`  
-**支持引擎**：UE 5.0, 5.1, 5.2, 5.3  
-**特点**：
-
-- 使用 UE5 的 FTSTicker API
-- 改进的 Python 集成
-- 更好的蓝图编辑器 API
-
-### 3. UE 5.4+ 版本
-
-**目录**：`BlueprintAITools_v3.0_UE54/`  
-**支持引擎**：UE 5.4, 5.5, 5.6  
-**特点**：
-
-- 最新的 UE5 API
-- 完整的功能支持
-- 推荐用于新项目
+- `BlueprintAITools_UE426/` - UE 4.26.x
+- `BlueprintAITools_UE427/` - UE 4.27.x
+- `BlueprintAITools_UE50/` - UE 5.0.x
+- `BlueprintAITools_UE54/` - UE 5.4.x
 
 ---
 
-## 🚀 快速开始
+## 🚀 编译步骤
 
-### 选择合适的版本
+### 1. 创建测试项目
 
-1. 查看你的 UE 项目版本
-2. 选择对应的插件文件夹
-3. 复制到项目的 `Plugins/` 目录
+在 Epic Games Launcher 中创建对应版本的空白 C++ 项目
 
-### 安装步骤
+### 2. 复制插件
 
 ```bash
-# 1. 复制插件到项目
-YourProject/
+TestProject/
 └── Plugins/
-    └── BlueprintAITools/  ← 复制对应版本的文件夹到这里
+    └── BlueprintAITools/  ← 复制对应版本的文件夹
+```
 
-# 2. 重新生成项目文件
-右键 .uproject → Generate Visual Studio project files
+### 3. 生成并编译
 
-# 3. 编译项目
-打开 .sln 文件，编译项目
+```bash
+# 右键 .uproject → Generate Visual Studio project files
+# 打开 .sln → Development Editor → 生成
+```
 
-# 4. 启动 UE 编辑器
-插件会自动启动 RPC 服务器
+### 4. 提取结果
+
+```bash
+# 复制 Binaries/ 文件夹回源码目录
+TestProject/Plugins/BlueprintAITools/Binaries/ → BlueprintAITools_UE426/Binaries/
+```
+
+---
+
+## 🚀 使用插件
+
+```bash
+# 复制编译好的插件到你的项目
+YourProject/Plugins/BlueprintAITools/
+
+# 启动 UE 编辑器，插件自动加载
 ```
 
 ---
 
 ## 📋 版本对照表
 
-| 插件版本 | UE 版本   | Ticker API | Editor API            | Python 支持 | 推荐度     |
-| -------- | --------- | ---------- | --------------------- | ----------- | ---------- |
-| UE426    | 4.26-4.27 | FTicker    | FAssetEditorManager   | 基础        | ⭐⭐⭐     |
-| UE50     | 5.0-5.3   | FTSTicker  | UAssetEditorSubsystem | 改进        | ⭐⭐⭐⭐   |
-| UE54     | 5.4+      | FTSTicker  | UAssetEditorSubsystem | 完整        | ⭐⭐⭐⭐⭐ |
+| 插件版本 | UE 版本 | Ticker API | Editor API            |
+| -------- | ------- | ---------- | --------------------- |
+| UE426    | 4.26.x  | FTicker    | FAssetEditorManager   |
+| UE427    | 4.27.x  | FTicker    | FAssetEditorManager   |
+| UE50     | 5.0.x   | FTSTicker  | UAssetEditorSubsystem |
+| UE54     | 5.4.x   | FTSTicker  | UAssetEditorSubsystem |
 
 ---
 
@@ -89,11 +80,7 @@ YourProject/
 
 ## 📖 详细文档
 
-每个插件版本都包含完整的 README.md 文档：
-
-- `BlueprintAITools_v3.0_UE426/README.md` - UE 4.26 版本说明
-- `BlueprintAITools_v3.0_UE50/README.md` - UE 5.0 版本说明
-- `BlueprintAITools_v3.0_UE54/README.md` - UE 5.4 版本说明
+每个插件版本都包含独立的 README.md 说明文档。
 
 ---
 
@@ -101,16 +88,13 @@ YourProject/
 
 ### 版本选择
 
-- **不要混用版本**：每个项目只使用一个版本
-- **引擎版本匹配**：选择与你的 UE 版本最接近的插件版本
-- **向后兼容**：高版本插件通常兼容低版本引擎（同一大版本内）
-- **API 差异**：插件通过条件编译自动适配不同版本的 UE API，无需手动修改
+- 选择与你的 UE 版本精确匹配的插件
+- 每个版本都需要单独编译
 
 ### 编译要求
 
-- **Visual Studio**：需要安装 VS 2019 或 2022
-- **C++ 工作负载**：选择"使用 C++ 的游戏开发"
-- **首次编译**：可能需要 2-5 分钟
+- Visual Studio 2019 或 2022
+- 对应版本的 UE 引擎
 
 ### Python 插件
 
@@ -119,69 +103,17 @@ YourProject/
 
 ---
 
-## 🎯 使用场景
-
-### 适用项目类型
-
-- ✅ 纯蓝图项目（Blueprint Only）
-- ✅ C++ + 蓝图混合项目
-- ✅ 蓝图函数库项目
-- ✅ 任何包含蓝图的 UE 项目
-
-### 典型工作流
-
-1. 在 UE 中打开蓝图编辑器
-2. 在 UE Toolkit AI 助手中询问："这个蓝图做什么？"
-3. AI 自动读取并分析蓝图
-4. AI 提供专家级的建议
-5. 用户在 UE 中手动修改
-
----
-
 ## 🐛 故障排查
 
 ### 插件加载失败
 
-**症状**：UE 提示插件无法加载
-
-**解决方案**：
-
 1. 检查引擎版本是否匹配
-2. 重新生成项目文件
-3. 清理 `Intermediate/` 和 `Binaries/` 目录
-4. 重新编译项目
+2. 重新生成项目文件并编译
 
 ### RPC 服务器未启动
 
-**症状**：AI 助手无法连接
-
-**解决方案**：
-
-1. 检查 Output Log 中的错误信息
-2. 确认 Python 插件已启用
-3. 手动启动：在 UE Python 控制台执行
-   ```python
-   import ue_rpc_server
-   ue_rpc_server.start_rpc_server()
-   ```
-
-### 通信不稳定
-
-**症状**：连接时断时续
-
-**解决方案**：
-
-1. 检查防火墙设置（端口 9998）
-2. 确保 UE 编辑器和 UE Toolkit 都在运行
-3. 查看双方的日志文件
-
----
-
-## 📞 技术支持
-
-**作者**：HUTAO  
-**许可**：MIT  
-**项目**：UE Toolkit
+1. 确认 Python 插件已启用
+2. 查看 Output Log 中的错误信息
 
 ---
 
@@ -189,21 +121,9 @@ YourProject/
 
 ### v3.0.1 (2025-01-XX)
 
-- ✅ 优化 UE 版本兼容性：通过条件编译支持 UE4 和 UE5 的不同 API
-- ✅ UE 4.26/4.27：使用 `FAssetEditorManager` API
-- ✅ UE 5.0+：使用 `UAssetEditorSubsystem` API
-- ✅ 所有版本共享相同的核心功能代码
-
-### v3.0 (2025-11-07)
-
-- ✅ 支持 UE 4.26, 5.0, 5.4 三个版本
-- ✅ 完整的蓝图读取和分析功能
-- ✅ 智能简化导出（节省 token）
-- ✅ 错误检测和验证
-- ✅ 节点字典系统
-- ✅ 自动启动 RPC 服务器
-- ✅ 100% 稳定，只读模式
+- ✅ 拆分为 4 个精确版本：UE 4.26、4.27、5.0、5.4
+- ✅ 每个版本独立编译，确保最佳兼容性
 
 ---
 
-**专注做好一件事：让 AI 深入理解您的蓝图！**
+**作者**：HUTAO | **许可**：MIT

@@ -24,7 +24,7 @@ from PyQt6.QtGui import (
 
 from core.logger import get_logger
 from modules.base_module_widget import BaseModuleWidget
-from modules.my_projects.logic.project_registry import ProjectRegistry, TOOLKIT_CONFIG_DIR
+from modules.my_projects.logic.project_registry import ProjectRegistry, TOOLKIT_CONFIG_DIR, PROJECT_CONFIG_FILE
 from modules.asset_manager.ui.message_dialog import MessageDialog
 
 logger = get_logger(__name__)
@@ -737,15 +737,17 @@ class ProjectScanner(QThread):
         'marketplace', 'plugins'
     }
 
-    def __init__(self, known_paths=None, excluded_paths=None):
+    def __init__(self, known_paths=None, excluded_paths=None, registry_data=None):
         """
         Args:
             known_paths: 已知工程路径集合。为 None 时全量扫描，非空时增量扫描（跳过已知）。
             excluded_paths: 需要排除的路径列表（预览工程、资产库等），扫描时会过滤掉这些路径。
+            registry_data: 注册表数据（用于读取现有工程的分类信息）
         """
         super().__init__()
         self.known_paths = known_paths or set()
         self.excluded_paths = set(excluded_paths or [])
+        self._registry_cache = registry_data or {}
         self.projs = []
 
     def run(self):
@@ -907,8 +909,7 @@ class ProjectScanner(QThread):
             pass
         return None
 
-    @staticmethod
-    def _get_category(proj_dir):
+    def _get_category(self, proj_dir):
         """从 .UeToolkitconfig/project.json 读取工程分类
         
         Args:
@@ -922,9 +923,21 @@ class ProjectScanner(QThread):
             if config_file.exists():
                 with open(config_file, "r", encoding="utf-8") as f:
                     cfg = json.load(f)
-                    return cfg.get("category", "默认")
+                    category = cfg.get("category", "默认")
+                    logger.debug(f"从配置文件读取工程分类: {proj_dir.name} -> {category}")
+                    return category
         except Exception as e:
             logger.debug(f"读取工程分类失败 {proj_dir}: {e}")
+        
+        # 如果配置文件不存在或读取失败，尝试从注册表中获取
+        proj_path_str = str(proj_dir)
+        if hasattr(self, '_registry_cache'):
+            for proj in self._registry_cache.get("projects", []):
+                if proj.get("path") == proj_path_str:
+                    category = proj.get("category", "默认")
+                    logger.debug(f"从注册表缓存读取工程分类: {proj_dir.name} -> {category}")
+                    return category
+        
         return "默认"
 
 
@@ -1130,7 +1143,14 @@ class MyProjectsUI(BaseModuleWidget):
         if excluded_paths is None:
             excluded_paths = self._get_excluded_paths()
         
-        scanner = ProjectScanner(known_paths=known_paths, excluded_paths=excluded_paths)
+        # 获取注册表数据（用于保留分类信息）
+        registry_data = self.registry.load_registry()
+        
+        scanner = ProjectScanner(
+            known_paths=known_paths, 
+            excluded_paths=excluded_paths,
+            registry_data=registry_data
+        )
         if known_paths:
             scanner.found.connect(self._on_incremental_scan_done)
         else:
