@@ -337,11 +337,8 @@ FString UBlueprintToAISubsystem::CreateSuccessResponse(const FString& Operation,
 	
 	if (Data.IsValid())
 	{
-		// Merge data fields into response
-		for (const auto& Pair : Data->Values)
-		{
-			Response->SetField(Pair.Key, Pair.Value);
-		}
+		// Put data in a nested "data" field for consistency
+		Response->SetObjectField(TEXT("data"), Data);
 	}
 
 	FString OutputString;
@@ -380,12 +377,20 @@ FString UBlueprintToAISubsystem::GetActiveBlueprint()
 	{
 		if (UBlueprint* Blueprint = Cast<UBlueprint>(Asset))
 		{
-			// Get the asset path
-			FString AssetPath = Blueprint->GetPathName();
+			// Get the package path (without the object name suffix)
+			FString FullPath = Blueprint->GetPathName();
+			FString PackagePath = FullPath;
+			
+			// Remove the ".ObjectName" suffix if present
+			int32 DotIndex;
+			if (FullPath.FindLastChar('.', DotIndex))
+			{
+				PackagePath = FullPath.Left(DotIndex);
+			}
 			
 			// Create response
 			TSharedPtr<FJsonObject> ResponseData = MakeShared<FJsonObject>();
-			ResponseData->SetStringField(TEXT("assetPath"), AssetPath);
+			ResponseData->SetStringField(TEXT("assetPath"), PackagePath);
 			ResponseData->SetStringField(TEXT("name"), Blueprint->GetName());
 			ResponseData->SetStringField(TEXT("parentClass"), Blueprint->ParentClass ? Blueprint->ParentClass->GetPathName() : TEXT(""));
 			

@@ -112,6 +112,21 @@ from version import VERSION  # 只在 version.py 定义版本号
 Git 提交规范：`[类型] 描述` 或 `[类型] 描述 v版本号`
 类型：feat、fix、refactor、docs、style、perf、test、chore
 
+## 文档编写规范
+
+**重要原则**：除非用户明确要求，否则不要创建或更新文档文件。
+
+- ✅ 在聊天窗口中回答用户问题
+- ✅ 提供代码示例和使用说明
+- ❌ 不要自动创建 README.md、GUIDE.md 等文档
+- ❌ 不要自动更新设计文档
+
+**例外情况**：
+
+- 用户明确说"写个文档"、"更新文档"
+- 用户要求"创建使用说明"
+- 项目初始化时必需的文档（如 manifest.json）
+
 ## 常见陷阱
 
 1. PyQt6 跨线程 UI 操作 - 在 `QThread.run()` 中直接调用 `setText()` 会崩溃，必须用信号
@@ -121,6 +136,7 @@ Git 提交规范：`[类型] 描述` 或 `[类型] 描述 v版本号`
 5. 文件只读属性 - 使用 `core.utils.file_utils.safe_copytree` 处理只读文件
 6. 模块间直接依赖 - 通过 `core.services` 或依赖注入解耦
 7. UE 连接检测 - 使用 Remote Control API (30010)，不要用旧的 Socket RPC (9998)
+8. 过度文档化 - 不要为每个功能都创建文档，在聊天中说明即可
 
 ## 模块结构
 
@@ -143,32 +159,16 @@ modules/<module_name>/
 
 ```bash
 scripts/package/tools/build_installer.bat
-# 或：python scripts/package/tools/build_installer.py
 ```
 
-**打包前自动检查**（6 项）：
-
-1. License 配置检查（\_DEV_MODE 必须为 False）
-2. 调试代码检查（可选自动注释 DEBUG 打印）
-3. 依赖检查（PyQt6、requests、Pillow）
-4. 代码质量检查（语法错误）
-5. 版本号检查（格式和一致性）
-6. 配置文件检查（必要文件存在性）
-
-检查失败会阻止打包，确保代码处于生产就绪状态。
+**打包前自动检查**（6 项）：License 配置、调试代码、依赖、代码质量、版本号、配置文件
 
 **自动执行流程**：清理旧构建 → 打包 EXE → 编译安装包 → 清理临时文件
 
-**方式二：分步执行**
-
-1. 打包 EXE：`pyinstaller scripts/package/config/ue_toolkit.spec --clean`
-2. 编译安装包：使用 Inno Setup 打开 `scripts/package/config/UeToolkitpack.iss` 并编译
-
 **输出文件**：
 
-- `dist/UE_Toolkit.exe` - 单文件可执行程序（临时，打包后自动清理）
 - `桌面/UE_Toolkit_Setup_v{版本}.exe` - 安装包（最终产物）
-- `logs/build/` - 打包日志（pyinstaller/ 和 inno/ 子目录）
+- `logs/build/` - 打包日志
 
 ### 打包配置
 
@@ -177,8 +177,3 @@ scripts/package/tools/build_installer.bat
 - 单文件模式，使用 UPX 压缩
 - 已优化：排除未使用的 AI 库
 - 自动包含所有 `config_template.json` 文件
-
-**运行时钩子**（`scripts/package/config/runtime_hook_encoding.py`）：
-
-- 修复 Windows 中文编码问题
-- 禁用临时目录清理警告
