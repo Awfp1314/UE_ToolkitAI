@@ -362,3 +362,70 @@ FString UBlueprintToAISubsystem::CreateErrorResponse(const FString& Operation, c
 	FJsonSerializer::Serialize(Response.ToSharedRef(), Writer);
 	return OutputString;
 }
+
+FString UBlueprintToAISubsystem::GetActiveBlueprint()
+{
+	// Get the active asset editor
+	UAssetEditorSubsystem* AssetEditorSubsystem = GEditor->GetEditorSubsystem<UAssetEditorSubsystem>();
+	if (!AssetEditorSubsystem)
+	{
+		return CreateErrorResponse(TEXT("GetActiveBlueprint"), TEXT("AssetEditorSubsystem not available"));
+	}
+
+	// Get all open assets
+	TArray<UObject*> EditedAssets = AssetEditorSubsystem->GetAllEditedAssets();
+	
+	// Find the first Blueprint in the list (usually the focused one)
+	for (UObject* Asset : EditedAssets)
+	{
+		if (UBlueprint* Blueprint = Cast<UBlueprint>(Asset))
+		{
+			// Get the asset path
+			FString AssetPath = Blueprint->GetPathName();
+			
+			// Create response
+			TSharedPtr<FJsonObject> ResponseData = MakeShared<FJsonObject>();
+			ResponseData->SetStringField(TEXT("assetPath"), AssetPath);
+			ResponseData->SetStringField(TEXT("name"), Blueprint->GetName());
+			ResponseData->SetStringField(TEXT("parentClass"), Blueprint->ParentClass ? Blueprint->ParentClass->GetPathName() : TEXT(""));
+			
+			return CreateSuccessResponse(TEXT("GetActiveBlueprint"), ResponseData);
+		}
+	}
+
+	return CreateErrorResponse(TEXT("GetActiveBlueprint"), TEXT("No Blueprint is currently open in the editor"));
+}
+
+FString UBlueprintToAISubsystem::ExtractActiveBlueprint(const FString& Scope)
+{
+	// First, get the active Blueprint
+	FString ActiveBlueprintJson = GetActiveBlueprint();
+	
+	// Parse the response to check if it succeeded
+	TSharedPtr<FJsonObject> JsonObject;
+	TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(ActiveBlueprintJson);
+	
+	if (!FJsonSerializer::Deserialize(Reader, JsonObject) || !JsonObject.IsValid())
+	{
+		return CreateErrorResponse(TEXT("ExtractActiveBlueprint"), TEXT("Failed to parse GetActiveBlueprint response"));
+	}
+
+	bool bSuccess = JsonObject->GetBoolField(TEXT("success"));
+	if (!bSuccess)
+	{
+		// Return the error from GetActiveBlueprint
+		return ActiveBlueprintJson;
+	}
+
+	// Extract the asset path
+	TSharedPtr<FJsonObject> DataObject = JsonObject->GetObjectField(TEXT("data"));
+	if (!DataObject.IsValid())
+	{
+		return CreateErrorResponse(TEXT("ExtractActiveBlueprint"), TEXT("Invalid response data"));
+	}
+
+	FString AssetPath = DataObject->GetStringField(TEXT("assetPath"));
+	
+	// Now extract the Blueprint using the asset path
+	return ExtractBlueprint(AssetPath, Scope);
+}

@@ -779,12 +779,58 @@ class ToolsRegistry:
 
         使用 BlueprintToAI 插件的 Remote Control API。
         """
+        # 0. 获取当前激活的蓝图
+        self.register_tool(ToolDefinition(
+            name="get_active_blueprint",
+            description="""
+获取当前在 UE 编辑器中激活（打开）的蓝图信息。
+用途：当用户说"分析这个蓝图"、"看看当前蓝图"时，无需提供路径。
+返回：蓝图的资产路径、名称、父类等信息。
+            """.strip(),
+            parameters={
+                "type": "object",
+                "properties": {},
+                "required": []
+            },
+            function=lambda **kwargs: self._execute_ue_python_tool("GetActiveBlueprint", **kwargs),
+            requires_confirmation=False  # 只读工具，无需确认
+        ))
+
+        # 0.5. 提取当前激活的蓝图（便捷函数）
+        self.register_tool(ToolDefinition(
+            name="extract_active_blueprint",
+            description="""
+提取当前在 UE 编辑器中激活（打开）的蓝图的结构信息。
+用途：当用户说"帮我分析一下这个蓝图"、"看看当前蓝图的逻辑"时使用。
+这是 get_active_blueprint + extract_blueprint 的便捷组合。
+参数：
+- Scope: 提取范围（可选）
+  - "Minimal": 只有节点类型和连接（最省token）
+  - "Compact": 添加位置和基本属性（默认，平衡）
+  - "Full": 包含所有信息（调试用）
+            """.strip(),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "Scope": {
+                        "type": "string",
+                        "description": "提取范围：Minimal | Compact | Full（默认 Compact）",
+                        "enum": ["Minimal", "Compact", "Full"]
+                    }
+                },
+                "required": []
+            },
+            function=lambda **kwargs: self._execute_ue_python_tool("ExtractActiveBlueprint", **kwargs),
+            requires_confirmation=False  # 只读工具，无需确认
+        ))
+
         # 1. 提取蓝图（读取）
         self.register_tool(ToolDefinition(
             name="extract_blueprint",
             description="""
-提取蓝图的结构信息（节点、变量、组件等）。
-用途：分析蓝图结构、理解蓝图逻辑、检测错误等。
+提取指定路径蓝图的结构信息（节点、变量、组件等）。
+用途：当用户提供了明确的蓝图路径时使用。
+如果用户没有提供路径，应该使用 extract_active_blueprint 工具。
 参数：
 - AssetPath: 蓝图资产路径（如 "/Game/Blueprints/BP_Character"）
 - Scope: 提取范围（可选）

@@ -165,6 +165,40 @@ AI: 调用 create_blueprint(AssetPath="/Game/Blueprints/BP_MyActor", ParentClass
 
 ## 📚 API 参考
 
+### GetActiveBlueprint
+
+获取当前在 UE 编辑器中激活的蓝图信息。
+
+```python
+result = client.execute_tool_rpc("GetActiveBlueprint")
+```
+
+**返回**：
+
+```json
+{
+  "success": true,
+  "data": {
+    "assetPath": "/Game/Blueprints/BP_Character",
+    "name": "BP_Character",
+    "parentClass": "/Script/Engine.Character"
+  }
+}
+```
+
+### ExtractActiveBlueprint
+
+提取当前激活蓝图的结构信息（便捷函数）。
+
+```python
+result = client.execute_tool_rpc(
+    "ExtractActiveBlueprint",
+    Scope="Compact"  # 可选：Minimal | Compact | Full
+)
+```
+
+**返回**：与 ExtractBlueprint 相同的结构。
+
 ### ExtractBlueprint
 
 提取蓝图结构信息。

@@ -60,6 +60,22 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "BlueprintToAI")
 	FString SaveBlueprints(const TArray<FString>& AssetPaths);
 
+	/**
+	 * Get the currently active (focused) Blueprint in the editor
+	 * @return JSON string with the active Blueprint's asset path, or error if none is active
+	 */
+	UFUNCTION(BlueprintCallable, Category = "BlueprintToAI")
+	FString GetActiveBlueprint();
+
+	/**
+	 * Extract the currently active Blueprint structure to JSON
+	 * Convenience function that combines GetActiveBlueprint + ExtractBlueprint
+	 * @param Scope - Extraction scope: "Minimal", "Compact", or "Full"
+	 * @return JSON string containing Blueprint structure
+	 */
+	UFUNCTION(BlueprintCallable, Category = "BlueprintToAI")
+	FString ExtractActiveBlueprint(const FString& Scope);
+
 private:
 	// Helper: Load Blueprint from asset path
 	class UBlueprint* LoadBlueprintAsset(const FString& AssetPath, FString& OutError);

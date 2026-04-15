@@ -57,6 +57,39 @@
 
 ## 🔧 核心功能设计
 
+### 0. 获取激活的蓝图（新增）
+
+**GetActiveBlueprint**
+
+```json
+{
+  // 无需参数
+}
+```
+
+**输出**：
+
+```json
+{
+  "success": true,
+  "data": {
+    "assetPath": "/Game/Blueprints/BP_Character",
+    "name": "BP_Character",
+    "parentClass": "/Script/Engine.Character"
+  }
+}
+```
+
+**ExtractActiveBlueprint**（便捷函数）
+
+```json
+{
+  "Scope": "Compact" // 可选
+}
+```
+
+直接返回当前激活蓝图的完整结构，相当于 `GetActiveBlueprint` + `ExtractBlueprint` 的组合。
+
 ### 1. 蓝图读取（ExtractBlueprint）
 
 **输入**：
@@ -549,19 +582,31 @@ public:
 
 ## 📝 使用示例
 
-### 示例 1：AI 读取蓝图
+### 示例 1：AI 读取当前蓝图（无需路径）
+
+**用户**："帮我看看这个蓝图做了什么"
+
+**AI 调用**：
+
+```python
+result = extract_active_blueprint(Scope="Compact")
+```
+
+**AI 回复**："这个蓝图继承自 Character 类，在 BeginPlay 事件中获取了 PlayerController..."
+
+### 示例 2：AI 读取指定路径的蓝图
 
 **用户**："帮我看看 BP_Character 这个蓝图做了什么"
 
 **AI 调用**：
 
 ```python
-result = read_blueprint("/Game/Blueprints/BP_Character", scope="Compact")
+result = extract_blueprint(AssetPath="/Game/Blueprints/BP_Character", Scope="Compact")
 ```
 
 **AI 回复**："这个蓝图继承自 Character 类，在 BeginPlay 事件中获取了 PlayerController..."
 
-### 示例 2：AI 创建蓝图
+### 示例 3：AI 创建蓝图
 
 **用户**："帮我创建一个 Actor，在 BeginPlay 时打印 Hello World"
 
@@ -578,7 +623,7 @@ save_blueprint(["/Game/Blueprints/BP_HelloWorld"])
 
 **AI 回复**："已创建 BP_HelloWorld 蓝图，并添加了打印逻辑。"
 
-### 示例 3：AI 修改蓝图
+### 示例 4：AI 修改蓝图
 
 **用户**："给 BP_Character 添加一个 Health 变量，默认值 100"
 
