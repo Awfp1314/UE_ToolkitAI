@@ -39,6 +39,9 @@ def format_tool_result(result: Dict) -> str:
                 ue_data = tool_result.get('data', tool_result)
                 if isinstance(ue_data, (dict, list)):
                     ue_data = json.dumps(ue_data, ensure_ascii=False, indent=2)
+                
+                # ⚡ 截断过大的结果（防止上下文溢出）
+                ue_data = _truncate_large_content(ue_data)
                 return f"工具执行成功。结果:\n{ue_data}"
             elif ue_status == 'error':
                 # UE工具执行失败
@@ -48,10 +51,38 @@ def format_tool_result(result: Dict) -> str:
         # 普通工具结果处理
         if isinstance(tool_result, (dict, list)):
             tool_result = json.dumps(tool_result, ensure_ascii=False, indent=2)
+        
+        # ⚡ 截断过大的结果
+        tool_result = _truncate_large_content(tool_result)
         return f"工具执行成功。结果:\n{tool_result}"
     else:
         error_msg = result.get('error', '未知错误')
         return f"工具执行失败。错误: {error_msg}"
+
+
+def _truncate_large_content(content: str, max_chars: int = 8000) -> str:
+    """
+    截断过大的内容，防止上下文溢出
+    
+    Args:
+        content: 原始内容
+        max_chars: 最大字符数（约 2000 tokens）
+        
+    Returns:
+        str: 截断后的内容
+    """
+    if len(content) <= max_chars:
+        return content
+    
+    # 截断并添加提示
+    truncated = content[:max_chars]
+    remaining = len(content) - max_chars
+    
+    return (
+        f"{truncated}\n\n"
+        f"[内容过长，已截断。剩余 {remaining} 字符未显示。"
+        f"如需完整内容，请要求用户提供更具体的查询条件。]"
+    )
 
 
 class FunctionCallingCoordinator(QObject):
