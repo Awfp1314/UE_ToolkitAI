@@ -1,27 +1,60 @@
 ---
 name: UE Toolkit 开发规范
 description: 帮助在 UE Toolkit 项目中编写符合规范的 Python + PyQt6 代码
-keywords: python, pyqt6, ue toolkit, 模块化, 线程安全
+keywords: python, pyqt6, ue toolkit, 模块化, 线程安全, remote control api
 ---
 
 # UE Toolkit 开发规范
 
-这个 skill 帮助你在 UE Toolkit 项目中编写符合规范的 Python + PyQt6 代码。
-
 ## 架构原则
 
-这是一个模块化的 PyQt6 桌面应用，采用三层架构：
+模块化 PyQt6 桌面应用，三层架构：
 
-- `core/` - 核心层，提供日志、配置、服务等基础设施
-- `modules/` - 功能模块层，各模块独立，通过 `manifest.json` 自动发现
+- `core/` - 核心层（日志、配置、服务）
+- `modules/` - 功能模块层（通过 `manifest.json` 自动发现）
 - `ui/` - 全局 UI 组件
-- `Plugins/` - UE 插件（BlueprintAITools），支持 UE 5.4 和 5.6
 
-依赖规则：
+依赖规则：模块可依赖 core，模块间禁止直接导入（通过依赖注入或 `core.services`），UI 可调用 Logic，反之禁止。
 
-- 模块可以依赖 core（`from core.xxx import yyy`）
-- 模块之间禁止直接导入，必须通过依赖注入或 `core.services`
-- UI 层可以调用 Logic 层，反之禁止
+## UE 集成架构
+
+### Remote Control API（推荐）
+
+```python
+from modules.ai_assistant.clients.ue_tool_client import UEToolClient
+client = UEToolClient(base_url="http://127.0.0.1:30010")
+result = client.execute_tool_rpc("ExtractBlueprint", AssetPath="/Game/BP_Test")
+```
+
+**架构**：`Python → HTTP (30010) → Remote Control API → UE Subsystem`
+
+**优势**：UE 官方 API，稳定可靠，标准 HTTP + JSON，易调试
+
+**配置**：UE 编辑器 → 项目设置 → Remote Control → 启用 Web Server
+
+### BlueprintToAI 插件开发规范（硬性要求）
+
+**参考工程**：`Plugins/temp_blueprint_extractor/` (blueprint-extractor)
+
+**强制规则**：
+
+1. 所有蓝图操作必须参考 `blueprint-extractor` 实现
+2. 使用官方 API：`FBlueprintEditorUtils::AddMemberVariable()` 等
+3. 禁止直接操作 `Blueprint->NewVariables` 数组
+4. 类型解析参考 `AuthoringHelpers.cpp::ParsePinType()`
+5. 实现前先在参考工程中搜索相关函数
+
+**参考文件**：`Authoring/BlueprintAuthoring.cpp`, `Authoring/AuthoringHelpers.cpp`
+
+### 连接检测
+
+```python
+# UI 层自动检测（每 5 秒）
+def _check_ue_connection(self):
+    response = requests.get('http://127.0.0.1:30010/remote/info', timeout=1.5)
+    if response.status_code == 200:
+        self._ue_connection_changed.emit(True)
+```
 
 ## 必须遵守的规范
 
@@ -30,21 +63,13 @@ keywords: python, pyqt6, ue toolkit, 模块化, 线程安全
 ```python
 from core.logger import get_logger
 logger = get_logger(__name__)
-
-# 禁止使用 print()
-# 异常必须记录
-try:
-    ...
-except Exception as e:
-    logger.exception(f"操作失败: {e}")
+# 禁止 print()，异常必须记录
 ```
 
 ### 路径操作
 
 ```python
 from pathlib import Path
-
-# 使用 Path 对象，禁止字符串拼接
 config_path = Path.home() / "AppData" / "Roaming" / "ue_toolkit"
 ```
 
@@ -52,15 +77,9 @@ config_path = Path.home() / "AppData" / "Roaming" / "ue_toolkit"
 
 ```python
 class Worker(QThread):
-    # 信号必须在类级别定义
     result_ready = pyqtSignal(object)
-
     def run(self):
-        # 禁止在这里直接操作 UI 控件
-        result = do_work()
-        self.result_ready.emit(result)  # 通过信号传递数据
-
-# 主线程中连接信号
+        self.result_ready.emit(do_work())  # 禁止直接操作 UI
 worker.result_ready.connect(self.update_ui)
 ```
 
@@ -68,13 +87,10 @@ worker.result_ready.connect(self.update_ui)
 
 ```python
 def cleanup(self) -> CleanupResult:
-    """模块必须实现此方法"""
     try:
-        # 停止所有线程
         if self.worker:
             self.worker.quit()
             self.worker.wait(1000)
-        # 断开信号、关闭连接等
         return CleanupResult.success()
     except Exception as e:
         return CleanupResult.failure_result(str(e))
@@ -83,49 +99,53 @@ def cleanup(self) -> CleanupResult:
 ### 版本管理
 
 ```python
-# 只在 version.py 定义版本号
-from version import VERSION  # 其他地方导入使用
+from version import VERSION  # 只在 version.py 定义版本号
 ```
 
-版本号遵循语义化版本规范（Semantic Versioning）：
+版本号格式：`MAJOR.MINOR.PATCH`（如 1.2.18）
 
-- `MAJOR.MINOR.PATCH` 格式（如 1.2.18）
-- 主版本号（MAJOR）：重大变更、不兼容的 API 修改
-- 次版本号（MINOR）：新功能、向后兼容的改进
-- 修订号（PATCH）：Bug 修复、小改进、文档更新
+版本更新由 Kiro Hook 自动管理：
 
-**版本更新流程**：
+- 功能性变更：更新 `version.py` + 同步到 `scripts/package/config/UeToolkitpack.iss` + 提交代码
+- 非功能性变更：只提交代码，不更新版本号
 
-版本号和代码提交由 Kiro Hook 自动管理：
+Git 提交规范：`[类型] 描述` 或 `[类型] 描述 v版本号`
+类型：feat、fix、refactor、docs、style、perf、test、chore
 
-- 修改 `version.py` 中的 `VERSION` 常量（功能性变更时）
-- Hook 会在用户验收成功后自动：
-  - **功能性代码变更**：更新版本号 + 同步到 `scripts/package/config/UeToolkitpack.iss` + 提交代码
-  - **非功能性修改**（文档、配置等）：只提交代码，不更新版本号
+## 文档编写规范
 
-Git 提交信息规范（使用中文）：
+**重要原则**：除非用户明确要求，否则不要创建或更新文档文件。
 
-- 格式：`[类型] 简短描述` 或 `[类型] 简短描述 v版本号`（功能性变更）
-- 类型：feat（新功能）、fix（修复）、refactor（重构）、docs（文档）、style（格式）、perf（性能）、test（测试）、chore（构建/工具）
-- 示例：`[feat] 添加资产批量导入功能 v1.3.0`（功能性）
-- 示例：`[docs] 更新打包流程说明`（非功能性）
+- ✅ 在聊天窗口中回答用户问题
+- ✅ 提供代码示例和使用说明
+- ❌ 不要自动创建 README.md、GUIDE.md 等文档
+- ❌ 不要自动更新设计文档
+
+**例外情况**：
+
+- 用户明确说"写个文档"、"更新文档"
+- 用户要求"创建使用说明"
+- 项目初始化时必需的文档（如 manifest.json）
 
 ## 常见陷阱
 
-1. PyQt6 跨线程 UI 操作 - 在 `QThread.run()` 中直接调用 `setText()` 会崩溃，必须用信号
-2. QTimer 只能在主线程 - 工作线程中用 `time.sleep()` 代替
+1. PyQt6 跨线程 UI 操作 - 必须用信号，不能直接调用 UI 方法
+2. QTimer 只能在主线程 - 工作线程用 `time.sleep()`
 3. 空异常处理 - 禁止 `except: pass`，必须记录日志
-4. 路径字符串拼接 - 使用 `Path` 对象而非字符串
-5. 文件只读属性 - 使用 `core.utils.file_utils.safe_copytree` 处理只读文件
-6. 模块间直接依赖 - 通过 `core.services` 或依赖注入解耦
+4. 路径字符串拼接 - 使用 `Path` 对象
+5. 文件只读属性 - 使用 `core.utils.file_utils.safe_copytree`
+6. 模块间直接依赖 - 通过 `core.services` 解耦
+7. UE 连接检测 - 使用 Remote Control API (30010)
+8. 过度文档化 - 在聊天中说明，不要自动创建文档
+9. BlueprintToAI 实现 - 必须参考 `blueprint-extractor` 工程，使用官方 API
 
 ## 模块结构
 
 ```
 modules/<module_name>/
 ├── __init__.py
-├── manifest.json          # 必需：name, display_name, version, entry_point
-├── config_template.json   # 可选：配置模板
+├── manifest.json          # 必需
+├── config_template.json   # 可选
 ├── logic/                 # 业务逻辑
 └── ui/                    # 界面代码
 ```
@@ -134,64 +154,18 @@ modules/<module_name>/
 
 ## 打包发布
 
-### 版本号管理
-
-版本号和代码提交由 Kiro Hook 自动管理（`.kiro/hooks/auto-version-commit.kiro.hook`）：
-
-- **功能性代码变更**（core/、modules/、ui/ 目录下的 .py 文件）：
-  - 自动更新 `version.py` 中的版本号
-  - 自动同步版本号到 `scripts/package/config/UeToolkitpack.iss`
-  - 生成带版本号的提交信息并提交代码
-- **非功能性修改**（文档、配置、构建脚本等）：
-  - 不更新版本号
-  - 生成不带版本号的提交信息并提交代码
-
-Hook 会在用户验收成功后自动执行上述操作。
-
 ### 打包步骤
 
-**方式一：一键打包（推荐）**
-
 ```bash
-# 双击运行或命令行执行
-scripts/package/tools/build_installer.bat
-# 或直接运行 Python 脚本
-python scripts/package/tools/build_installer.py
+scripts/package/tools/build_installer.bat  # 一键打包
 ```
 
-**打包前自动检查**（6 项）：
+**自动检查**（6 项）：License、调试代码、依赖、代码质量、版本号、配置
 
-1. License 配置检查（\_DEV_MODE 必须为 False）
-2. 调试代码检查（可选自动注释 DEBUG 打印）
-3. 依赖检查（PyQt6、requests、Pillow）
-4. 代码质量检查（语法错误）
-5. 版本号检查（格式和一致性）
-6. 配置文件检查（必要文件存在性）
+**自动流程**：清理 → 打包 EXE → 编译安装包 → 清理临时文件
 
-检查失败会阻止打包，确保代码处于生产就绪状态。
-
-**自动执行流程**：清理旧构建 → 打包 EXE → 编译安装包 → 清理临时文件
-
-**方式二：分步执行**
-
-1. **打包 EXE**：`pyinstaller scripts/package/config/ue_toolkit.spec --clean`
-2. **编译安装包**：使用 Inno Setup 打开 `scripts/package/config/UeToolkitpack.iss` 并编译
-
-**输出文件**：
-
-- `dist/UE_Toolkit.exe` - 单文件可执行程序（临时，打包后自动清理）
-- `桌面/UE_Toolkit_Setup_v{版本}.exe` - 安装包（最终产物）
-- `logs/build/` - 打包日志（pyinstaller/ 和 inno/ 子目录）
+**输出**：`桌面/UE_Toolkit_Setup_v{版本}.exe`，日志在 `logs/build/`
 
 ### 打包配置
 
-**PyInstaller 配置**（`scripts/package/config/ue_toolkit.spec`）：
-
-- 单文件模式，使用 UPX 压缩
-- 已优化：排除未使用的 AI 库
-- 自动包含所有 `config_template.json` 文件
-
-**运行时钩子**（`scripts/package/config/runtime_hook_encoding.py`）：
-
-- 修复 Windows 中文编码问题
-- 禁用临时目录清理警告
+**PyInstaller**（`scripts/package/config/ue_toolkit.spec`）：单文件模式，UPX 压缩，自动包含 `config_template.json`
