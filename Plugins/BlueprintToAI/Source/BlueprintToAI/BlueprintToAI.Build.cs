@@ -25,10 +25,16 @@ public class BlueprintToAI : ModuleRules
 				"UnrealEd",
 				"EditorSubsystem",
 				"AssetRegistry",
+				"AssetTools",
 				"BlueprintGraph",
 				"KismetCompiler",
+				"Kismet",
+				"GraphEditor",
 				"Json",
 				"JsonUtilities",
+				"RemoteControlCommon",
+				"HTTP",
+				"EnhancedInput",
 			}
 		);
 	}

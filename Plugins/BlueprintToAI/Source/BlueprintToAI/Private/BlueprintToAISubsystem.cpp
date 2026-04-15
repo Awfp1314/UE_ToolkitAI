@@ -3,6 +3,7 @@
 #include "BlueprintToAISubsystem.h"
 #include "Engine/Blueprint.h"
 #include "AssetRegistry/AssetRegistryModule.h"
+#include "AssetToolsModule.h"
 #include "Kismet2/BlueprintEditorUtils.h"
 #include "Kismet2/KismetEditorUtilities.h"
 #include "EdGraphSchema_K2.h"
@@ -10,13 +11,18 @@
 #include "K2Node_CallFunction.h"
 #include "K2Node_VariableGet.h"
 #include "K2Node_VariableSet.h"
+#include "K2Node_DynamicCast.h"
+#include "K2Node_IfThenElse.h"
 #include "Json.h"
 #include "JsonUtilities.h"
+#include "Misc/PackageName.h"
+#include "UObject/SavePackage.h"
+#include "FileHelpers.h"
 
 void UBlueprintToAISubsystem::Initialize(FSubsystemCollectionBase& Collection)
 {
 	Super::Initialize(Collection);
-	UE_LOG(LogTemp, Log, TEXT("BlueprintToAI Subsystem initialized"));
+	UE_LOG(LogTemp, Log, TEXT("BlueprintToAI Subsystem initialized (UE 5.6+)"));
 }
 
 void UBlueprintToAISubsystem::Deinitialize()
