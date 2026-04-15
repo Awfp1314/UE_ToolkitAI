@@ -153,20 +153,18 @@ class ToolsRegistry:
         self.document_reader = document_reader
         self.asset_importer = asset_importer
         
-        # 初始化UE工具RPC客户端
+        # 初始化UE工具HTTP客户端
         from modules.ai_assistant.clients.ue_tool_client import UEToolClient
         
-        # 从配置读取UE服务器地址和端口（如果配置不存在则使用默认值）
-        ue_host = "127.0.0.1"
-        ue_port = 9998
+        # 使用 Remote Control API (HTTP)
+        ue_base_url = "http://127.0.0.1:30010"
         
         # TODO: 未来可以从配置管理器读取这些设置
         # if config_reader:
-        #     ue_host = config_reader.get('ue_server_host', '127.0.0.1')
-        #     ue_port = config_reader.get('ue_server_port', 9998)
+        #     ue_base_url = config_reader.get('ue_remote_control_url', 'http://127.0.0.1:30010')
         
-        self.ue_client = UEToolClient(host=ue_host, port=ue_port)
-        self.logger.info(f"UE RPC客户端已初始化 (目标: {ue_host}:{ue_port})")
+        self.ue_client = UEToolClient(base_url=ue_base_url)
+        self.logger.info(f"UE HTTP客户端已初始化 (目标: {ue_base_url})")
         
         # 工具注册表
         self.tools: Dict[str, ToolDefinition] = {}
@@ -750,22 +748,21 @@ class ToolsRegistry:
     
     def _execute_ue_python_tool(self, tool_name: str, **kwargs) -> dict:
         """
-        通过RPC客户端执行虚幻引擎编辑器内的Python脚本。
+        通过HTTP客户端执行虚幻引擎编辑器内的函数。
         这是 Function Calling 调用虚幻引擎工具的桥梁。
         
         Args:
-            tool_name: UE工具名称
+            tool_name: UE工具名称（BlueprintToAISubsystem的函数名）
             **kwargs: 工具参数
             
         Returns:
-            dict: 执行结果字典（直接返回dict而不是JSON字符串）
+            dict: 执行结果字典
         """
         try:
-            # 使用UE RPC客户端执行工具
+            # 使用UE HTTP客户端执行工具
             result = self.ue_client.execute_tool_rpc(tool_name, **kwargs)
             
             # 直接返回dict，让dispatch方法统一处理
-            # 不再转换为JSON字符串，避免双重包装
             return result
             
         except Exception as e:
@@ -780,26 +777,130 @@ class ToolsRegistry:
         """
         注册虚幻引擎蓝图操作工具到注册表中。
 
-        注意：当前版本为只读模式，只支持蓝图分析，不支持修改蓝图。
+        使用 BlueprintToAI 插件的 Remote Control API。
         """
-        # 1. 获取蓝图摘要（读取）工具
+        # 1. 提取蓝图（读取）
         self.register_tool(ToolDefinition(
-            name="get_current_blueprint_summary",
+            name="extract_blueprint",
             description="""
-读取当前在虚幻编辑器中打开的蓝图的主要节点和结构。
-用途：用于分析蓝图结构、理解蓝图逻辑、检测错误等。
-注意：当前版本为只读模式，AI只能分析蓝图并给出建议，不能直接修改蓝图。
-参数：无需参数。
+提取蓝图的结构信息（节点、变量、组件等）。
+用途：分析蓝图结构、理解蓝图逻辑、检测错误等。
+参数：
+- AssetPath: 蓝图资产路径（如 "/Game/Blueprints/BP_Character"）
+- Scope: 提取范围（可选）
+  - "Minimal": 只有节点类型和连接（最省token）
+  - "Compact": 添加位置和基本属性（默认，平衡）
+  - "Full": 包含所有信息（调试用）
             """.strip(),
             parameters={
                 "type": "object",
-                "properties": {},
-                "required": []
+                "properties": {
+                    "AssetPath": {
+                        "type": "string",
+                        "description": "蓝图资产路径（如 /Game/Blueprints/BP_Character）"
+                    },
+                    "Scope": {
+                        "type": "string",
+                        "description": "提取范围：Minimal | Compact | Full（默认 Compact）",
+                        "enum": ["Minimal", "Compact", "Full"]
+                    }
+                },
+                "required": ["AssetPath"]
             },
-            function=lambda **kwargs: self._execute_ue_python_tool("get_current_blueprint_summary", **kwargs),
+            function=lambda **kwargs: self._execute_ue_python_tool("ExtractBlueprint", **kwargs),
             requires_confirmation=False  # 只读工具，无需确认
         ))
 
-        # 注意：apply_blueprint_changes 工具已弃用（只读模式）
-        # 当前版本专注于稳定的蓝图分析和错误检测，不支持修改蓝图
+        # 2. 创建蓝图
+        self.register_tool(ToolDefinition(
+            name="create_blueprint",
+            description="""
+创建新的蓝图资产。
+参数：
+- AssetPath: 蓝图资产路径（如 "/Game/Blueprints/BP_MyActor"）
+- ParentClass: 父类路径（如 "/Script/Engine.Actor"）
+- GraphDSL: 图表DSL（可选，用于快速定义节点）
+- PayloadJson: 额外配置（可选，JSON字符串）
+            """.strip(),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "AssetPath": {
+                        "type": "string",
+                        "description": "蓝图资产路径"
+                    },
+                    "ParentClass": {
+                        "type": "string",
+                        "description": "父类路径（如 /Script/Engine.Actor）"
+                    },
+                    "GraphDSL": {
+                        "type": "string",
+                        "description": "图表DSL（可选）"
+                    },
+                    "PayloadJson": {
+                        "type": "string",
+                        "description": "额外配置JSON（可选）"
+                    }
+                },
+                "required": ["AssetPath", "ParentClass"]
+            },
+            function=lambda **kwargs: self._execute_ue_python_tool("CreateBlueprint", **kwargs),
+            requires_confirmation=True  # 创建操作需要确认
+        ))
+
+        # 3. 修改蓝图
+        self.register_tool(ToolDefinition(
+            name="modify_blueprint",
+            description="""
+修改现有蓝图。
+参数：
+- AssetPath: 蓝图资产路径
+- Operation: 操作类型（add_variable | add_component | reparent | modify_graph）
+- PayloadJson: 操作参数（JSON字符串）
+            """.strip(),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "AssetPath": {
+                        "type": "string",
+                        "description": "蓝图资产路径"
+                    },
+                    "Operation": {
+                        "type": "string",
+                        "description": "操作类型",
+                        "enum": ["add_variable", "add_component", "reparent", "modify_graph"]
+                    },
+                    "PayloadJson": {
+                        "type": "string",
+                        "description": "操作参数JSON"
+                    }
+                },
+                "required": ["AssetPath", "Operation", "PayloadJson"]
+            },
+            function=lambda **kwargs: self._execute_ue_python_tool("ModifyBlueprint", **kwargs),
+            requires_confirmation=True  # 修改操作需要确认
+        ))
+
+        # 4. 保存蓝图
+        self.register_tool(ToolDefinition(
+            name="save_blueprints",
+            description="""
+保存蓝图到磁盘。
+注意：所有修改操作不会自动保存，必须显式调用此工具。
+参数：
+- AssetPaths: 蓝图资产路径列表（JSON数组字符串）
+            """.strip(),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "AssetPaths": {
+                        "type": "string",
+                        "description": "蓝图资产路径列表（JSON数组字符串，如 '[\"/Game/BP1\", \"/Game/BP2\"]'）"
+                    }
+                },
+                "required": ["AssetPaths"]
+            },
+            function=lambda **kwargs: self._execute_ue_python_tool("SaveBlueprints", **kwargs),
+            requires_confirmation=True  # 保存操作需要确认
+        ))
 

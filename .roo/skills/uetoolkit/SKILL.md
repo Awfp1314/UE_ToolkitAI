@@ -1,7 +1,7 @@
 ---
 name: UE Toolkit 开发规范
 description: 帮助在 UE Toolkit 项目中编写符合规范的 Python + PyQt6 代码
-keywords: python, pyqt6, ue toolkit, 模块化, 线程安全
+keywords: python, pyqt6, ue toolkit, 模块化, 线程安全, remote control api
 ---
 
 # UE Toolkit 开发规范
@@ -15,6 +15,39 @@ keywords: python, pyqt6, ue toolkit, 模块化, 线程安全
 - `ui/` - 全局 UI 组件
 
 依赖规则：模块可依赖 core，模块间禁止直接导入（通过依赖注入或 `core.services`），UI 可调用 Logic，反之禁止。
+
+## UE 集成架构
+
+### Remote Control API（推荐）
+
+```python
+# 使用 HTTP Remote Control API 与 UE 通信
+from modules.ai_assistant.clients.ue_tool_client import UEToolClient
+
+client = UEToolClient(base_url="http://127.0.0.1:30010")
+result = client.execute_tool_rpc("ExtractBlueprint", AssetPath="/Game/BP_Test")
+```
+
+**架构**：`Python App → HTTP (30010) → Remote Control API → UE Subsystem`
+
+**优势**：
+
+- UE 官方 API，稳定可靠
+- 标准 HTTP + JSON，易调试
+- 支持读写操作
+- 无需自定义协议
+
+**配置**：UE 编辑器 → 项目设置 → Remote Control → 启用 Remote Control Web Server
+
+### 连接检测
+
+```python
+# UI 层自动检测（每 5 秒）
+def _check_ue_connection(self):
+    response = requests.get('http://127.0.0.1:30010/remote/info', timeout=1.5)
+    if response.status_code == 200:
+        self._ue_connection_changed.emit(True)
+```
 
 ## 必须遵守的规范
 
@@ -87,6 +120,7 @@ Git 提交规范：`[类型] 描述` 或 `[类型] 描述 v版本号`
 4. 路径字符串拼接 - 使用 `Path` 对象而非字符串
 5. 文件只读属性 - 使用 `core.utils.file_utils.safe_copytree` 处理只读文件
 6. 模块间直接依赖 - 通过 `core.services` 或依赖注入解耦
+7. UE 连接检测 - 使用 Remote Control API (30010)，不要用旧的 Socket RPC (9998)
 
 ## 模块结构
 

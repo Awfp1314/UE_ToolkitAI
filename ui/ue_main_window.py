@@ -1852,28 +1852,20 @@ class UEMainWindow(QMainWindow):
         QTimer.singleShot(2000, self._check_ue_connection)
     
     def _check_ue_connection(self):
-        """检查 UE RPC 服务器是否真正可用（后台线程，不阻塞 UI）"""
+        """检查 UE Remote Control API 是否可用（后台线程，不阻塞 UI）"""
         from threading import Thread
         
         def _ping():
-            import socket
-            import struct
-            import json as _json
+            import requests
             connected = False
             try:
-                sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                sock.settimeout(1.5)
-                sock.connect(('127.0.0.1', 9998))
-                ping = _json.dumps({"action": "ping"}).encode('utf-8')
-                sock.sendall(struct.pack('!I', len(ping)) + ping)
-                prefix = sock.recv(4)
-                if len(prefix) == 4:
-                    resp_len = struct.unpack('!I', prefix)[0]
-                    if 0 < resp_len < 65536:
-                        _resp = sock.recv(min(resp_len, 4096))
-                        if len(_resp) > 0:
-                            connected = True
-                sock.close()
+                # 使用 Remote Control API 的 /remote/info 端点检查连接
+                response = requests.get('http://127.0.0.1:30010/remote/info', timeout=1.5)
+                if response.status_code == 200:
+                    data = response.json()
+                    # 检查响应是否包含预期的字段
+                    if 'HttpRoutes' in data or 'ActivePreset' in data:
+                        connected = True
             except Exception:
                 connected = False
             # 通过信号安全地通知主线程
