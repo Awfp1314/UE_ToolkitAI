@@ -901,8 +901,24 @@ class ToolsRegistry:
 修改现有蓝图。
 参数：
 - AssetPath: 蓝图资产路径
-- Operation: 操作类型（add_variable | add_component | reparent | modify_graph）
+- Operation: 操作类型（add_variable | reparent）
+  * add_variable: 添加变量，支持的类型：
+    - bool: 布尔值
+    - int/integer: 整数
+    - float/real: 单精度浮点数
+    - double: 双精度浮点数
+    - string: 字符串
+    - name: 名称
+    - text: 文本
+    - vector: 三维向量
+    - rotator: 旋转器
+    - transform: 变换
+    - color: 颜色
+  * reparent: 更改父类
+  * modify_graph: 修改图表（暂未实现）
 - PayloadJson: 操作参数（JSON字符串）
+  * add_variable 示例: {"name": "Speed", "type": "float"}
+  * reparent 示例: {"parentClassPath": "/Script/Engine.Pawn"}
             """.strip(),
             parameters={
                 "type": "object",

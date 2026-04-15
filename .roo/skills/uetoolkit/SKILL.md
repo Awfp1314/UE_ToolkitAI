@@ -21,23 +21,30 @@ keywords: python, pyqt6, ue toolkit, 模块化, 线程安全, remote control api
 ### Remote Control API（推荐）
 
 ```python
-# 使用 HTTP Remote Control API 与 UE 通信
 from modules.ai_assistant.clients.ue_tool_client import UEToolClient
-
 client = UEToolClient(base_url="http://127.0.0.1:30010")
 result = client.execute_tool_rpc("ExtractBlueprint", AssetPath="/Game/BP_Test")
 ```
 
-**架构**：`Python App → HTTP (30010) → Remote Control API → UE Subsystem`
+**架构**：`Python → HTTP (30010) → Remote Control API → UE Subsystem`
 
-**优势**：
+**优势**：UE 官方 API，稳定可靠，标准 HTTP + JSON，易调试
 
-- UE 官方 API，稳定可靠
-- 标准 HTTP + JSON，易调试
-- 支持读写操作
-- 无需自定义协议
+**配置**：UE 编辑器 → 项目设置 → Remote Control → 启用 Web Server
 
-**配置**：UE 编辑器 → 项目设置 → Remote Control → 启用 Remote Control Web Server
+### BlueprintToAI 插件开发规范（硬性要求）
+
+**参考工程**：`Plugins/temp_blueprint_extractor/` (blueprint-extractor)
+
+**强制规则**：
+
+1. 所有蓝图操作必须参考 `blueprint-extractor` 实现
+2. 使用官方 API：`FBlueprintEditorUtils::AddMemberVariable()` 等
+3. 禁止直接操作 `Blueprint->NewVariables` 数组
+4. 类型解析参考 `AuthoringHelpers.cpp::ParsePinType()`
+5. 实现前先在参考工程中搜索相关函数
+
+**参考文件**：`Authoring/BlueprintAuthoring.cpp`, `Authoring/AuthoringHelpers.cpp`
 
 ### 连接检测
 
@@ -57,17 +64,12 @@ def _check_ue_connection(self):
 from core.logger import get_logger
 logger = get_logger(__name__)
 # 禁止 print()，异常必须记录
-try:
-    ...
-except Exception as e:
-    logger.exception(f"操作失败: {e}")
 ```
 
 ### 路径操作
 
 ```python
 from pathlib import Path
-# 使用 Path 对象，禁止字符串拼接
 config_path = Path.home() / "AppData" / "Roaming" / "ue_toolkit"
 ```
 
@@ -75,11 +77,9 @@ config_path = Path.home() / "AppData" / "Roaming" / "ue_toolkit"
 
 ```python
 class Worker(QThread):
-    result_ready = pyqtSignal(object)  # 信号必须在类级别定义
+    result_ready = pyqtSignal(object)
     def run(self):
-        result = do_work()
-        self.result_ready.emit(result)  # 禁止直接操作 UI
-# 主线程连接信号
+        self.result_ready.emit(do_work())  # 禁止直接操作 UI
 worker.result_ready.connect(self.update_ui)
 ```
 
@@ -129,14 +129,15 @@ Git 提交规范：`[类型] 描述` 或 `[类型] 描述 v版本号`
 
 ## 常见陷阱
 
-1. PyQt6 跨线程 UI 操作 - 在 `QThread.run()` 中直接调用 `setText()` 会崩溃，必须用信号
-2. QTimer 只能在主线程 - 工作线程中用 `time.sleep()` 代替
+1. PyQt6 跨线程 UI 操作 - 必须用信号，不能直接调用 UI 方法
+2. QTimer 只能在主线程 - 工作线程用 `time.sleep()`
 3. 空异常处理 - 禁止 `except: pass`，必须记录日志
-4. 路径字符串拼接 - 使用 `Path` 对象而非字符串
-5. 文件只读属性 - 使用 `core.utils.file_utils.safe_copytree` 处理只读文件
-6. 模块间直接依赖 - 通过 `core.services` 或依赖注入解耦
-7. UE 连接检测 - 使用 Remote Control API (30010)，不要用旧的 Socket RPC (9998)
-8. 过度文档化 - 不要为每个功能都创建文档，在聊天中说明即可
+4. 路径字符串拼接 - 使用 `Path` 对象
+5. 文件只读属性 - 使用 `core.utils.file_utils.safe_copytree`
+6. 模块间直接依赖 - 通过 `core.services` 解耦
+7. UE 连接检测 - 使用 Remote Control API (30010)
+8. 过度文档化 - 在聊天中说明，不要自动创建文档
+9. BlueprintToAI 实现 - 必须参考 `blueprint-extractor` 工程，使用官方 API
 
 ## 模块结构
 
@@ -155,25 +156,16 @@ modules/<module_name>/
 
 ### 打包步骤
 
-**方式一：一键打包（推荐）**
-
 ```bash
-scripts/package/tools/build_installer.bat
+scripts/package/tools/build_installer.bat  # 一键打包
 ```
 
-**打包前自动检查**（6 项）：License 配置、调试代码、依赖、代码质量、版本号、配置文件
+**自动检查**（6 项）：License、调试代码、依赖、代码质量、版本号、配置
 
-**自动执行流程**：清理旧构建 → 打包 EXE → 编译安装包 → 清理临时文件
+**自动流程**：清理 → 打包 EXE → 编译安装包 → 清理临时文件
 
-**输出文件**：
-
-- `桌面/UE_Toolkit_Setup_v{版本}.exe` - 安装包（最终产物）
-- `logs/build/` - 打包日志
+**输出**：`桌面/UE_Toolkit_Setup_v{版本}.exe`，日志在 `logs/build/`
 
 ### 打包配置
 
-**PyInstaller 配置**（`scripts/package/config/ue_toolkit.spec`）：
-
-- 单文件模式，使用 UPX 压缩
-- 已优化：排除未使用的 AI 库
-- 自动包含所有 `config_template.json` 文件
+**PyInstaller**（`scripts/package/config/ue_toolkit.spec`）：单文件模式，UPX 压缩，自动包含 `config_template.json`

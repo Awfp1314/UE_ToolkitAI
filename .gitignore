@@ -3,11 +3,27 @@ __pycache__/
 *.py[cod]
 *$py.class
 *.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
 
-# 虚拟环境
+# Virtual Environment
 venv/
+ENV/
 env/
-.venv/
 
 # IDE
 .vscode/
@@ -19,47 +35,23 @@ env/
 # OS
 .DS_Store
 Thumbs.db
-desktop.ini
 
-# 日志
+# Logs
 *.log
 logs/
 
-# 临时文件
-*.tmp
-*.temp
-temp/
-tmp/
-tempCodeRunnerFile.py
-
-# 构建输出
-build/
-dist/
-
-# 用户数据
+# User data
 user_data/
 
-# 测试
-.pytest_cache/
-.coverage
-htmlcov/
+# Build artifacts
+*.spec.bak
+dist/
+build/
 
-# PyInstaller
-*.manifest
-
-# 备份
+# Temporary files
+*.tmp
 *.bak
-backup/
+*.cache
 
-# Docs（只保留 README）
-docs/
-
-# Plugins 相关
-Plugins/*/Binaries/
-Plugins/*/Intermediate/
-Plugins/*/DerivedDataCache/
-Plugins/*/Saved/
-Plugins/*/Build/
-Plugins/*/*.zip
-Plugins/*/*.rar
-Plugins/*/*.7z
+# Reference projects (git submodules)
+Plugins/temp_*/

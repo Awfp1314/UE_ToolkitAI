@@ -18,6 +18,7 @@
 #include "Misc/PackageName.h"
 #include "UObject/SavePackage.h"
 #include "FileHelpers.h"
+#include "UObject/StructOnScope.h"
 
 void UBlueprintToAISubsystem::Initialize(FSubsystemCollectionBase& Collection)
 {
@@ -206,23 +207,97 @@ FString UBlueprintToAISubsystem::ModifyBlueprint(const FString& AssetPath, const
 
 	if (Operation == TEXT("add_variable"))
 	{
-		// Add variable
+		// Add variable using official Blueprint Editor API
 		FString VarName = PayloadObject->GetStringField(TEXT("name"));
 		FString VarType = PayloadObject->GetStringField(TEXT("type"));
 		
+		// 构建正确的 PinType
 		FEdGraphPinType PinType;
-		PinType.PinCategory = *VarType;
+		PinType.ResetToDefaults();
 		
-		FBPVariableDescription NewVar;
-		NewVar.VarName = *VarName;
-		NewVar.VarType = PinType;
-		NewVar.PropertyFlags = CPF_Edit | CPF_BlueprintVisible;
+		// 根据类型字符串设置正确的 PinCategory 和 PinSubCategoryObject
+		if (VarType.Equals(TEXT("bool"), ESearchCase::IgnoreCase))
+		{
+			PinType.PinCategory = UEdGraphSchema_K2::PC_Boolean;
+		}
+		else if (VarType.Equals(TEXT("int"), ESearchCase::IgnoreCase) || VarType.Equals(TEXT("integer"), ESearchCase::IgnoreCase))
+		{
+			PinType.PinCategory = UEdGraphSchema_K2::PC_Int;
+		}
+		else if (VarType.Equals(TEXT("int64"), ESearchCase::IgnoreCase))
+		{
+			PinType.PinCategory = UEdGraphSchema_K2::PC_Int64;
+		}
+		else if (VarType.Equals(TEXT("byte"), ESearchCase::IgnoreCase))
+		{
+			PinType.PinCategory = UEdGraphSchema_K2::PC_Byte;
+		}
+		else if (VarType.Equals(TEXT("float"), ESearchCase::IgnoreCase) || VarType.Equals(TEXT("real"), ESearchCase::IgnoreCase))
+		{
+			PinType.PinCategory = UEdGraphSchema_K2::PC_Real;
+			PinType.PinSubCategory = UEdGraphSchema_K2::PC_Float;
+		}
+		else if (VarType.Equals(TEXT("double"), ESearchCase::IgnoreCase))
+		{
+			PinType.PinCategory = UEdGraphSchema_K2::PC_Real;
+			PinType.PinSubCategory = UEdGraphSchema_K2::PC_Double;
+		}
+		else if (VarType.Equals(TEXT("string"), ESearchCase::IgnoreCase))
+		{
+			PinType.PinCategory = UEdGraphSchema_K2::PC_String;
+		}
+		else if (VarType.Equals(TEXT("name"), ESearchCase::IgnoreCase))
+		{
+			PinType.PinCategory = UEdGraphSchema_K2::PC_Name;
+		}
+		else if (VarType.Equals(TEXT("text"), ESearchCase::IgnoreCase))
+		{
+			PinType.PinCategory = UEdGraphSchema_K2::PC_Text;
+		}
+		else if (VarType.Equals(TEXT("vector"), ESearchCase::IgnoreCase))
+		{
+			PinType.PinCategory = UEdGraphSchema_K2::PC_Struct;
+			PinType.PinSubCategoryObject = TBaseStructure<FVector>::Get();
+		}
+		else if (VarType.Equals(TEXT("rotator"), ESearchCase::IgnoreCase))
+		{
+			PinType.PinCategory = UEdGraphSchema_K2::PC_Struct;
+			PinType.PinSubCategoryObject = TBaseStructure<FRotator>::Get();
+		}
+		else if (VarType.Equals(TEXT("transform"), ESearchCase::IgnoreCase))
+		{
+			PinType.PinCategory = UEdGraphSchema_K2::PC_Struct;
+			PinType.PinSubCategoryObject = TBaseStructure<FTransform>::Get();
+		}
+		else if (VarType.Equals(TEXT("color"), ESearchCase::IgnoreCase) || VarType.Equals(TEXT("linearcolor"), ESearchCase::IgnoreCase))
+		{
+			PinType.PinCategory = UEdGraphSchema_K2::PC_Struct;
+			PinType.PinSubCategoryObject = TBaseStructure<FLinearColor>::Get();
+		}
+		else
+		{
+			// 不支持的类型
+			Message = FString::Printf(TEXT("Unsupported variable type: %s. Supported types: bool, byte, int, int64, float, double, string, name, text, vector, rotator, transform, color"), *VarType);
+			bSuccess = false;
+		}
 		
-		Blueprint->NewVariables.Add(NewVar);
-		FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
-		
-		bSuccess = true;
-		Message = FString::Printf(TEXT("Variable '%s' added successfully"), *VarName);
+		if (bSuccess || Message.IsEmpty())
+		{
+			// 使用官方 API 添加变量，这会自动处理所有必要的初始化
+			FString DefaultValue;
+			PayloadObject->TryGetStringField(TEXT("defaultValue"), DefaultValue);
+			
+			if (FBlueprintEditorUtils::AddMemberVariable(Blueprint, FName(*VarName), PinType, DefaultValue))
+			{
+				bSuccess = true;
+				Message = FString::Printf(TEXT("Variable '%s' (type: %s) added successfully"), *VarName, *VarType);
+			}
+			else
+			{
+				bSuccess = false;
+				Message = FString::Printf(TEXT("Failed to add variable '%s'. The variable may already exist or the type is invalid."), *VarName);
+			}
+		}
 	}
 	else if (Operation == TEXT("reparent"))
 	{
