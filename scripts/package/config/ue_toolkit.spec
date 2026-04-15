@@ -20,6 +20,8 @@ datas = [
     (os.path.join(spec_root, 'modules'), 'modules'),
     (os.path.join(spec_root, 'core'), 'core'),
     (os.path.join(spec_root, 'ui'), 'ui'),
+    (os.path.join(spec_root, 'scripts/mcp_servers'), 'scripts/mcp_servers'),  # MCP 服务器脚本
+    (os.path.join(spec_root, 'config/mcp_config.json'), 'config'),  # MCP 配置文件
     (os.path.join(spec_root, 'version.py'), '.'),  # 打包版本文件
     (os.path.join(spec_dir, 'License.txt'), '.'),  # 打包许可协议文件
 ]

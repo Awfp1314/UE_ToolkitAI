@@ -1,0 +1,35 @@
+{
+  "mcpServers": {
+    "blueprint-extractor": {
+      "command": "python",
+      "args": [
+        "scripts/mcp_servers/blueprint_extractor_bridge.py",
+        "--base-url",
+        "http://127.0.0.1:30010"
+      ],
+      "env": {},
+      "disabled": false,
+      "autoApprove": [
+        "ExtractBlueprint",
+        "ExtractActiveBlueprint",
+        "GetActiveBlueprint",
+        "GetEditorContext",
+        "SearchAssets",
+        "ListAssets",
+        "ExtractWidgetBlueprint",
+        "ExtractMaterial",
+        "ExtractDataTable",
+        "ExtractEnum",
+        "ExtractStruct",
+        "ExtractAnimBlueprint",
+        "ExtractBehaviorTree",
+        "ExtractBlackboard",
+        "ExtractStateMachine",
+        "ExtractAnimMontage",
+        "ExtractAnimSequence",
+        "ExtractSoundCue"
+      ],
+      "description": "Blueprint Extractor 插件桥接，提供 UE 蓝图提取和操作功能"
+    }
+  }
+}

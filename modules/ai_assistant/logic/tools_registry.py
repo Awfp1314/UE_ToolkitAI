@@ -177,14 +177,18 @@ class ToolsRegistry:
         # 工具注册表
         self.tools: Dict[str, ToolDefinition] = {}
         
+        # 初始化 MCP Manager
+        self.mcp_manager = None
+        self._init_mcp_manager()
+        
         # 注册所有只读工具
         self._register_readonly_tools()
         
         # 注册测试功能工具
         self._register_experimental_tools()
         
-        # 注册 Blueprint Extractor 工具（免费 + 付费）
-        self._register_blueprint_extractor_tools()
+        # 注册 MCP 工具（替代手动注册的 Blueprint Extractor 工具）
+        self._register_mcp_tools()
         
         self.logger.info(f"工具注册表初始化完成，共注册 {len(self.tools)} 个工具")
     
@@ -580,6 +584,85 @@ class ToolsRegistry:
         # 其他错误，直接转发
         return f"工具 '{tool_name}' 执行失败：{error_message}"
     
+    def _init_mcp_manager(self):
+        """初始化 MCP Manager"""
+        try:
+            from modules.ai_assistant.mcp import MCPManager
+            
+            self.mcp_manager = MCPManager()
+            
+            # 尝试加载配置
+            if self.mcp_manager.load_config():
+                self.logger.info("MCP Manager 初始化成功")
+            else:
+                self.logger.warning("MCP Manager 初始化失败或无可用 Server")
+                self.mcp_manager = None
+        
+        except Exception as e:
+            self.logger.warning(f"初始化 MCP Manager 失败: {e}")
+            self.mcp_manager = None
+    
+    def _register_mcp_tools(self):
+        """从 MCP Manager 注册所有工具"""
+        if not self.mcp_manager:
+            self.logger.warning("MCP Manager 未初始化，跳过 MCP 工具注册")
+            return
+        
+        try:
+            mcp_tools = self.mcp_manager.get_all_tools()
+            
+            for tool in mcp_tools:
+                tool_name = tool["name"]
+                server_name = tool.get("_mcp_server")
+                
+                # 创建工具定义（使用闭包捕获变量）
+                def make_tool_function(tn, sn):
+                    return lambda **kwargs: self._execute_mcp_tool(tn, sn, **kwargs)
+                
+                tool_def = ToolDefinition(
+                    name=tool_name,
+                    description=tool["description"],
+                    parameters=tool["inputSchema"],
+                    function=make_tool_function(tool_name, server_name),
+                    requires_confirmation=False  # MCP 工具的权限由插件层控制
+                )
+                
+                self.register_tool(tool_def)
+            
+            self.logger.info(f"从 MCP 注册了 {len(mcp_tools)} 个工具")
+        
+        except Exception as e:
+            self.logger.error(f"注册 MCP 工具失败: {e}", exc_info=True)
+    
+    def _execute_mcp_tool(self, tool_name: str, server_name: str, **kwargs) -> Dict[str, Any]:
+        """
+        执行 MCP 工具
+        
+        Args:
+            tool_name: 工具名称
+            server_name: MCP Server 名称
+            **kwargs: 工具参数
+            
+        Returns:
+            Dict: 执行结果
+        """
+        if not self.mcp_manager:
+            return {
+                "success": False,
+                "error": "MCP Manager 未初始化"
+            }
+        
+        try:
+            result = self.mcp_manager.call_tool(tool_name, kwargs, server_name)
+            return result
+        
+        except Exception as e:
+            self.logger.error(f"执行 MCP 工具失败: {e}", exc_info=True)
+            return {
+                "success": False,
+                "error": str(e)
+            }
+    
     def cleanup(self):
         """清理资源，关闭连接"""
         try:
@@ -588,6 +671,13 @@ class ToolsRegistry:
                 self.logger.info("UE RPC客户端连接已关闭")
         except Exception as e:
             self.logger.warning(f"清理UE客户端时出错: {e}")
+        
+        try:
+            if hasattr(self, 'mcp_manager') and self.mcp_manager:
+                self.mcp_manager.stop_all()
+                self.logger.info("MCP Manager 已停止")
+        except Exception as e:
+            self.logger.warning(f"清理 MCP Manager 时出错: {e}")
     
     # ========== 工具实现函数 ==========
     
@@ -920,583 +1010,11 @@ class ToolsRegistry:
         """
         注册 Blueprint Extractor 工具到注册表
         
-        包含：
-        - 18 个免费工具（只读操作）
-        - 10+ 个付费工具（创建/修改操作）
-        
-        所有工具委托给 _execute_ue_python_tool() 方法，
-        该方法会通过 Feature Gate 检查权限。
+        ⚠️ 已废弃：现在通过 MCP 自动注册，无需手动维护
+        保留此方法作为回退方案（如果 MCP 不可用）
         """
-        
-        # ========== 免费工具（18 个只读工具）==========
-        
-        # 1. ExtractBlueprint - 提取蓝图结构
-        self.register_tool(ToolDefinition(
-            name="ExtractBlueprint",
-            description="提取指定路径蓝图的完整结构信息，包括节点、变量、函数、组件等。用于分析蓝图逻辑和结构。",
-            parameters={
-                "type": "object",
-                "properties": {
-                    "AssetPath": {
-                        "type": "string",
-                        "description": "蓝图资产路径，如 /Game/Blueprints/BP_Character"
-                    },
-                    "Scope": {
-                        "type": "string",
-                        "description": "提取范围：Minimal（最小）| Compact（紧凑，默认）| Full（完整）",
-                        "enum": ["Minimal", "Compact", "Full"]
-                    }
-                },
-                "required": ["AssetPath"]
-            },
-            function=lambda **kwargs: self._execute_ue_python_tool("ExtractBlueprint", **kwargs),
-            requires_confirmation=False
-        ))
-        
-        # 2. ExtractActiveBlueprint - 提取当前活动蓝图（使用 GetEditorContext）
-        self.register_tool(ToolDefinition(
-            name="ExtractActiveBlueprint",
-            description="提取当前在 UE 编辑器中打开的蓝图的结构信息。首先获取编辑器上下文，然后提取打开的蓝图。",
-            parameters={
-                "type": "object",
-                "properties": {
-                    "Scope": {
-                        "type": "string",
-                        "description": "提取范围：Minimal（最小）| Compact（紧凑，默认）| Full（完整）",
-                        "enum": ["Minimal", "Compact", "Full"]
-                    }
-                },
-                "required": []
-            },
-            function=lambda **kwargs: self._extract_active_blueprint_wrapper(**kwargs),
-            requires_confirmation=False
-        ))
-        
-        # 3. GetActiveBlueprint - 获取当前活动蓝图路径（使用 GetEditorContext）
-        self.register_tool(ToolDefinition(
-            name="GetActiveBlueprint",
-            description="获取当前在 UE 编辑器中激活（打开）的蓝图信息，返回蓝图的资产路径、名称等。",
-            parameters={
-                "type": "object",
-                "properties": {},
-                "required": []
-            },
-            function=lambda **kwargs: self._get_active_blueprint_wrapper(**kwargs),
-            requires_confirmation=False
-        ))
-        
-        # 4. ExtractWidgetBlueprint - 提取 UMG Widget
-        self.register_tool(ToolDefinition(
-            name="ExtractWidgetBlueprint",
-            description="提取 UMG Widget 蓝图的结构信息，包括控件树、绑定、动画等。",
-            parameters={
-                "type": "object",
-                "properties": {
-                    "AssetPath": {
-                        "type": "string",
-                        "description": "Widget 蓝图资产路径，如 /Game/UI/WBP_MainMenu"
-                    }
-                },
-                "required": ["AssetPath"]
-            },
-            function=lambda **kwargs: self._execute_ue_python_tool("ExtractWidgetBlueprint", **kwargs),
-            requires_confirmation=False
-        ))
-        
-        # 5. ExtractMaterial - 提取材质
-        self.register_tool(ToolDefinition(
-            name="ExtractMaterial",
-            description="提取材质的结构信息，包括材质节点、参数、纹理等。",
-            parameters={
-                "type": "object",
-                "properties": {
-                    "AssetPath": {
-                        "type": "string",
-                        "description": "材质资产路径，如 /Game/Materials/M_Character"
-                    }
-                },
-                "required": ["AssetPath"]
-            },
-            function=lambda **kwargs: self._execute_ue_python_tool("ExtractMaterial", **kwargs),
-            requires_confirmation=False
-        ))
-        
-        # 6. SearchAssets - 搜索资产
-        self.register_tool(ToolDefinition(
-            name="SearchAssets",
-            description="在 UE 项目中搜索资产，支持按名称、类型、路径等条件搜索。",
-            parameters={
-                "type": "object",
-                "properties": {
-                    "Keyword": {
-                        "type": "string",
-                        "description": "搜索关键词"
-                    },
-                    "AssetClass": {
-                        "type": "string",
-                        "description": "资产类型过滤，如 Blueprint、Material、Texture 等（可选）"
-                    }
-                },
-                "required": ["Keyword"]
-            },
-            function=lambda **kwargs: self._execute_ue_python_tool("SearchAssets", **kwargs),
-            requires_confirmation=False
-        ))
-        
-        # 7. ListAssets - 列出资产
-        self.register_tool(ToolDefinition(
-            name="ListAssets",
-            description="列出指定目录下的所有资产。",
-            parameters={
-                "type": "object",
-                "properties": {
-                    "Path": {
-                        "type": "string",
-                        "description": "资产目录路径，如 /Game/Blueprints"
-                    },
-                    "Recursive": {
-                        "type": "boolean",
-                        "description": "是否递归列出子目录（可选，默认 false）"
-                    }
-                },
-                "required": ["Path"]
-            },
-            function=lambda **kwargs: self._execute_ue_python_tool("ListAssets", **kwargs),
-            requires_confirmation=False
-        ))
-        
-        # 8. GetEditorContext - 获取编辑器上下文
-        self.register_tool(ToolDefinition(
-            name="GetEditorContext",
-            description="获取当前 UE 编辑器的上下文信息，包括当前打开的关卡、选中的 Actor 等。",
-            parameters={
-                "type": "object",
-                "properties": {},
-                "required": []
-            },
-            function=lambda **kwargs: self._execute_ue_python_tool("GetEditorContext", **kwargs),
-            requires_confirmation=False
-        ))
-        
-        # 9. ExtractDataTable - 提取数据表
-        self.register_tool(ToolDefinition(
-            name="ExtractDataTable",
-            description="提取数据表的结构和内容，包括列定义和所有行数据。",
-            parameters={
-                "type": "object",
-                "properties": {
-                    "AssetPath": {
-                        "type": "string",
-                        "description": "数据表资产路径，如 /Game/Data/DT_Items"
-                    }
-                },
-                "required": ["AssetPath"]
-            },
-            function=lambda **kwargs: self._execute_ue_python_tool("ExtractDataTable", **kwargs),
-            requires_confirmation=False
-        ))
-        
-        # 10. ExtractEnum - 提取枚举
-        self.register_tool(ToolDefinition(
-            name="ExtractEnum",
-            description="提取枚举类型的定义，包括所有枚举值。",
-            parameters={
-                "type": "object",
-                "properties": {
-                    "AssetPath": {
-                        "type": "string",
-                        "description": "枚举资产路径，如 /Game/Enums/E_CharacterState"
-                    }
-                },
-                "required": ["AssetPath"]
-            },
-            function=lambda **kwargs: self._execute_ue_python_tool("ExtractEnum", **kwargs),
-            requires_confirmation=False
-        ))
-        
-        # 11. ExtractStruct - 提取结构体
-        self.register_tool(ToolDefinition(
-            name="ExtractStruct",
-            description="提取结构体的定义，包括所有成员变量和类型。",
-            parameters={
-                "type": "object",
-                "properties": {
-                    "AssetPath": {
-                        "type": "string",
-                        "description": "结构体资产路径，如 /Game/Structs/S_PlayerData"
-                    }
-                },
-                "required": ["AssetPath"]
-            },
-            function=lambda **kwargs: self._execute_ue_python_tool("ExtractStruct", **kwargs),
-            requires_confirmation=False
-        ))
-        
-        # 12. ExtractAnimBlueprint - 提取动画蓝图
-        self.register_tool(ToolDefinition(
-            name="ExtractAnimBlueprint",
-            description="提取动画蓝图的结构信息，包括状态机、动画节点等。",
-            parameters={
-                "type": "object",
-                "properties": {
-                    "AssetPath": {
-                        "type": "string",
-                        "description": "动画蓝图资产路径，如 /Game/Characters/ABP_Character"
-                    }
-                },
-                "required": ["AssetPath"]
-            },
-            function=lambda **kwargs: self._execute_ue_python_tool("ExtractAnimBlueprint", **kwargs),
-            requires_confirmation=False
-        ))
-        
-        # 13. ExtractBehaviorTree - 提取行为树
-        self.register_tool(ToolDefinition(
-            name="ExtractBehaviorTree",
-            description="提取 AI 行为树的结构信息，包括任务节点、装饰器、服务等。",
-            parameters={
-                "type": "object",
-                "properties": {
-                    "AssetPath": {
-                        "type": "string",
-                        "description": "行为树资产路径，如 /Game/AI/BT_Enemy"
-                    }
-                },
-                "required": ["AssetPath"]
-            },
-            function=lambda **kwargs: self._execute_ue_python_tool("ExtractBehaviorTree", **kwargs),
-            requires_confirmation=False
-        ))
-        
-        # 14. ExtractBlackboard - 提取黑板
-        self.register_tool(ToolDefinition(
-            name="ExtractBlackboard",
-            description="提取 AI 黑板的结构信息，包括所有键值定义。",
-            parameters={
-                "type": "object",
-                "properties": {
-                    "AssetPath": {
-                        "type": "string",
-                        "description": "黑板资产路径，如 /Game/AI/BB_Enemy"
-                    }
-                },
-                "required": ["AssetPath"]
-            },
-            function=lambda **kwargs: self._execute_ue_python_tool("ExtractBlackboard", **kwargs),
-            requires_confirmation=False
-        ))
-        
-        # 15. ExtractStateMachine - 提取状态机
-        self.register_tool(ToolDefinition(
-            name="ExtractStateMachine",
-            description="提取状态机的结构信息，包括状态、转换条件等。",
-            parameters={
-                "type": "object",
-                "properties": {
-                    "AssetPath": {
-                        "type": "string",
-                        "description": "状态机资产路径"
-                    }
-                },
-                "required": ["AssetPath"]
-            },
-            function=lambda **kwargs: self._execute_ue_python_tool("ExtractStateMachine", **kwargs),
-            requires_confirmation=False
-        ))
-        
-        # 16. ExtractAnimMontage - 提取动画蒙太奇
-        self.register_tool(ToolDefinition(
-            name="ExtractAnimMontage",
-            description="提取动画蒙太奇的结构信息，包括片段、通知等。",
-            parameters={
-                "type": "object",
-                "properties": {
-                    "AssetPath": {
-                        "type": "string",
-                        "description": "动画蒙太奇资产路径，如 /Game/Animations/AM_Attack"
-                    }
-                },
-                "required": ["AssetPath"]
-            },
-            function=lambda **kwargs: self._execute_ue_python_tool("ExtractAnimMontage", **kwargs),
-            requires_confirmation=False
-        ))
-        
-        # 17. ExtractAnimSequence - 提取动画序列
-        self.register_tool(ToolDefinition(
-            name="ExtractAnimSequence",
-            description="提取动画序列的信息，包括帧数、时长、通知等。",
-            parameters={
-                "type": "object",
-                "properties": {
-                    "AssetPath": {
-                        "type": "string",
-                        "description": "动画序列资产路径，如 /Game/Animations/AS_Walk"
-                    }
-                },
-                "required": ["AssetPath"]
-            },
-            function=lambda **kwargs: self._execute_ue_python_tool("ExtractAnimSequence", **kwargs),
-            requires_confirmation=False
-        ))
-        
-        # 18. ExtractSoundCue - 提取声音提示
-        self.register_tool(ToolDefinition(
-            name="ExtractSoundCue",
-            description="提取声音提示的结构信息，包括声音节点、衰减设置等。",
-            parameters={
-                "type": "object",
-                "properties": {
-                    "AssetPath": {
-                        "type": "string",
-                        "description": "声音提示资产路径，如 /Game/Audio/SC_Footstep"
-                    }
-                },
-                "required": ["AssetPath"]
-            },
-            function=lambda **kwargs: self._execute_ue_python_tool("ExtractSoundCue", **kwargs),
-            requires_confirmation=False
-        ))
-        
-        self.logger.info("已注册 18 个免费 Blueprint Extractor 工具")
-        
-        # ========== 付费工具（10+ 个创建/修改工具）==========
-        
-        # 1. CreateBlueprint - 创建新蓝图
-        self.register_tool(ToolDefinition(
-            name="CreateBlueprint",
-            description="创建新的蓝图资产。需要指定资产路径和父类。",
-            parameters={
-                "type": "object",
-                "properties": {
-                    "AssetPath": {
-                        "type": "string",
-                        "description": "新蓝图的保存路径，如 /Game/Blueprints/BP_MyActor"
-                    },
-                    "ParentClass": {
-                        "type": "string",
-                        "description": "父类路径，如 /Script/Engine.Actor"
-                    },
-                    "GraphDSL": {
-                        "type": "string",
-                        "description": "图表 DSL（可选），用于快速定义节点"
-                    }
-                },
-                "required": ["AssetPath", "ParentClass"]
-            },
-            function=lambda **kwargs: self._execute_ue_python_tool("CreateBlueprint", **kwargs),
-            requires_confirmation=True  # 创建操作需要确认
-        ))
-        
-        # 2. ModifyBlueprintMembers - 修改蓝图成员
-        self.register_tool(ToolDefinition(
-            name="ModifyBlueprintMembers",
-            description="修改蓝图的成员（变量、函数等）。支持添加、删除、重命名等操作。",
-            parameters={
-                "type": "object",
-                "properties": {
-                    "AssetPath": {
-                        "type": "string",
-                        "description": "蓝图资产路径"
-                    },
-                    "Operation": {
-                        "type": "string",
-                        "description": "操作类型：add_variable | remove_variable | rename_variable | add_function | remove_function",
-                        "enum": ["add_variable", "remove_variable", "rename_variable", "add_function", "remove_function"]
-                    },
-                    "PayloadJson": {
-                        "type": "string",
-                        "description": "操作参数（JSON 字符串），如 {\"name\": \"Speed\", \"type\": \"float\"}"
-                    }
-                },
-                "required": ["AssetPath", "Operation", "PayloadJson"]
-            },
-            function=lambda **kwargs: self._execute_ue_python_tool("ModifyBlueprintMembers", **kwargs),
-            requires_confirmation=True
-        ))
-        
-        # 3. AddBlueprintVariable - 添加蓝图变量
-        self.register_tool(ToolDefinition(
-            name="AddBlueprintVariable",
-            description="向蓝图添加新变量。支持的类型：bool, int, float, double, string, name, text, vector, rotator, transform, color 等。",
-            parameters={
-                "type": "object",
-                "properties": {
-                    "AssetPath": {
-                        "type": "string",
-                        "description": "蓝图资产路径"
-                    },
-                    "VariableName": {
-                        "type": "string",
-                        "description": "变量名称"
-                    },
-                    "VariableType": {
-                        "type": "string",
-                        "description": "变量类型：bool | int | float | double | string | name | text | vector | rotator | transform | color"
-                    },
-                    "DefaultValue": {
-                        "type": "string",
-                        "description": "默认值（可选）"
-                    }
-                },
-                "required": ["AssetPath", "VariableName", "VariableType"]
-            },
-            function=lambda **kwargs: self._execute_ue_python_tool("AddBlueprintVariable", **kwargs),
-            requires_confirmation=True
-        ))
-        
-        # 4. AddBlueprintFunction - 添加蓝图函数
-        self.register_tool(ToolDefinition(
-            name="AddBlueprintFunction",
-            description="向蓝图添加新函数。可以指定函数名称、输入参数、输出参数等。",
-            parameters={
-                "type": "object",
-                "properties": {
-                    "AssetPath": {
-                        "type": "string",
-                        "description": "蓝图资产路径"
-                    },
-                    "FunctionName": {
-                        "type": "string",
-                        "description": "函数名称"
-                    },
-                    "Inputs": {
-                        "type": "string",
-                        "description": "输入参数（JSON 数组字符串，可选），如 '[{\"name\": \"Value\", \"type\": \"float\"}]'"
-                    },
-                    "Outputs": {
-                        "type": "string",
-                        "description": "输出参数（JSON 数组字符串，可选），如 '[{\"name\": \"Result\", \"type\": \"bool\"}]'"
-                    }
-                },
-                "required": ["AssetPath", "FunctionName"]
-            },
-            function=lambda **kwargs: self._execute_ue_python_tool("AddBlueprintFunction", **kwargs),
-            requires_confirmation=True
-        ))
-        
-        # 5. CreateWidgetBlueprint - 创建 Widget 蓝图
-        self.register_tool(ToolDefinition(
-            name="CreateWidgetBlueprint",
-            description="创建新的 UMG Widget 蓝图。",
-            parameters={
-                "type": "object",
-                "properties": {
-                    "AssetPath": {
-                        "type": "string",
-                        "description": "Widget 蓝图的保存路径，如 /Game/UI/WBP_MyWidget"
-                    },
-                    "ParentClass": {
-                        "type": "string",
-                        "description": "父类路径（可选），默认为 UserWidget"
-                    }
-                },
-                "required": ["AssetPath"]
-            },
-            function=lambda **kwargs: self._execute_ue_python_tool("CreateWidgetBlueprint", **kwargs),
-            requires_confirmation=True
-        ))
-        
-        # 6. ModifyWidget - 修改 Widget
-        self.register_tool(ToolDefinition(
-            name="ModifyWidget",
-            description="修改 UMG Widget 的结构，支持添加、删除、修改控件等操作。",
-            parameters={
-                "type": "object",
-                "properties": {
-                    "AssetPath": {
-                        "type": "string",
-                        "description": "Widget 蓝图资产路径"
-                    },
-                    "Operation": {
-                        "type": "string",
-                        "description": "操作类型：add_widget | remove_widget | set_property",
-                        "enum": ["add_widget", "remove_widget", "set_property"]
-                    },
-                    "PayloadJson": {
-                        "type": "string",
-                        "description": "操作参数（JSON 字符串）"
-                    }
-                },
-                "required": ["AssetPath", "Operation", "PayloadJson"]
-            },
-            function=lambda **kwargs: self._execute_ue_python_tool("ModifyWidget", **kwargs),
-            requires_confirmation=True
-        ))
-        
-        # 7. SaveAssets - 保存资产
-        self.register_tool(ToolDefinition(
-            name="SaveAssets",
-            description="保存一个或多个资产到磁盘。所有修改操作不会自动保存，必须显式调用此工具。",
-            parameters={
-                "type": "object",
-                "properties": {
-                    "AssetPaths": {
-                        "type": "string",
-                        "description": "资产路径列表（JSON 数组字符串），如 '[\"/Game/BP1\", \"/Game/BP2\"]'"
-                    }
-                },
-                "required": ["AssetPaths"]
-            },
-            function=lambda **kwargs: self._execute_ue_python_tool("SaveAssets", **kwargs),
-            requires_confirmation=True
-        ))
-        
-        # 8. ImportTexture - 导入纹理
-        self.register_tool(ToolDefinition(
-            name="ImportTexture",
-            description="从本地文件系统导入纹理到 UE 项目。",
-            parameters={
-                "type": "object",
-                "properties": {
-                    "FilePath": {
-                        "type": "string",
-                        "description": "本地纹理文件路径"
-                    },
-                    "DestinationPath": {
-                        "type": "string",
-                        "description": "UE 项目中的目标路径，如 /Game/Textures/T_MyTexture"
-                    }
-                },
-                "required": ["FilePath", "DestinationPath"]
-            },
-            function=lambda **kwargs: self._execute_ue_python_tool("ImportTexture", **kwargs),
-            requires_confirmation=True
-        ))
-        
-        # 9. StartPIE - 启动 PIE（Play In Editor）
-        self.register_tool(ToolDefinition(
-            name="StartPIE",
-            description="启动 Play In Editor（PIE）模式，用于测试游戏逻辑。",
-            parameters={
-                "type": "object",
-                "properties": {
-                    "Mode": {
-                        "type": "string",
-                        "description": "PIE 模式：Viewport | NewWindow | Standalone（可选，默认 Viewport）",
-                        "enum": ["Viewport", "NewWindow", "Standalone"]
-                    }
-                },
-                "required": []
-            },
-            function=lambda **kwargs: self._execute_ue_python_tool("StartPIE", **kwargs),
-            requires_confirmation=False  # PIE 控制不需要确认
-        ))
-        
-        # 10. StopPIE - 停止 PIE
-        self.register_tool(ToolDefinition(
-            name="StopPIE",
-            description="停止当前运行的 Play In Editor（PIE）会话。",
-            parameters={
-                "type": "object",
-                "properties": {},
-                "required": []
-            },
-            function=lambda **kwargs: self._execute_ue_python_tool("StopPIE", **kwargs),
-            requires_confirmation=False
-        ))
-        
-        self.logger.info("已注册 10 个付费 Blueprint Extractor 工具")
+        self.logger.info("Blueprint Extractor 工具现在通过 MCP 自动注册")
+        # 原有的手动注册代码已移除，工具定义在 scripts/mcp_servers/blueprint_extractor_tools.json
     
     def _execute_ue_python_tool(self, tool_name: str, **kwargs) -> dict:
         """
