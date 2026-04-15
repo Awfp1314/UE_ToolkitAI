@@ -953,10 +953,10 @@ class ToolsRegistry:
             requires_confirmation=False
         ))
         
-        # 2. ExtractActiveBlueprint - 提取当前活动蓝图
+        # 2. ExtractActiveBlueprint - 提取当前活动蓝图（使用 GetEditorContext）
         self.register_tool(ToolDefinition(
             name="ExtractActiveBlueprint",
-            description="提取当前在 UE 编辑器中打开的蓝图的结构信息。这是 GetActiveBlueprint + ExtractBlueprint 的便捷组合。",
+            description="提取当前在 UE 编辑器中打开的蓝图的结构信息。首先获取编辑器上下文，然后提取打开的蓝图。",
             parameters={
                 "type": "object",
                 "properties": {
@@ -968,20 +968,20 @@ class ToolsRegistry:
                 },
                 "required": []
             },
-            function=lambda **kwargs: self._execute_ue_python_tool("ExtractActiveBlueprint", **kwargs),
+            function=lambda **kwargs: self._extract_active_blueprint_wrapper(**kwargs),
             requires_confirmation=False
         ))
         
-        # 3. GetActiveBlueprint - 获取当前活动蓝图路径
+        # 3. GetActiveBlueprint - 获取当前活动蓝图路径（使用 GetEditorContext）
         self.register_tool(ToolDefinition(
             name="GetActiveBlueprint",
-            description="获取当前在 UE 编辑器中激活（打开）的蓝图信息，返回蓝图的资产路径、名称、父类等。",
+            description="获取当前在 UE 编辑器中激活（打开）的蓝图信息，返回蓝图的资产路径、名称等。",
             parameters={
                 "type": "object",
                 "properties": {},
                 "required": []
             },
-            function=lambda **kwargs: self._execute_ue_python_tool("GetActiveBlueprint", **kwargs),
+            function=lambda **kwargs: self._get_active_blueprint_wrapper(**kwargs),
             requires_confirmation=False
         ))
         
@@ -1545,4 +1545,87 @@ class ToolsRegistry:
             return {
                 "status": "error", 
                 "message": f"UE工具执行器捕获到错误: {str(e)}"
+            }
+    
+    def _get_active_blueprint_wrapper(self, **kwargs) -> dict:
+        """
+        获取当前活动蓝图的包装函数
+        Blueprint Extractor 没有 GetActiveBlueprint 函数，
+        需要通过 GetEditorContext 获取打开的蓝图信息
+        """
+        try:
+            # 调用 GetEditorContext
+            result = self._execute_ue_python_tool("GetEditorContext", **kwargs)
+            
+            if result.get("status") == "error":
+                return result
+            
+            # 解析 ReturnValue（JSON 字符串）
+            import json
+            return_value = result.get("ReturnValue", "{}")
+            context = json.loads(return_value)
+            
+            # 提取打开的蓝图信息
+            open_editors = context.get("openAssetEditors", [])
+            selected_assets = context.get("selectedAssetPaths", [])
+            
+            if not open_editors and not selected_assets:
+                return {
+                    "status": "error",
+                    "message": "当前没有打开的蓝图。请在 UE 编辑器中双击打开一个蓝图。"
+                }
+            
+            # 返回第一个打开的蓝图或选中的资产
+            active_blueprint = open_editors[0] if open_editors else selected_assets[0]
+            
+            return {
+                "status": "success",
+                "data": {
+                    "assetPath": active_blueprint,
+                    "openEditors": open_editors,
+                    "selectedAssets": selected_assets
+                }
+            }
+            
+        except Exception as e:
+            self.logger.error(f"获取活动蓝图失败: {e}", exc_info=True)
+            return {
+                "status": "error",
+                "message": f"获取活动蓝图失败: {str(e)}"
+            }
+    
+    def _extract_active_blueprint_wrapper(self, **kwargs) -> dict:
+        """
+        提取当前活动蓝图的包装函数
+        先获取活动蓝图路径，然后调用 ExtractBlueprint
+        """
+        try:
+            # 1. 获取活动蓝图
+            active_result = self._get_active_blueprint_wrapper()
+            
+            if active_result.get("status") == "error":
+                return active_result
+            
+            # 2. 提取蓝图路径
+            asset_path = active_result.get("data", {}).get("assetPath", "")
+            
+            if not asset_path:
+                return {
+                    "status": "error",
+                    "message": "无法获取活动蓝图路径"
+                }
+            
+            # 3. 调用 ExtractBlueprint
+            extract_params = {
+                "AssetPath": asset_path,
+                **kwargs  # 包含 Scope 等参数
+            }
+            
+            return self._execute_ue_python_tool("ExtractBlueprint", **extract_params)
+            
+        except Exception as e:
+            self.logger.error(f"提取活动蓝图失败: {e}", exc_info=True)
+            return {
+                "status": "error",
+                "message": f"提取活动蓝图失败: {str(e)}"
             }

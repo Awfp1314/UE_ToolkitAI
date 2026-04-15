@@ -15,6 +15,7 @@ from PyQt6.QtCore import QObject, pyqtSignal
 from core.utils.error_handler import ErrorHandler
 from core.utils.thread_utils import CancellationToken
 from core.logger import get_logger
+from .dsml_parser import DSMLParser
 
 
 def format_tool_result(result: Dict) -> str:
@@ -328,6 +329,23 @@ class FunctionCallingCoordinator(QObject):
 
             elapsed = time.time() - start_time
             self.logger.info(f"[API调用 #{self.api_call_count}] 流式完成 - 耗时: {elapsed:.2f}s, 内容长度: {len(accumulated_content)}")
+
+            # ⚡ 检查是否包含 DSML 格式的工具调用（DeepSeek 特有格式）
+            if DSMLParser.contains_dsml(accumulated_content):
+                self.logger.info(f"[API调用 #{self.api_call_count}] 检测到 DSML 格式的工具调用")
+                tool_calls = DSMLParser.parse_tool_calls(accumulated_content)
+                
+                if tool_calls:
+                    # 移除 DSML 标记，保留前置文本
+                    clean_content = DSMLParser.remove_dsml_tags(accumulated_content)
+                    
+                    return {
+                        'type': 'tool_calls',
+                        'tool_calls': tool_calls,
+                        'content': clean_content or None,
+                        'usage': accumulated_usage,
+                        'has_streamed_prefix': bool(clean_content),
+                    }
 
             return {
                 'type': 'content',
