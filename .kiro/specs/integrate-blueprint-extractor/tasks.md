@@ -8,21 +8,21 @@
 
 ## Tasks
 
-- [ ] 1. 实现 Feature Gate 权限控制系统
-  - [ ] 1.1 创建 Feature Gate 类和工具分类定义
+- [x] 1. 实现 Feature Gate 权限控制系统
+  - [x] 1.1 创建 Feature Gate 类和工具分类定义
     - 在 `core/security/` 目录创建 `feature_gate.py` 文件
     - 定义 `FREE_TOOLS` 常量集合（18 个只读工具）
     - 定义 `PRO_TOOLS` 常量集合（94 个创建/修改工具）
     - 实现 `FeatureGate` 类的 `__init__` 方法，注入 `LicenseManager`
     - _Requirements: 3.1, 4.1, 4.2, 4.3, 4.4, 4.5, 4.6, 4.7, 4.8, 5.1, 5.2, 5.3, 5.4, 5.5, 5.6, 5.7, 5.8, 5.9_
-  - [ ] 1.2 实现权限检查逻辑
+  - [x] 1.2 实现权限检查逻辑
     - 实现 `check_tool_permission()` 方法，返回权限检查结果字典
     - 实现 `is_ue_tool()` 方法，判断工具是否需要权限检查
     - 对于免费工具，无论 License 状态都返回允许
     - 对于付费工具，检查 License 激活状态
     - 对于非 UE 工具，跳过权限检查
     - _Requirements: 3.2, 3.4, 4.10, 5.10_
-  - [ ] 1.3 实现友好的中文错误消息
+  - [x] 1.3 实现友好的中文错误消息
     - 当付费工具被阻止时，返回包含 `locked: true` 和 `tier: "pro"` 的错误
     - 错误消息建议用户激活 License
     - 错误消息清晰且可操作
@@ -35,18 +35,18 @@
     - 测试错误消息格式和内容
     - _Requirements: 3.2, 3.3, 3.4, 3.5, 4.10, 5.10_
 
-- [ ] 2. 更新 UE Tool Client 以支持 Blueprint Extractor
-  - [ ] 2.1 更新 HTTP 客户端配置
+- [x] 2. 更新 UE Tool Client 以支持 Blueprint Extractor
+  - [x] 2.1 更新 HTTP 客户端配置
     - 在 `core/ue_integration/` 目录找到或创建 `ue_tool_client.py` 文件
     - 更新 Subsystem 路径为 `/Script/BlueprintExtractor.Default__BlueprintExtractorSubsystem`
     - 保持 HTTP 端点为 `http://localhost:8080/remote/object/call`
     - _Requirements: 2.1_
-  - [ ] 2.2 实现连接验证和错误处理
+  - [x] 2.2 实现连接验证和错误处理
     - 实现 `verify_connection()` 方法，验证 Subsystem 可访问性
     - 实现连接失败时的描述性错误消息
     - 当 UE Editor 未运行时，返回友好提示
     - _Requirements: 2.2, 2.3, 15.2_
-  - [ ] 2.3 添加重试机制
+  - [x] 2.3 添加重试机制
     - 实现最多 3 次重试，使用指数退避（1s, 2s, 4s）
     - 3 次失败后返回连接错误
     - _Requirements: NFR - Reliability_
@@ -57,13 +57,13 @@
     - 测试错误消息格式
     - _Requirements: 2.1, 2.2, 2.3_
 
-- [ ] 3. Checkpoint - 验证核心基础设施
+- [x] 3. Checkpoint - 验证核心基础设施
   - 确保 Feature Gate 和 UE Tool Client 的单元测试通过
   - 确认权限检查逻辑正确
   - 如有问题，请向用户询问
 
-- [ ] 4. 更新 Tools Registry 并注册 Blueprint Extractor 工具
-  - [ ] 4.1 实现工具执行方法
+- [x] 4. 更新 Tools Registry 并注册 Blueprint Extractor 工具
+  - [x] 4.1 实现工具执行方法
     - 在 `core/tools/tools_registry.py` 中找到 `ToolsRegistry` 类
     - 实现 `_execute_ue_python_tool()` 方法
     - 调用 Feature Gate 检查权限
@@ -71,7 +71,7 @@
     - 如果允许，调用 UE Tool Client 执行工具
     - 返回统一格式的结果（`success`, `result`, `error`）
     - _Requirements: 3.2, 3.3, 7.1, 7.2, 7.3, 7.4, 7.5_
-  - [ ] 4.2 注册免费工具（18 个只读工具）
+  - [x] 4.2 注册免费工具（18 个只读工具）
     - 实现 `_register_blueprint_extractor_tools()` 方法
     - 注册 `ExtractBlueprint` - 提取蓝图结构
     - 注册 `ExtractActiveBlueprint` - 提取当前活动蓝图
@@ -94,7 +94,7 @@
     - 每个工具包含：名称、中文描述、JSON Schema 参数、执行函数、确认要求标志
     - 所有工具委托给 `_execute_ue_python_tool()` 方法
     - _Requirements: 6.1, 6.2, 6.3, 6.4, 6.5, 6.6, 6.7, 6.8_
-  - [ ] 4.3 注册付费工具（至少 10 个核心创建/修改工具）
+  - [x] 4.3 注册付费工具（至少 10 个核心创建/修改工具）
     - 注册 `CreateBlueprint` - 创建新蓝图（需要确认）
     - 注册 `ModifyBlueprintMembers` - 修改蓝图成员（需要确认）
     - 注册 `AddBlueprintVariable` - 添加蓝图变量（需要确认）
@@ -107,7 +107,7 @@
     - 注册 `StopPIE` - 停止 PIE
     - 每个工具包含完整的参数 Schema 和中文描述
     - _Requirements: 6.1, 6.2, 6.3, 6.4, 6.5, 6.6, 6.7, 6.8_
-  - [ ] 4.4 实现参数验证和错误处理
+  - [x] 4.4 实现参数验证和错误处理
     - 在工具调度前验证参数符合 JSON Schema
     - 参数无效时返回清晰的错误消息，显示正确格式
     - 转发 Blueprint Extractor 插件的错误消息
@@ -119,22 +119,22 @@
     - 测试错误处理和消息格式
     - _Requirements: 6.2, 7.1, 7.2, 7.3, 7.4, 7.5_
 
-- [ ] 5. Checkpoint - 验证工具注册
+- [x] 5. Checkpoint - 验证工具注册
   - 确保所有工具正确注册
   - 确认工具调度流程正常
   - 如有问题，请向用户询问
 
-- [ ] 6. 部署 Blueprint Extractor 插件并清理旧代码
-  - [ ] 6.1 部署 Blueprint Extractor 插件
+- [x] 6. 部署 Blueprint Extractor 插件并清理旧代码
+  - [x] 6.1 部署 Blueprint Extractor 插件
     - 确认 `Plugins/BlueprintExtractor/` 目录存在且包含完整插件文件
     - 验证 `BlueprintExtractor.uplugin` 文件存在
     - 验证 LICENSE 文件存在
     - _Requirements: 1.1, 1.4, 16.3_
-  - [ ] 6.2 删除旧的 BlueprintToAI 插件
+  - [x] 6.2 删除旧的 BlueprintToAI 插件
     - 删除 `Plugins/BlueprintToAI/` 目录及其所有内容
     - 删除 `Plugins/temp_blueprint_extractor/` 目录及其所有内容
     - _Requirements: 1.2, 1.3_
-  - [ ] 6.3 清理旧代码和临时文件
+  - [x] 6.3 清理旧代码和临时文件
     - 在 `ToolsRegistry` 中删除或替换 `_register_ue_tools()` 方法
     - 搜索并删除代码库中所有对 "BlueprintToAI" 的引用
     - 删除 `Plugins/BlueprintToAI_Design.md`

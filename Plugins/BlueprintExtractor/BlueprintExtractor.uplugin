@@ -1,0 +1,42 @@
+{
+	"FileVersion": 3,
+	"Version": 4,
+	"VersionName": "2.1.1",
+	"FriendlyName": "Blueprint Extractor",
+	"Description": "Extracts and authors Blueprint, UI, Enhanced Input, AI, data, material, curve, and animation assets through structured JSON and MCP tools",
+	"Category": "Editor",
+	"CreatedBy": "",
+	"EnabledByDefault": true,
+	"CanContainContent": false,
+	"IsBetaVersion": false,
+	"Installed": false,
+	"Plugins": [
+		{
+			"Name": "Interchange",
+			"Enabled": true
+		},
+		{
+			"Name": "PropertyBindingUtils",
+			"Enabled": true
+		},
+		{
+			"Name": "EnhancedInput",
+			"Enabled": true
+		},
+		{
+			"Name": "RemoteControl",
+			"Enabled": true
+		},
+		{
+			"Name": "StateTree",
+			"Enabled": true
+		}
+	],
+	"Modules": [
+		{
+			"Name": "BlueprintExtractor",
+			"Type": "Editor",
+			"LoadingPhase": "Default"
+		}
+	]
+}
