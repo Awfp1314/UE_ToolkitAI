@@ -1,0 +1,447 @@
+[
+  {
+    "name": "ExtractBlueprint",
+    "description": "提取指定路径蓝图的完整结构信息，包括节点、变量、函数、组件等。用于分析蓝图逻辑和结构。",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "AssetPath": {
+          "type": "string",
+          "description": "蓝图资产路径，如 /Game/Blueprints/BP_Character"
+        },
+        "Scope": {
+          "type": "string",
+          "description": "提取范围：Minimal（最小）| Compact（紧凑，默认）| Full（完整）",
+          "enum": ["Minimal", "Compact", "Full"]
+        }
+      },
+      "required": ["AssetPath"]
+    }
+  },
+  {
+    "name": "ExtractActiveBlueprint",
+    "description": "提取当前在 UE 编辑器中打开的蓝图的结构信息。首先获取编辑器上下文，然后提取打开的蓝图。",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "Scope": {
+          "type": "string",
+          "description": "提取范围：Minimal（最小）| Compact（紧凑，默认）| Full（完整）",
+          "enum": ["Minimal", "Compact", "Full"]
+        }
+      }
+    }
+  },
+  {
+    "name": "GetActiveBlueprint",
+    "description": "获取当前在 UE 编辑器中激活（打开）的蓝图信息，返回蓝图的资产路径、名称等。",
+    "inputSchema": {
+      "type": "object",
+      "properties": {}
+    }
+  },
+  {
+    "name": "ExtractWidgetBlueprint",
+    "description": "提取 UMG Widget 蓝图的结构信息，包括控件树、绑定、动画等。",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "AssetPath": {
+          "type": "string",
+          "description": "Widget 蓝图资产路径，如 /Game/UI/WBP_MainMenu"
+        }
+      },
+      "required": ["AssetPath"]
+    }
+  },
+  {
+    "name": "ExtractMaterial",
+    "description": "提取材质的结构信息，包括材质节点、参数、纹理等。",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "AssetPath": {
+          "type": "string",
+          "description": "材质资产路径，如 /Game/Materials/M_Character"
+        }
+      },
+      "required": ["AssetPath"]
+    }
+  },
+  {
+    "name": "SearchAssets",
+    "description": "在 UE 项目中搜索资产，支持按名称、类型、路径等条件搜索。",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "Keyword": {
+          "type": "string",
+          "description": "搜索关键词"
+        },
+        "AssetClass": {
+          "type": "string",
+          "description": "资产类型过滤，如 Blueprint、Material、Texture 等（可选）"
+        }
+      },
+      "required": ["Keyword"]
+    }
+  },
+  {
+    "name": "ListAssets",
+    "description": "列出指定目录下的所有资产。",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "Path": {
+          "type": "string",
+          "description": "资产目录路径，如 /Game/Blueprints"
+        },
+        "Recursive": {
+          "type": "boolean",
+          "description": "是否递归列出子目录（可选，默认 false）"
+        }
+      },
+      "required": ["Path"]
+    }
+  },
+  {
+    "name": "GetEditorContext",
+    "description": "获取当前 UE 编辑器的上下文信息，包括当前打开的关卡、选中的 Actor 等。",
+    "inputSchema": {
+      "type": "object",
+      "properties": {}
+    }
+  },
+  {
+    "name": "ExtractDataTable",
+    "description": "提取数据表的结构和内容，包括列定义和所有行数据。",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "AssetPath": {
+          "type": "string",
+          "description": "数据表资产路径，如 /Game/Data/DT_Items"
+        }
+      },
+      "required": ["AssetPath"]
+    }
+  },
+  {
+    "name": "ExtractEnum",
+    "description": "提取枚举类型的定义，包括所有枚举值。",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "AssetPath": {
+          "type": "string",
+          "description": "枚举资产路径，如 /Game/Enums/E_CharacterState"
+        }
+      },
+      "required": ["AssetPath"]
+    }
+  },
+  {
+    "name": "ExtractStruct",
+    "description": "提取结构体的定义，包括所有成员变量和类型。",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "AssetPath": {
+          "type": "string",
+          "description": "结构体资产路径，如 /Game/Structs/S_PlayerData"
+        }
+      },
+      "required": ["AssetPath"]
+    }
+  },
+  {
+    "name": "ExtractAnimBlueprint",
+    "description": "提取动画蓝图的结构信息，包括状态机、动画节点等。",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "AssetPath": {
+          "type": "string",
+          "description": "动画蓝图资产路径，如 /Game/Characters/ABP_Character"
+        }
+      },
+      "required": ["AssetPath"]
+    }
+  },
+  {
+    "name": "ExtractBehaviorTree",
+    "description": "提取 AI 行为树的结构信息，包括任务节点、装饰器、服务等。",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "AssetPath": {
+          "type": "string",
+          "description": "行为树资产路径，如 /Game/AI/BT_Enemy"
+        }
+      },
+      "required": ["AssetPath"]
+    }
+  },
+  {
+    "name": "ExtractBlackboard",
+    "description": "提取 AI 黑板的结构信息，包括所有键值定义。",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "AssetPath": {
+          "type": "string",
+          "description": "黑板资产路径，如 /Game/AI/BB_Enemy"
+        }
+      },
+      "required": ["AssetPath"]
+    }
+  },
+  {
+    "name": "ExtractStateMachine",
+    "description": "提取状态机的结构信息，包括状态、转换条件等。",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "AssetPath": {
+          "type": "string",
+          "description": "状态机资产路径"
+        }
+      },
+      "required": ["AssetPath"]
+    }
+  },
+  {
+    "name": "ExtractAnimMontage",
+    "description": "提取动画蒙太奇的结构信息，包括片段、通知等。",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "AssetPath": {
+          "type": "string",
+          "description": "动画蒙太奇资产路径，如 /Game/Animations/AM_Attack"
+        }
+      },
+      "required": ["AssetPath"]
+    }
+  },
+  {
+    "name": "ExtractAnimSequence",
+    "description": "提取动画序列的信息，包括帧数、时长、通知等。",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "AssetPath": {
+          "type": "string",
+          "description": "动画序列资产路径，如 /Game/Animations/AS_Walk"
+        }
+      },
+      "required": ["AssetPath"]
+    }
+  },
+  {
+    "name": "ExtractSoundCue",
+    "description": "提取声音提示的结构信息，包括声音节点、衰减设置等。",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "AssetPath": {
+          "type": "string",
+          "description": "声音提示资产路径，如 /Game/Audio/SC_Footstep"
+        }
+      },
+      "required": ["AssetPath"]
+    }
+  },
+  {
+    "name": "CreateBlueprint",
+    "description": "创建新的蓝图资产。需要指定资产路径和父类。⚠️ 此操作会修改项目，需要付费许可证。",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "AssetPath": {
+          "type": "string",
+          "description": "新蓝图的保存路径，如 /Game/Blueprints/BP_MyActor"
+        },
+        "ParentClass": {
+          "type": "string",
+          "description": "父类路径，如 /Script/Engine.Actor"
+        },
+        "GraphDSL": {
+          "type": "string",
+          "description": "图表 DSL（可选），用于快速定义节点"
+        }
+      },
+      "required": ["AssetPath", "ParentClass"]
+    }
+  },
+  {
+    "name": "ModifyBlueprintMembers",
+    "description": "修改蓝图的成员（变量、函数等）。支持添加、删除、重命名等操作。⚠️ 此操作会修改项目，需要付费许可证。",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "AssetPath": {
+          "type": "string",
+          "description": "蓝图资产路径"
+        },
+        "Operation": {
+          "type": "string",
+          "description": "操作类型",
+          "enum": ["add_variable", "remove_variable", "rename_variable", "add_function", "remove_function"]
+        },
+        "PayloadJson": {
+          "type": "string",
+          "description": "操作参数（JSON 字符串），如 {\"name\": \"Speed\", \"type\": \"float\"}"
+        }
+      },
+      "required": ["AssetPath", "Operation", "PayloadJson"]
+    }
+  },
+  {
+    "name": "AddBlueprintVariable",
+    "description": "向蓝图添加新变量。⚠️ 此操作会修改项目，需要付费许可证。",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "AssetPath": {
+          "type": "string",
+          "description": "蓝图资产路径"
+        },
+        "VariableName": {
+          "type": "string",
+          "description": "变量名称"
+        },
+        "VariableType": {
+          "type": "string",
+          "description": "变量类型：bool | int | float | double | string | name | text | vector | rotator | transform | color"
+        },
+        "DefaultValue": {
+          "type": "string",
+          "description": "默认值（可选）"
+        }
+      },
+      "required": ["AssetPath", "VariableName", "VariableType"]
+    }
+  },
+  {
+    "name": "AddBlueprintFunction",
+    "description": "向蓝图添加新函数。⚠️ 此操作会修改项目，需要付费许可证。",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "AssetPath": {
+          "type": "string",
+          "description": "蓝图资产路径"
+        },
+        "FunctionName": {
+          "type": "string",
+          "description": "函数名称"
+        },
+        "Inputs": {
+          "type": "string",
+          "description": "输入参数（JSON 数组字符串，可选），如 '[{\"name\": \"Value\", \"type\": \"float\"}]'"
+        },
+        "Outputs": {
+          "type": "string",
+          "description": "输出参数（JSON 数组字符串，可选），如 '[{\"name\": \"Result\", \"type\": \"bool\"}]'"
+        }
+      },
+      "required": ["AssetPath", "FunctionName"]
+    }
+  },
+  {
+    "name": "CreateWidgetBlueprint",
+    "description": "创建新的 UMG Widget 蓝图。⚠️ 此操作会修改项目，需要付费许可证。",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "AssetPath": {
+          "type": "string",
+          "description": "Widget 蓝图的保存路径，如 /Game/UI/WBP_MyWidget"
+        },
+        "ParentClass": {
+          "type": "string",
+          "description": "父类路径（可选），默认为 UserWidget"
+        }
+      },
+      "required": ["AssetPath"]
+    }
+  },
+  {
+    "name": "ModifyWidget",
+    "description": "修改 UMG Widget 的结构。⚠️ 此操作会修改项目，需要付费许可证。",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "AssetPath": {
+          "type": "string",
+          "description": "Widget 蓝图资产路径"
+        },
+        "Operation": {
+          "type": "string",
+          "description": "操作类型",
+          "enum": ["add_widget", "remove_widget", "set_property"]
+        },
+        "PayloadJson": {
+          "type": "string",
+          "description": "操作参数（JSON 字符串）"
+        }
+      },
+      "required": ["AssetPath", "Operation", "PayloadJson"]
+    }
+  },
+  {
+    "name": "SaveAssets",
+    "description": "保存一个或多个资产到磁盘。所有修改操作不会自动保存，必须显式调用此工具。⚠️ 需要付费许可证。",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "AssetPaths": {
+          "type": "string",
+          "description": "资产路径列表（JSON 数组字符串），如 '[\"/Game/BP1\", \"/Game/BP2\"]'"
+        }
+      },
+      "required": ["AssetPaths"]
+    }
+  },
+  {
+    "name": "ImportTexture",
+    "description": "从本地文件系统导入纹理到 UE 项目。⚠️ 此操作会修改项目，需要付费许可证。",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "FilePath": {
+          "type": "string",
+          "description": "本地纹理文件路径"
+        },
+        "DestinationPath": {
+          "type": "string",
+          "description": "UE 项目中的目标路径，如 /Game/Textures/T_MyTexture"
+        }
+      },
+      "required": ["FilePath", "DestinationPath"]
+    }
+  },
+  {
+    "name": "StartPIE",
+    "description": "启动 Play In Editor（PIE）模式，用于测试游戏逻辑。",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "Mode": {
+          "type": "string",
+          "description": "PIE 模式（可选，默认 Viewport）",
+          "enum": ["Viewport", "NewWindow", "Standalone"]
+        }
+      }
+    }
+  },
+  {
+    "name": "StopPIE",
+    "description": "停止当前运行的 Play In Editor（PIE）会话。",
+    "inputSchema": {
+      "type": "object",
+      "properties": {}
+    }
+  }
+]
