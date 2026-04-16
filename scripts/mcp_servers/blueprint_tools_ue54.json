@@ -1,0 +1,162 @@
+[
+  {
+    "name": "GetEditorContext",
+    "description": "获取当前 UE 编辑器的上下文信息（项目名、引擎版本、插件版本等）",
+    "inputSchema": {
+      "type": "object",
+      "properties": {}
+    }
+  },
+  {
+    "name": "SearchAssets",
+    "description": "在 UE 项目中搜索资产，支持按名称、类型等条件搜索",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "Query": {
+          "type": "string",
+          "description": "搜索关键词"
+        },
+        "ClassFilter": {
+          "type": "string",
+          "description": "资产类型过滤，如 Blueprint、Material 等（可选，默认 Blueprint）"
+        },
+        "MaxResults": {
+          "type": "integer",
+          "description": "最大返回结果数（可选，默认 50）"
+        }
+      },
+      "required": ["Query"]
+    }
+  },
+  {
+    "name": "ListAssets",
+    "description": "列出指定目录下的所有资产",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "PackagePath": {
+          "type": "string",
+          "description": "资产目录路径，如 /Game/Blueprints"
+        },
+        "bRecursive": {
+          "type": "boolean",
+          "description": "是否递归列出子目录（可选，默认 true）"
+        },
+        "ClassFilter": {
+          "type": "string",
+          "description": "资产类型过滤（可选）"
+        }
+      },
+      "required": ["PackagePath"]
+    }
+  },
+  {
+    "name": "ExtractBlueprint",
+    "description": "提取指定路径蓝图的结构信息（目前仅支持基础元数据）",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "AssetPath": {
+          "type": "string",
+          "description": "蓝图资产路径，如 /Game/Blueprints/BP_Character.BP_Character"
+        },
+        "Scope": {
+          "type": "string",
+          "description": "提取范围：ClassLevel | Variables | Components | FunctionsShallow | Full（默认 Full）",
+          "enum": ["ClassLevel", "Variables", "Components", "FunctionsShallow", "Full"]
+        },
+        "GraphFilter": {
+          "type": "string",
+          "description": "图表名称过滤，逗号分隔（可选）"
+        },
+        "bIncludeClassDefaults": {
+          "type": "boolean",
+          "description": "是否包含类默认值（可选，默认 false）"
+        }
+      },
+      "required": ["AssetPath"]
+    }
+  },
+  {
+    "name": "CreateBlueprint",
+    "description": "创建新的蓝图资产。需要指定资产路径和父类",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "AssetPath": {
+          "type": "string",
+          "description": "新蓝图的保存路径，如 /Game/Blueprints/BP_MyActor"
+        },
+        "ParentClassPath": {
+          "type": "string",
+          "description": "父类路径，如 /Script/Engine.Actor"
+        },
+        "PayloadJson": {
+          "type": "string",
+          "description": "初始成员定义（JSON 字符串，可选）"
+        },
+        "bValidateOnly": {
+          "type": "boolean",
+          "description": "仅验证不创建（可选，默认 false）"
+        }
+      },
+      "required": ["AssetPath", "ParentClassPath"]
+    }
+  },
+  {
+    "name": "ModifyBlueprintMembers",
+    "description": "修改蓝图的成员（变量、函数等）。支持添加、删除、修改操作",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "AssetPath": {
+          "type": "string",
+          "description": "蓝图资产路径，如 /Game/Blueprints/BP_Test.BP_Test"
+        },
+        "Operation": {
+          "type": "string",
+          "description": "操作类型",
+          "enum": ["add_variable", "remove_variable", "modify_variable"]
+        },
+        "PayloadJson": {
+          "type": "string",
+          "description": "操作参数（JSON 字符串）。\n\nadd_variable 示例：{\"name\": \"Health\", \"type\": {\"category\": \"float\"}, \"defaultValue\": \"100.0\", \"category\": \"Stats\", \"tooltip\": \"Player health\", \"instanceEditable\": true, \"exposeOnSpawn\": false, \"replicated\": false}\n\nremove_variable 示例：{\"name\": \"OldVariable\"}\n\nmodify_variable 示例：{\"name\": \"Health\", \"defaultValue\": \"150.0\", \"category\": \"Updated Stats\"}"
+        },
+        "bValidateOnly": {
+          "type": "boolean",
+          "description": "仅验证不修改（可选，默认 false）"
+        }
+      },
+      "required": ["AssetPath", "Operation", "PayloadJson"]
+    }
+  },
+  {
+    "name": "CompileBlueprint",
+    "description": "编译蓝图资产，返回编译错误和警告",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "AssetPath": {
+          "type": "string",
+          "description": "蓝图资产路径"
+        }
+      },
+      "required": ["AssetPath"]
+    }
+  },
+  {
+    "name": "SaveAssets",
+    "description": "保存一个或多个资产到磁盘。所有修改操作不会自动保存，必须显式调用此工具",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "AssetPathsJson": {
+          "type": "string",
+          "description": "资产路径列表（JSON 数组字符串），如 '[\"/Game/BP1.BP1\", \"/Game/BP2.BP2\"]'"
+        }
+      },
+      "required": ["AssetPathsJson"]
+    }
+  }
+]
