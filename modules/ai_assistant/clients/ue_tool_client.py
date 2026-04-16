@@ -35,7 +35,7 @@ class UEToolClient:
             base_url: Blueprint Extractor HTTP 服务器基础URL
         """
         self.base_url = base_url.rstrip('/')
-        self.subsystem_path = "/Script/BlueprintExtractor.Default__BlueprintExtractorSubsystem"
+        self.subsystem_path = "/Script/BlueprintToolsUE54.Default__BlueprintToolsSubsystem"
         self._connected = False
         
         logger.info(f"UEToolClient 初始化完成 (目标: {base_url}, Subsystem: {self.subsystem_path})")
