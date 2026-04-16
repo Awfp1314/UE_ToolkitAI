@@ -574,7 +574,7 @@ class FunctionCallingCoordinator(QObject):
                     text = chunk.get('text', '')
                     if text:
                         accumulated_content += text  # ⚡ 累积内容
-                        self.chunk_received.emit(text)
+                        # ⚠️ 暂时不输出，等检测完 DSML 后再决定
                 elif chunk_type == 'token_usage':
                     # ⚡ 转发 token 使用量
                     self.token_usage.emit(chunk.get('usage', {}))
@@ -582,16 +582,67 @@ class FunctionCallingCoordinator(QObject):
                 # 字符串类型（向后兼容）
                 text = str(chunk)
                 accumulated_content += text  # ⚡ 累积内容
-                self.chunk_received.emit(text)
         
         # print(f"[DEBUG] [流式输出] 完成！共输出{chunk_count}个chunk")  # 打包时自动注释
         self.logger.info(f"[流式输出] 流式输出完成，共{chunk_count}个chunk")
         
         # ⚡ 检查是否包含 DSML 格式的工具调用（DeepSeek 特有格式）
         if DSMLParser.contains_dsml(accumulated_content):
-            self.logger.warning(f"[流式输出] 检测到 DSML 格式输出！这不应该发生在最终响应中。")
-            self.logger.warning(f"[流式输出] DeepSeek 模型应该在第一轮就返回标准 tool_calls，而不是在工具执行后返回 DSML。")
-            self.logger.warning(f"[流式输出] 内容预览: {accumulated_content[:200]}")
+            self.logger.info(f"[流式输出] 检测到 DSML 格式的工具调用，开始解析...")
+            tool_calls = DSMLParser.parse_tool_calls(accumulated_content)
+            
+            if tool_calls:
+                self.logger.info(f"[流式输出] 成功解析 {len(tool_calls)} 个工具调用")
+                
+                # 移除 DSML 标记，保留前置文本
+                clean_content = DSMLParser.remove_dsml_tags(accumulated_content)
+                
+                # 如果有前置文本，先输出
+                if clean_content.strip():
+                    self.chunk_received.emit(clean_content)
+                
+                # 构建 assistant 消息（包含 tool_calls）
+                assistant_message = {
+                    "role": "assistant",
+                    "content": clean_content if clean_content.strip() else None,
+                    "tool_calls": tool_calls
+                }
+                self.messages.append(assistant_message)
+                
+                # 执行每个工具
+                for tool_call in tool_calls:
+                    if self._should_stop:
+                        break
+                    
+                    tool_name = tool_call['function']['name']
+                    tool_args_str = tool_call['function']['arguments']
+                    tool_call_id = tool_call['id']
+                    
+                    # 通知 UI 工具开始
+                    self.tool_start.emit(tool_name)
+                    
+                    # 执行工具
+                    result = self._execute_tool(tool_name, tool_args_str)
+                    
+                    # 通知 UI 工具完成
+                    self.tool_complete.emit(tool_name, result)
+                    
+                    # 将工具结果追加到消息
+                    tool_message = {
+                        "role": "tool",
+                        "tool_call_id": tool_call_id,
+                        "content": format_tool_result(result)
+                    }
+                    self.messages.append(tool_message)
+                
+                # 递归调用，获取工具执行后的最终回复
+                self.logger.info(f"[流式输出] 工具执行完毕，递归获取最终回复")
+                self._stream_final_response(self.messages, tools=None)
+                return
+        
+        # 没有 DSML，正常输出累积的内容
+        if accumulated_content:
+            self.chunk_received.emit(accumulated_content)
         
         self.request_finished.emit()
     
