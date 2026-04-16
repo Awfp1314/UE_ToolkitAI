@@ -555,6 +555,8 @@ class FunctionCallingCoordinator(QObject):
         self.logger.info(f"[流式输出] 开始流式输出最终响应，消息数:{len(messages)}")
         
         chunk_count = 0
+        accumulated_content = ""  # ⚡ 累积内容用于 DSML 检测
+        
         # ⚡ 关键修复：移除重试逻辑，直接抛出异常
         # 原因：重试逻辑会导致重复 API 调用，浪费 Token
         for chunk in self.llm_client.generate_response(messages, stream=True, tools=tools):
@@ -571,16 +573,26 @@ class FunctionCallingCoordinator(QObject):
                 if chunk_type == 'content':
                     text = chunk.get('text', '')
                     if text:
+                        accumulated_content += text  # ⚡ 累积内容
                         self.chunk_received.emit(text)
                 elif chunk_type == 'token_usage':
                     # ⚡ 转发 token 使用量
                     self.token_usage.emit(chunk.get('usage', {}))
             else:
                 # 字符串类型（向后兼容）
-                self.chunk_received.emit(str(chunk))
+                text = str(chunk)
+                accumulated_content += text  # ⚡ 累积内容
+                self.chunk_received.emit(text)
         
         # print(f"[DEBUG] [流式输出] 完成！共输出{chunk_count}个chunk")  # 打包时自动注释
         self.logger.info(f"[流式输出] 流式输出完成，共{chunk_count}个chunk")
+        
+        # ⚡ 检查是否包含 DSML 格式的工具调用（DeepSeek 特有格式）
+        if DSMLParser.contains_dsml(accumulated_content):
+            self.logger.warning(f"[流式输出] 检测到 DSML 格式输出！这不应该发生在最终响应中。")
+            self.logger.warning(f"[流式输出] DeepSeek 模型应该在第一轮就返回标准 tool_calls，而不是在工具执行后返回 DSML。")
+            self.logger.warning(f"[流式输出] 内容预览: {accumulated_content[:200]}")
+        
         self.request_finished.emit()
     
     def _execute_tool(self, tool_name: str, tool_args_str: str) -> Dict:

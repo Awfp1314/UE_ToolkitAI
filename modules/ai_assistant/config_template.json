@@ -7,7 +7,8 @@
     "default_model": "gpt-3.5-turbo",
     "temperature": 0.8,
     "timeout": 60,
-    "note": "请在此处配置有效的API密钥。如果没有API密钥，可以访问 https://platform.openai.com/api-keys 获取，或使用其他兼容OpenAI的API服务。"
+    "supports_function_calling": true,
+    "note": "请在此处配置有效的API密钥。如果没有API密钥，可以访问 https://platform.openai.com/api-keys 获取，或使用其他兼容OpenAI的API服务。supports_function_calling 表示该模型是否支持 function calling（工具调用），DeepSeek 等模型不支持请设为 false。"
   },
   "ollama_settings": {
     "base_url": "http://localhost:11434",
@@ -15,7 +16,8 @@
     "temperature": 0.9,
     "stream": true,
     "timeout": 300,
-    "note": "如需使用本地Ollama，请确保Ollama服务正在运行"
+    "supports_function_calling": false,
+    "note": "如需使用本地Ollama，请确保Ollama服务正在运行。大多数 Ollama 模型不支持 function calling。"
   },
   "note": "首次使用前请在设置中配置API密钥或Ollama服务"
 }
