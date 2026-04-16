@@ -1083,17 +1083,19 @@ class AIAssistantSection(SettingsSection):
             config["api_settings"]["api_key"] = self.api_key_input.text().strip()
             config["api_settings"]["api_url"] = self.api_url_input.text().strip()
             
-            # 根据供应商设置默认模型（如果配置中没有模型，使用供应商默认值）
-            provider_default_models = {
-                "openai": "gpt-4o-mini",
-                "gemini": "gemini-2.0-flash-exp",
-                "deepseek": "deepseek-chat",
-                "claude": "claude-3-5-sonnet-20241022",
-                "byok": config["api_settings"].get("default_model", "gpt-3.5-turbo")
-            }
-            
-            # 如果配置中已有模型，保留；否则使用供应商默认模型
-            if "default_model" not in config["api_settings"] or not config["api_settings"]["default_model"]:
+            # 从模型输入框读取模型名称（用户可能手动修改了）
+            model_from_input = self.api_model_input.text().strip()
+            if model_from_input:
+                config["api_settings"]["default_model"] = model_from_input
+            else:
+                # 如果输入框为空，使用供应商默认模型
+                provider_default_models = {
+                    "openai": "gpt-4o-mini",
+                    "gemini": "gemini-2.0-flash-exp",
+                    "deepseek": "deepseek-chat",
+                    "claude": "claude-3-5-sonnet-20241022",
+                    "byok": "gpt-3.5-turbo"
+                }
                 config["api_settings"]["default_model"] = provider_default_models.get(provider, "gpt-4o-mini")
             
             # Ollama设置
