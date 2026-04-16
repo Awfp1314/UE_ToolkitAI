@@ -857,7 +857,7 @@ class AIAssistantSection(SettingsSection):
         self.ollama_widget.setVisible(is_ollama)
         self.api_url_row.setVisible(is_byok)
         
-        # 如果不是加载配置状态，则自动设置 URL
+        # 如果不是加载配置状态，则自动设置 URL 和默认模型
         if not self._loading_config:
             config = provider_configs.get(provider, {})
             
@@ -865,6 +865,12 @@ class AIAssistantSection(SettingsSection):
             if not is_byok and not is_ollama:
                 url = config.get("url", "")
                 self.api_url_input.setText(url)
+                
+                # 同时设置默认模型，避免残留上一个供应商的模型
+                model = config.get("model", "")
+                if model:
+                    self.api_model_input.setText(model)
+                    logger.info(f"供应商切换：自动设置默认模型为 {model}")
         
         logger.info(f"供应商切换到: {provider}")
     
