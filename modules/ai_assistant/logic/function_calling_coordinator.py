@@ -556,6 +556,7 @@ class FunctionCallingCoordinator(QObject):
         
         chunk_count = 0
         accumulated_content = ""  # ⚡ 累积内容用于 DSML 检测
+        dsml_detected = False  # ⚡ DSML 检测标志
         
         # ⚡ 关键修复：移除重试逻辑，直接抛出异常
         # 原因：重试逻辑会导致重复 API 调用，浪费 Token
@@ -574,7 +575,16 @@ class FunctionCallingCoordinator(QObject):
                     text = chunk.get('text', '')
                     if text:
                         accumulated_content += text  # ⚡ 累积内容
-                        # ⚠️ 暂时不输出，等检测完 DSML 后再决定
+                        
+                        # ⚡ 实时检测 DSML 标记
+                        if not dsml_detected and '<|DSML|' in accumulated_content:
+                            dsml_detected = True
+                            self.logger.info(f"[流式输出] 检测到 DSML 标记，停止输出并等待完整内容")
+                        
+                        # 如果没有检测到 DSML，正常输出
+                        if not dsml_detected:
+                            self.chunk_received.emit(text)
+                            
                 elif chunk_type == 'token_usage':
                     # ⚡ 转发 token 使用量
                     self.token_usage.emit(chunk.get('usage', {}))
@@ -582,13 +592,22 @@ class FunctionCallingCoordinator(QObject):
                 # 字符串类型（向后兼容）
                 text = str(chunk)
                 accumulated_content += text  # ⚡ 累积内容
+                
+                # ⚡ 实时检测 DSML 标记
+                if not dsml_detected and '<|DSML|' in accumulated_content:
+                    dsml_detected = True
+                    self.logger.info(f"[流式输出] 检测到 DSML 标记，停止输出并等待完整内容")
+                
+                # 如果没有检测到 DSML，正常输出
+                if not dsml_detected:
+                    self.chunk_received.emit(text)
         
         # print(f"[DEBUG] [流式输出] 完成！共输出{chunk_count}个chunk")  # 打包时自动注释
-        self.logger.info(f"[流式输出] 流式输出完成，共{chunk_count}个chunk")
+        self.logger.info(f"[流式输出] 流式输出完成，共{chunk_count}个chunk，DSML检测:{dsml_detected}")
         
-        # ⚡ 检查是否包含 DSML 格式的工具调用（DeepSeek 特有格式）
-        if DSMLParser.contains_dsml(accumulated_content):
-            self.logger.info(f"[流式输出] 检测到 DSML 格式的工具调用，开始解析...")
+        # ⚡ 如果检测到 DSML，解析并执行工具调用
+        if dsml_detected and DSMLParser.contains_dsml(accumulated_content):
+            self.logger.info(f"[流式输出] 开始解析 DSML 格式的工具调用")
             tool_calls = DSMLParser.parse_tool_calls(accumulated_content)
             
             if tool_calls:
@@ -597,7 +616,7 @@ class FunctionCallingCoordinator(QObject):
                 # 移除 DSML 标记，保留前置文本
                 clean_content = DSMLParser.remove_dsml_tags(accumulated_content)
                 
-                # 如果有前置文本，先输出
+                # 如果有前置文本，输出
                 if clean_content.strip():
                     self.chunk_received.emit(clean_content)
                 
@@ -639,10 +658,13 @@ class FunctionCallingCoordinator(QObject):
                 self.logger.info(f"[流式输出] 工具执行完毕，递归获取最终回复")
                 self._stream_final_response(self.messages, tools=None)
                 return
-        
-        # 没有 DSML，正常输出累积的内容
-        if accumulated_content:
-            self.chunk_received.emit(accumulated_content)
+            else:
+                self.logger.warning(f"[流式输出] DSML 解析失败，输出原始内容")
+                self.chunk_received.emit(accumulated_content)
+        elif not dsml_detected and accumulated_content:
+            # 没有检测到 DSML，但有累积内容（可能在检测前就输出完了）
+            # 这种情况下内容已经通过 chunk_received 输出了，不需要再输出
+            pass
         
         self.request_finished.emit()
     
