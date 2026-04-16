@@ -1,39 +1,16 @@
 #include "BlueprintToolsSubsystem.h"
 #include "BlueprintToolsModule.h"
+#include "BlueprintToolsHelpers.h"
 #include "AssetRegistry/AssetRegistryModule.h"
 #include "Dom/JsonObject.h"
 #include "Engine/Blueprint.h"
 #include "Kismet2/BlueprintEditorUtils.h"
 #include "Kismet2/KismetEditorUtilities.h"
+#include "Misc/PackageName.h"
 #include "Serialization/JsonSerializer.h"
 #include "Serialization/JsonWriter.h"
+#include "UObject/Package.h"
 #include "UObject/SavePackage.h"
-
-namespace
-{
-	static FString SerializeJsonObject(const TSharedPtr<FJsonObject>& JsonObject)
-	{
-		FString OutString;
-		const TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&OutString);
-		FJsonSerializer::Serialize(JsonObject.ToSharedRef(), Writer);
-		return OutString;
-	}
-
-	static TSharedPtr<FJsonObject> CreateErrorResponse(const FString& ErrorMessage)
-	{
-		TSharedPtr<FJsonObject> ErrorObj = MakeShared<FJsonObject>();
-		ErrorObj->SetBoolField(TEXT("success"), false);
-		ErrorObj->SetStringField(TEXT("error"), ErrorMessage);
-		return ErrorObj;
-	}
-
-	static TSharedPtr<FJsonObject> CreateSuccessResponse()
-	{
-		TSharedPtr<FJsonObject> SuccessObj = MakeShared<FJsonObject>();
-		SuccessObj->SetBoolField(TEXT("success"), true);
-		return SuccessObj;
-	}
-}
 
 EBlueprintExtractionScope UBlueprintToolsSubsystem::ParseScope(const FString& ScopeString)
 {
@@ -68,7 +45,9 @@ FString UBlueprintToolsSubsystem::ExtractBlueprint(
 	UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *AssetPath);
 	if (!Blueprint)
 	{
-		return SerializeJsonObject(CreateErrorResponse(FString::Printf(TEXT("Failed to load Blueprint: %s"), *AssetPath)));
+		return FBlueprintToolsHelpers::SerializeJsonObject(
+			FBlueprintToolsHelpers::CreateErrorResponse(
+				FString::Printf(TEXT("Failed to load Blueprint: %s"), *AssetPath)));
 	}
 
 	const EBlueprintExtractionScope ExtractionScope = ParseScope(Scope);
@@ -86,7 +65,7 @@ FString UBlueprintToolsSubsystem::ExtractBlueprint(
 	// - FunctionsShallow: + function signatures
 	// - Full: + graph nodes
 
-	return SerializeJsonObject(ResultObj);
+	return FBlueprintToolsHelpers::SerializeJsonObject(ResultObj);
 }
 
 FString UBlueprintToolsSubsystem::CreateBlueprint(
@@ -101,23 +80,37 @@ FString UBlueprintToolsSubsystem::CreateBlueprint(
 	if (bValidateOnly)
 	{
 		// TODO: Implement validation logic
-		TSharedPtr<FJsonObject> ResultObj = CreateSuccessResponse();
+		TSharedPtr<FJsonObject> ResultObj = FBlueprintToolsHelpers::CreateSuccessResponse();
 		ResultObj->SetStringField(TEXT("message"), TEXT("Validation passed"));
-		return SerializeJsonObject(ResultObj);
+		return FBlueprintToolsHelpers::SerializeJsonObject(ResultObj);
 	}
 
 	// Load parent class
-	UClass* ParentClass = LoadObject<UClass>(nullptr, *ParentClassPath);
+	UClass* ParentClass = FBlueprintToolsHelpers::ResolveClass(ParentClassPath);
 	if (!ParentClass)
 	{
-		return SerializeJsonObject(CreateErrorResponse(FString::Printf(TEXT("Failed to load parent class: %s"), *ParentClassPath)));
+		return FBlueprintToolsHelpers::SerializeJsonObject(
+			FBlueprintToolsHelpers::CreateErrorResponse(
+				FString::Printf(TEXT("Failed to load parent class: %s"), *ParentClassPath)));
 	}
+
+	// Create package
+	UPackage* Package = CreatePackage(*AssetPath);
+	if (!Package)
+	{
+		return FBlueprintToolsHelpers::SerializeJsonObject(
+			FBlueprintToolsHelpers::CreateErrorResponse(
+				FString::Printf(TEXT("Failed to create package: %s"), *AssetPath)));
+	}
+
+	// Get asset name from package path
+	const FName AssetName = FPackageName::GetShortFName(AssetPath);
 
 	// Create Blueprint
 	UBlueprint* NewBlueprint = FKismetEditorUtilities::CreateBlueprint(
 		ParentClass,
-		nullptr,
-		FName(*AssetPath),
+		Package,
+		AssetName,
 		BPTYPE_Normal,
 		UBlueprint::StaticClass(),
 		UBlueprintGeneratedClass::StaticClass(),
@@ -125,15 +118,28 @@ FString UBlueprintToolsSubsystem::CreateBlueprint(
 
 	if (!NewBlueprint)
 	{
-		return SerializeJsonObject(CreateErrorResponse(TEXT("Failed to create Blueprint")));
+		return FBlueprintToolsHelpers::SerializeJsonObject(
+			FBlueprintToolsHelpers::CreateErrorResponse(TEXT("Failed to create Blueprint")));
 	}
+
+	// Mark as modified
+	NewBlueprint->Modify();
 
 	// TODO: Apply PayloadJson (variables, functions, components)
 
-	TSharedPtr<FJsonObject> ResultObj = CreateSuccessResponse();
+	// Compile the Blueprint
+	FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(NewBlueprint);
+	TArray<TSharedPtr<FJsonValue>> Errors, Warnings;
+	FBlueprintToolsHelpers::CompileBlueprint(NewBlueprint, Errors, Warnings);
+
+	// Notify asset registry
+	FAssetRegistryModule::AssetCreated(NewBlueprint);
+
+	TSharedPtr<FJsonObject> ResultObj = FBlueprintToolsHelpers::CreateSuccessResponse();
 	ResultObj->SetStringField(TEXT("assetPath"), NewBlueprint->GetPathName());
+	ResultObj->SetStringField(TEXT("assetName"), AssetName.ToString());
 	ResultObj->SetStringField(TEXT("message"), TEXT("Blueprint created successfully"));
-	return SerializeJsonObject(ResultObj);
+	return FBlueprintToolsHelpers::SerializeJsonObject(ResultObj);
 }
 
 FString UBlueprintToolsSubsystem::ModifyBlueprintMembers(
@@ -148,29 +154,278 @@ FString UBlueprintToolsSubsystem::ModifyBlueprintMembers(
 	UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *AssetPath);
 	if (!Blueprint)
 	{
-		return SerializeJsonObject(CreateErrorResponse(FString::Printf(TEXT("Failed to load Blueprint: %s"), *AssetPath)));
+		return FBlueprintToolsHelpers::SerializeJsonObject(
+			FBlueprintToolsHelpers::CreateErrorResponse(
+				FString::Printf(TEXT("Failed to load Blueprint: %s"), *AssetPath)));
+	}
+
+	// Parse payload JSON
+	TSharedPtr<FJsonObject> PayloadObject;
+	if (!PayloadJson.IsEmpty())
+	{
+		const TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(PayloadJson);
+		if (!FJsonSerializer::Deserialize(Reader, PayloadObject) || !PayloadObject.IsValid())
+		{
+			return FBlueprintToolsHelpers::SerializeJsonObject(
+				FBlueprintToolsHelpers::CreateErrorResponse(TEXT("Invalid PayloadJson format")));
+		}
 	}
 
 	if (bValidateOnly)
 	{
 		// TODO: Implement validation logic
-		TSharedPtr<FJsonObject> ResultObj = CreateSuccessResponse();
+		TSharedPtr<FJsonObject> ResultObj = FBlueprintToolsHelpers::CreateSuccessResponse();
 		ResultObj->SetStringField(TEXT("message"), TEXT("Validation passed"));
-		return SerializeJsonObject(ResultObj);
+		return FBlueprintToolsHelpers::SerializeJsonObject(ResultObj);
 	}
 
-	// TODO: Implement operations:
-	// - add_variable
-	// - remove_variable
-	// - modify_variable
-	// - add_function
-	// - remove_function
-	// - add_component
-	// - remove_component
+	// Handle different operations
+	if (Operation.Equals(TEXT("add_variable"), ESearchCase::IgnoreCase))
+	{
+		return AddVariable(Blueprint, PayloadObject);
+	}
+	else if (Operation.Equals(TEXT("remove_variable"), ESearchCase::IgnoreCase))
+	{
+		return RemoveVariable(Blueprint, PayloadObject);
+	}
+	else if (Operation.Equals(TEXT("modify_variable"), ESearchCase::IgnoreCase))
+	{
+		return ModifyVariable(Blueprint, PayloadObject);
+	}
+	else
+	{
+		return FBlueprintToolsHelpers::SerializeJsonObject(
+			FBlueprintToolsHelpers::CreateErrorResponse(
+				FString::Printf(TEXT("Unsupported operation: %s"), *Operation)));
+	}
+}
 
-	TSharedPtr<FJsonObject> ResultObj = CreateSuccessResponse();
-	ResultObj->SetStringField(TEXT("message"), FString::Printf(TEXT("Operation '%s' completed"), *Operation));
-	return SerializeJsonObject(ResultObj);
+FString UBlueprintToolsSubsystem::AddVariable(UBlueprint* Blueprint, const TSharedPtr<FJsonObject>& PayloadObject)
+{
+	if (!Blueprint || !PayloadObject.IsValid())
+	{
+		return FBlueprintToolsHelpers::SerializeJsonObject(
+			FBlueprintToolsHelpers::CreateErrorResponse(TEXT("Invalid Blueprint or payload")));
+	}
+
+	// Get variable name
+	FString VariableName;
+	if (!PayloadObject->TryGetStringField(TEXT("name"), VariableName) || VariableName.IsEmpty())
+	{
+		return FBlueprintToolsHelpers::SerializeJsonObject(
+			FBlueprintToolsHelpers::CreateErrorResponse(TEXT("Variable name is required")));
+	}
+
+	// Check if variable already exists
+	const int32 ExistingIndex = FBlueprintToolsHelpers::FindVariableIndex(Blueprint, FName(*VariableName));
+	if (ExistingIndex != INDEX_NONE)
+	{
+		return FBlueprintToolsHelpers::SerializeJsonObject(
+			FBlueprintToolsHelpers::CreateErrorResponse(
+				FString::Printf(TEXT("Variable '%s' already exists"), *VariableName)));
+	}
+
+	// Parse variable type
+	const TSharedPtr<FJsonObject>* TypeObject = nullptr;
+	if (!PayloadObject->TryGetObjectField(TEXT("type"), TypeObject) || !TypeObject || !(*TypeObject).IsValid())
+	{
+		return FBlueprintToolsHelpers::SerializeJsonObject(
+			FBlueprintToolsHelpers::CreateErrorResponse(TEXT("Variable type is required")));
+	}
+
+	FEdGraphPinType PinType;
+	FString ParseError;
+	if (!FBlueprintToolsHelpers::ParsePinType(*TypeObject, PinType, ParseError))
+	{
+		return FBlueprintToolsHelpers::SerializeJsonObject(
+			FBlueprintToolsHelpers::CreateErrorResponse(
+				FString::Printf(TEXT("Failed to parse type: %s"), *ParseError)));
+	}
+
+	// Get default value (optional)
+	FString DefaultValue;
+	PayloadObject->TryGetStringField(TEXT("defaultValue"), DefaultValue);
+
+	// Add the variable using official API
+	if (!FBlueprintEditorUtils::AddMemberVariable(Blueprint, FName(*VariableName), PinType, DefaultValue))
+	{
+		return FBlueprintToolsHelpers::SerializeJsonObject(
+			FBlueprintToolsHelpers::CreateErrorResponse(
+				FString::Printf(TEXT("Failed to add variable '%s'"), *VariableName)));
+	}
+
+	// Find the newly added variable
+	const int32 VariableIndex = FBlueprintToolsHelpers::FindVariableIndex(Blueprint, FName(*VariableName));
+	if (VariableIndex == INDEX_NONE || !Blueprint->NewVariables.IsValidIndex(VariableIndex))
+	{
+		return FBlueprintToolsHelpers::SerializeJsonObject(
+			FBlueprintToolsHelpers::CreateErrorResponse(
+				FString::Printf(TEXT("Failed to find variable '%s' after creation"), *VariableName)));
+	}
+
+	// Set additional metadata
+	FBPVariableDescription& VarDesc = Blueprint->NewVariables[VariableIndex];
+
+	FString Category;
+	if (PayloadObject->TryGetStringField(TEXT("category"), Category))
+	{
+		VarDesc.Category = FText::FromString(Category);
+	}
+
+	FString Tooltip;
+	if (PayloadObject->TryGetStringField(TEXT("tooltip"), Tooltip))
+	{
+		VarDesc.SetMetaData(TEXT("tooltip"), *Tooltip);
+	}
+
+	bool bExposeOnSpawn = false;
+	if (PayloadObject->TryGetBoolField(TEXT("exposeOnSpawn"), bExposeOnSpawn) && bExposeOnSpawn)
+	{
+		VarDesc.PropertyFlags |= CPF_ExposeOnSpawn;
+	}
+
+	bool bInstanceEditable = false;
+	if (PayloadObject->TryGetBoolField(TEXT("instanceEditable"), bInstanceEditable))
+	{
+		if (bInstanceEditable)
+		{
+			VarDesc.PropertyFlags |= CPF_Edit;
+			VarDesc.PropertyFlags |= CPF_BlueprintVisible;
+		}
+	}
+
+	bool bReplicated = false;
+	if (PayloadObject->TryGetBoolField(TEXT("replicated"), bReplicated) && bReplicated)
+	{
+		VarDesc.PropertyFlags |= CPF_Net;
+	}
+
+	// Mark Blueprint as modified
+	FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);
+
+	// Create success response
+	TSharedPtr<FJsonObject> ResultObj = FBlueprintToolsHelpers::CreateSuccessResponse();
+	ResultObj->SetStringField(TEXT("message"), FString::Printf(TEXT("Variable '%s' added successfully"), *VariableName));
+	ResultObj->SetStringField(TEXT("variableName"), VariableName);
+	ResultObj->SetStringField(TEXT("assetPath"), Blueprint->GetPathName());
+	return FBlueprintToolsHelpers::SerializeJsonObject(ResultObj);
+}
+
+FString UBlueprintToolsSubsystem::RemoveVariable(UBlueprint* Blueprint, const TSharedPtr<FJsonObject>& PayloadObject)
+{
+	if (!Blueprint || !PayloadObject.IsValid())
+	{
+		return FBlueprintToolsHelpers::SerializeJsonObject(
+			FBlueprintToolsHelpers::CreateErrorResponse(TEXT("Invalid Blueprint or payload")));
+	}
+
+	FString VariableName;
+	if (!PayloadObject->TryGetStringField(TEXT("name"), VariableName) || VariableName.IsEmpty())
+	{
+		return FBlueprintToolsHelpers::SerializeJsonObject(
+			FBlueprintToolsHelpers::CreateErrorResponse(TEXT("Variable name is required")));
+	}
+
+	const int32 VariableIndex = FBlueprintToolsHelpers::FindVariableIndex(Blueprint, FName(*VariableName));
+	if (VariableIndex == INDEX_NONE)
+	{
+		return FBlueprintToolsHelpers::SerializeJsonObject(
+			FBlueprintToolsHelpers::CreateErrorResponse(
+				FString::Printf(TEXT("Variable '%s' not found"), *VariableName)));
+	}
+
+	// Remove the variable using official API
+	FBlueprintEditorUtils::RemoveMemberVariable(Blueprint, FName(*VariableName));
+
+	// Mark Blueprint as modified
+	FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);
+
+	TSharedPtr<FJsonObject> ResultObj = FBlueprintToolsHelpers::CreateSuccessResponse();
+	ResultObj->SetStringField(TEXT("message"), FString::Printf(TEXT("Variable '%s' removed successfully"), *VariableName));
+	return FBlueprintToolsHelpers::SerializeJsonObject(ResultObj);
+}
+
+FString UBlueprintToolsSubsystem::ModifyVariable(UBlueprint* Blueprint, const TSharedPtr<FJsonObject>& PayloadObject)
+{
+	if (!Blueprint || !PayloadObject.IsValid())
+	{
+		return FBlueprintToolsHelpers::SerializeJsonObject(
+			FBlueprintToolsHelpers::CreateErrorResponse(TEXT("Invalid Blueprint or payload")));
+	}
+
+	FString VariableName;
+	if (!PayloadObject->TryGetStringField(TEXT("name"), VariableName) || VariableName.IsEmpty())
+	{
+		return FBlueprintToolsHelpers::SerializeJsonObject(
+			FBlueprintToolsHelpers::CreateErrorResponse(TEXT("Variable name is required")));
+	}
+
+	int32 VariableIndex = FBlueprintToolsHelpers::FindVariableIndex(Blueprint, FName(*VariableName));
+	if (VariableIndex == INDEX_NONE)
+	{
+		return FBlueprintToolsHelpers::SerializeJsonObject(
+			FBlueprintToolsHelpers::CreateErrorResponse(
+				FString::Printf(TEXT("Variable '%s' not found"), *VariableName)));
+	}
+
+	FBPVariableDescription& VarDesc = Blueprint->NewVariables[VariableIndex];
+
+	// Update default value
+	FString DefaultValue;
+	if (PayloadObject->TryGetStringField(TEXT("defaultValue"), DefaultValue))
+	{
+		VarDesc.DefaultValue = DefaultValue;
+	}
+
+	// Update category
+	FString Category;
+	if (PayloadObject->TryGetStringField(TEXT("category"), Category))
+	{
+		VarDesc.Category = FText::FromString(Category);
+	}
+
+	// Update tooltip
+	FString Tooltip;
+	if (PayloadObject->TryGetStringField(TEXT("tooltip"), Tooltip))
+	{
+		VarDesc.SetMetaData(TEXT("tooltip"), *Tooltip);
+	}
+
+	// Update flags
+	bool bExposeOnSpawn;
+	if (PayloadObject->TryGetBoolField(TEXT("exposeOnSpawn"), bExposeOnSpawn))
+	{
+		if (bExposeOnSpawn)
+		{
+			VarDesc.PropertyFlags |= CPF_ExposeOnSpawn;
+		}
+		else
+		{
+			VarDesc.PropertyFlags &= ~CPF_ExposeOnSpawn;
+		}
+	}
+
+	bool bInstanceEditable;
+	if (PayloadObject->TryGetBoolField(TEXT("instanceEditable"), bInstanceEditable))
+	{
+		if (bInstanceEditable)
+		{
+			VarDesc.PropertyFlags |= CPF_Edit;
+			VarDesc.PropertyFlags |= CPF_BlueprintVisible;
+		}
+		else
+		{
+			VarDesc.PropertyFlags &= ~CPF_Edit;
+			VarDesc.PropertyFlags &= ~CPF_BlueprintVisible;
+		}
+	}
+
+	// Mark Blueprint as modified
+	FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);
+
+	TSharedPtr<FJsonObject> ResultObj = FBlueprintToolsHelpers::CreateSuccessResponse();
+	ResultObj->SetStringField(TEXT("message"), FString::Printf(TEXT("Variable '%s' modified successfully"), *VariableName));
+	return FBlueprintToolsHelpers::SerializeJsonObject(ResultObj);
 }
 
 FString UBlueprintToolsSubsystem::CompileBlueprint(const FString& AssetPath)
@@ -180,19 +435,22 @@ FString UBlueprintToolsSubsystem::CompileBlueprint(const FString& AssetPath)
 	UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *AssetPath);
 	if (!Blueprint)
 	{
-		return SerializeJsonObject(CreateErrorResponse(FString::Printf(TEXT("Failed to load Blueprint: %s"), *AssetPath)));
+		return FBlueprintToolsHelpers::SerializeJsonObject(
+			FBlueprintToolsHelpers::CreateErrorResponse(
+				FString::Printf(TEXT("Failed to load Blueprint: %s"), *AssetPath)));
 	}
 
-	FKismetEditorUtilities::CompileBlueprint(Blueprint);
-
-	TSharedPtr<FJsonObject> ResultObj = CreateSuccessResponse();
 	TArray<TSharedPtr<FJsonValue>> ErrorsArray;
+	TArray<TSharedPtr<FJsonValue>> WarningsArray;
 	
-	// TODO: Collect compilation errors/warnings from Blueprint->Status
+	const bool bSuccess = FBlueprintToolsHelpers::CompileBlueprint(Blueprint, ErrorsArray, WarningsArray);
 
+	TSharedPtr<FJsonObject> ResultObj = FBlueprintToolsHelpers::CreateSuccessResponse();
+	ResultObj->SetBoolField(TEXT("success"), bSuccess);
 	ResultObj->SetArrayField(TEXT("errors"), ErrorsArray);
-	ResultObj->SetStringField(TEXT("message"), TEXT("Blueprint compiled"));
-	return SerializeJsonObject(ResultObj);
+	ResultObj->SetArrayField(TEXT("warnings"), WarningsArray);
+	ResultObj->SetStringField(TEXT("message"), bSuccess ? TEXT("Blueprint compiled successfully") : TEXT("Blueprint compilation failed"));
+	return FBlueprintToolsHelpers::SerializeJsonObject(ResultObj);
 }
 
 FString UBlueprintToolsSubsystem::SaveAssets(const FString& AssetPathsJson)
@@ -204,7 +462,8 @@ FString UBlueprintToolsSubsystem::SaveAssets(const FString& AssetPathsJson)
 	
 	if (!FJsonSerializer::Deserialize(Reader, JsonValue) || JsonValue->Type != EJson::Array)
 	{
-		return SerializeJsonObject(CreateErrorResponse(TEXT("Invalid JSON array")));
+		return FBlueprintToolsHelpers::SerializeJsonObject(
+			FBlueprintToolsHelpers::CreateErrorResponse(TEXT("Invalid JSON array")));
 	}
 
 	const TArray<TSharedPtr<FJsonValue>> AssetPaths = JsonValue->AsArray();
@@ -232,10 +491,10 @@ FString UBlueprintToolsSubsystem::SaveAssets(const FString& AssetPathsJson)
 		}
 	}
 
-	TSharedPtr<FJsonObject> ResultObj = CreateSuccessResponse();
+	TSharedPtr<FJsonObject> ResultObj = FBlueprintToolsHelpers::CreateSuccessResponse();
 	ResultObj->SetNumberField(TEXT("savedCount"), SavedCount);
 	ResultObj->SetNumberField(TEXT("totalCount"), AssetPaths.Num());
-	return SerializeJsonObject(ResultObj);
+	return FBlueprintToolsHelpers::SerializeJsonObject(ResultObj);
 }
 
 FString UBlueprintToolsSubsystem::SearchAssets(
@@ -281,10 +540,10 @@ FString UBlueprintToolsSubsystem::SearchAssets(
 		}
 	}
 
-	TSharedPtr<FJsonObject> ResultObj = CreateSuccessResponse();
+	TSharedPtr<FJsonObject> ResultObj = FBlueprintToolsHelpers::CreateSuccessResponse();
 	ResultObj->SetArrayField(TEXT("assets"), ResultsArray);
 	ResultObj->SetNumberField(TEXT("count"), Count);
-	return SerializeJsonObject(ResultObj);
+	return FBlueprintToolsHelpers::SerializeJsonObject(ResultObj);
 }
 
 FString UBlueprintToolsSubsystem::ListAssets(
@@ -322,10 +581,10 @@ FString UBlueprintToolsSubsystem::ListAssets(
 		ResultsArray.Add(MakeShared<FJsonValueObject>(AssetObj));
 	}
 
-	TSharedPtr<FJsonObject> ResultObj = CreateSuccessResponse();
+	TSharedPtr<FJsonObject> ResultObj = FBlueprintToolsHelpers::CreateSuccessResponse();
 	ResultObj->SetArrayField(TEXT("assets"), ResultsArray);
 	ResultObj->SetNumberField(TEXT("count"), ResultsArray.Num());
-	return SerializeJsonObject(ResultObj);
+	return FBlueprintToolsHelpers::SerializeJsonObject(ResultObj);
 }
 
 FString UBlueprintToolsSubsystem::GetEditorContext()
@@ -338,5 +597,5 @@ FString UBlueprintToolsSubsystem::GetEditorContext()
 	ContextObj->SetStringField(TEXT("pluginVersion"), TEXT("1.0.0-UE5.4"));
 	ContextObj->SetNumberField(TEXT("processId"), static_cast<int32>(FPlatformProcess::GetCurrentProcessId()));
 
-	return SerializeJsonObject(ContextObj);
+	return FBlueprintToolsHelpers::SerializeJsonObject(ContextObj);
 }

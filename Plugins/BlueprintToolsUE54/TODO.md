@@ -1,249 +1,253 @@
-# Blueprint Tools UE5.4 - Implementation TODO
+# Blueprint Tools UE5.4 - 实现计划
 
-## Phase 1: Core Extraction (ExtractBlueprint)
+## 阶段 1：核心提取功能 (ExtractBlueprint)
 
-### 1.1 Basic Blueprint Metadata
+### 1.1 基础蓝图元数据
 
-- [ ] Extract class name, parent class, path
-- [ ] Extract Blueprint type (normal, interface, macro library)
-- [ ] Extract Blueprint flags and settings
-- **Reference**: `BlueprintExtractor/Private/Extractors/BlueprintExtractor.cpp`
+- [ ] 提取类名、父类、路径
+- [ ] 提取蓝图类型（普通、接口、宏库）
+- [ ] 提取蓝图标志和设置
+- **参考文件**: `BlueprintExtractor/Private/Extractors/BlueprintExtractor.cpp`
 
-### 1.2 Variables Extraction
+### 1.2 变量提取
 
-- [ ] Extract member variables (name, type, default value)
-- [ ] Extract variable metadata (category, tooltip, replication)
-- [ ] Extract variable flags (expose on spawn, instance editable, etc.)
-- [ ] Handle complex types (arrays, maps, sets, structs)
-- **Reference**: `BlueprintExtractor/Private/Extractors/BlueprintExtractor.cpp::ExtractVariables()`
+- [ ] 提取成员变量（名称、类型、默认值）
+- [ ] 提取变量元数据（分类、提示、复制）
+- [ ] 提取变量标志（生成时暴露、实例可编辑等）
+- [ ] 处理复杂类型（数组、映射、集合、结构体）
+- **参考文件**: `BlueprintExtractor/Private/Extractors/BlueprintExtractor.cpp::ExtractVariables()`
 
-### 1.3 Components Extraction
+### 1.3 组件提取
 
-- [ ] Extract component hierarchy
-- [ ] Extract component properties
-- [ ] Extract component transforms
-- [ ] Handle scene components vs actor components
-- **Reference**: `BlueprintExtractor/Private/Extractors/BlueprintExtractor.cpp::ExtractComponents()`
+- [ ] 提取组件层级结构
+- [ ] 提取组件属性
+- [ ] 提取组件变换
+- [ ] 处理场景组件 vs Actor 组件
+- **参考文件**: `BlueprintExtractor/Private/Extractors/BlueprintExtractor.cpp::ExtractComponents()`
 
-### 1.4 Functions Extraction (Shallow)
+### 1.4 函数提取（浅层）
 
-- [ ] Extract function signatures (name, inputs, outputs)
-- [ ] Extract function metadata (category, keywords, tooltip)
-- [ ] Extract function flags (pure, const, static, etc.)
-- **Reference**: `BlueprintExtractor/Private/Extractors/BlueprintExtractor.cpp::ExtractFunctions()`
+- [ ] 提取函数签名（名称、输入、输出）
+- [ ] 提取函数元数据（分类、关键字、提示）
+- [ ] 提取函数标志（纯函数、常量、静态等）
+- **参考文件**: `BlueprintExtractor/Private/Extractors/BlueprintExtractor.cpp::ExtractFunctions()`
 
-### 1.5 Graph Extraction (Full)
+### 1.5 图表提取（完整）
 
-- [ ] Extract event graphs
-- [ ] Extract function graphs
-- [ ] Extract construction script
-- [ ] Extract nodes and connections
-- [ ] Handle graph filtering by name
-- **Reference**: `BlueprintExtractor/Private/Extractors/GraphExtractor.cpp`
+- [ ] 提取事件图表
+- [ ] 提取函数图表
+- [ ] 提取构造脚本
+- [ ] 提取节点和连接
+- [ ] 处理按名称过滤图表
+- **参考文件**: `BlueprintExtractor/Private/Extractors/GraphExtractor.cpp`
 
-### 1.6 Class Defaults (CDO)
+### 1.6 类默认值 (CDO)
 
-- [ ] Extract CDO property values
-- [ ] Compare with parent class defaults
-- [ ] Only include modified properties
-- **Reference**: `BlueprintExtractor/Private/PropertySerializer.cpp`
+- [ ] 提取 CDO 属性值
+- [ ] 与父类默认值比较
+- [ ] 只包含修改过的属性
+- **参考文件**: `BlueprintExtractor/Private/PropertySerializer.cpp`
 
-## Phase 2: Blueprint Creation (CreateBlueprint)
+## 阶段 2：蓝图创建 (CreateBlueprint)
 
-### 2.1 Basic Blueprint Creation
+### 2.1 基础蓝图创建
 
-- [x] Create Blueprint from parent class (already implemented)
-- [ ] Set Blueprint metadata
-- [ ] Handle different Blueprint types
-- **Reference**: `BlueprintExtractor/Private/Authoring/BlueprintAuthoring.cpp::CreateBlueprint()`
+- [x] 从父类创建蓝图（已实现）
+- [ ] 设置蓝图元数据
+- [ ] 处理不同的蓝图类型
+- **参考文件**: `BlueprintExtractor/Private/Authoring/BlueprintAuthoring.cpp::CreateBlueprint()`
 
-### 2.2 Parse PayloadJson
+### 2.2 解析 PayloadJson
 
-- [ ] Parse variables array from JSON
-- [ ] Parse functions array from JSON
-- [ ] Parse components array from JSON
-- [ ] Validate JSON structure
-- **Reference**: `BlueprintExtractor/Private/Authoring/AuthoringHelpers.cpp::ParsePayload()`
+- [ ] 从 JSON 解析变量数组
+- [ ] 从 JSON 解析函数数组
+- [ ] 从 JSON 解析组件数组
+- [ ] 验证 JSON 结构
+- **参考文件**: `BlueprintExtractor/Private/Authoring/AuthoringHelpers.cpp::ParsePayload()`
 
-### 2.3 Create Initial Members
+### 2.3 创建初始成员
 
-- [ ] Create variables from payload
-- [ ] Create function signatures from payload
-- [ ] Create components from payload
-- [ ] Set default values
-- **Reference**: `BlueprintExtractor/Private/Authoring/BlueprintAuthoring.cpp`
+- [ ] 从 payload 创建变量
+- [ ] 从 payload 创建函数签名
+- [ ] 从 payload 创建组件
+- [ ] 设置默认值
+- **参考文件**: `BlueprintExtractor/Private/Authoring/BlueprintAuthoring.cpp`
 
-## Phase 3: Blueprint Modification (ModifyBlueprintMembers)
+## 阶段 3：蓝图修改 (ModifyBlueprintMembers)
 
-### 3.1 Variable Operations
+### 3.1 变量操作
 
-- [ ] **add_variable**: Add new member variable
-  - Parse variable type from JSON
-  - Set default value
-  - Set metadata (category, tooltip, flags)
-  - **Reference**: `BlueprintExtractor/Private/Authoring/BlueprintAuthoring.cpp::AddVariable()`
-- [ ] **remove_variable**: Remove existing variable
-  - Find variable by name
-  - Remove all references (if any)
-  - **Reference**: `BlueprintExtractor/Private/Authoring/BlueprintAuthoring.cpp::RemoveVariable()`
-- [ ] **modify_variable**: Modify existing variable
-  - Update default value
-  - Update metadata
-  - Update flags
-  - **Reference**: `BlueprintExtractor/Private/Authoring/BlueprintAuthoring.cpp::ModifyVariable()`
+- [ ] **add_variable**: 添加新成员变量
+  - 从 JSON 解析变量类型
+  - 设置默认值
+  - 设置元数据（分类、提示、标志）
+  - **参考文件**: `BlueprintExtractor/Private/Authoring/BlueprintAuthoring.cpp::AddVariable()`
+- [ ] **remove_variable**: 删除现有变量
+  - 按名称查找变量
+  - 删除所有引用（如果有）
+  - **参考文件**: `BlueprintExtractor/Private/Authoring/BlueprintAuthoring.cpp::RemoveVariable()`
+- [ ] **modify_variable**: 修改现有变量
+  - 更新默认值
+  - 更新元数据
+  - 更新标志
+  - **参考文件**: `BlueprintExtractor/Private/Authoring/BlueprintAuthoring.cpp::ModifyVariable()`
 
-### 3.2 Function Operations
+### 3.2 函数操作
 
-- [ ] **add_function**: Add new function
-  - Create function graph
-  - Add input/output parameters
-  - Set function metadata
-  - **Reference**: `BlueprintExtractor/Private/Authoring/BlueprintAuthoring.cpp::AddFunction()`
-- [ ] **remove_function**: Remove existing function
-  - Remove function graph
-  - Remove all call sites (if any)
-  - **Reference**: `BlueprintExtractor/Private/Authoring/BlueprintAuthoring.cpp::RemoveFunction()`
-- [ ] **modify_function**: Modify function signature
-  - Update parameters
-  - Update metadata
-  - **Reference**: `BlueprintExtractor/Private/Authoring/BlueprintAuthoring.cpp::ModifyFunction()`
+- [ ] **add_function**: 添加新函数
+  - 创建函数图表
+  - 添加输入/输出参数
+  - 设置函数元数据
+  - **参考文件**: `BlueprintExtractor/Private/Authoring/BlueprintAuthoring.cpp::AddFunction()`
+- [ ] **remove_function**: 删除现有函数
+  - 删除函数图表
+  - 删除所有调用点（如果有）
+  - **参考文件**: `BlueprintExtractor/Private/Authoring/BlueprintAuthoring.cpp::RemoveFunction()`
+- [ ] **modify_function**: 修改函数签名
+  - 更新参数
+  - 更新元数据
+  - **参考文件**: `BlueprintExtractor/Private/Authoring/BlueprintAuthoring.cpp::ModifyFunction()`
 
-### 3.3 Component Operations
+### 3.3 组件操作
 
-- [ ] **add_component**: Add new component
-  - Create component instance
-  - Set component properties
-  - Attach to hierarchy
-  - **Reference**: `BlueprintExtractor/Private/Authoring/BlueprintAuthoring.cpp::AddComponent()`
-- [ ] **remove_component**: Remove existing component
-  - Remove from hierarchy
-  - Clean up references
-  - **Reference**: `BlueprintExtractor/Private/Authoring/BlueprintAuthoring.cpp::RemoveComponent()`
-- [ ] **modify_component**: Modify component properties
-  - Update properties
-  - Update transform
-  - **Reference**: `BlueprintExtractor/Private/Authoring/BlueprintAuthoring.cpp::ModifyComponent()`
+- [ ] **add_component**: 添加新组件
+  - 创建组件实例
+  - 设置组件属性
+  - 附加到层级结构
+  - **参考文件**: `BlueprintExtractor/Private/Authoring/BlueprintAuthoring.cpp::AddComponent()`
+- [ ] **remove_component**: 删除现有组件
+  - 从层级结构中移除
+  - 清理引用
+  - **参考文件**: `BlueprintExtractor/Private/Authoring/BlueprintAuthoring.cpp::RemoveComponent()`
+- [ ] **modify_component**: 修改组件属性
+  - 更新属性
+  - 更新变换
+  - **参考文件**: `BlueprintExtractor/Private/Authoring/BlueprintAuthoring.cpp::ModifyComponent()`
 
-## Phase 4: Type System & Helpers
+## 阶段 4：类型系统与辅助工具
 
-### 4.1 Type Parsing
+### 4.1 类型解析
 
-- [ ] Parse primitive types (int, float, bool, string, name, text)
-- [ ] Parse object references
-- [ ] Parse struct types
-- [ ] Parse enum types
-- [ ] Parse container types (array, set, map)
-- **Reference**: `BlueprintExtractor/Private/Authoring/AuthoringHelpers.cpp::ParsePinType()`
+- [ ] 解析基础类型（int, float, bool, string, name, text）
+- [ ] 解析对象引用
+- [ ] 解析结构体类型
+- [ ] 解析枚举类型
+- [ ] 解析容器类型（array, set, map）
+- **参考文件**: `BlueprintExtractor/Private/Authoring/AuthoringHelpers.cpp::ParsePinType()`
 
-### 4.2 Property Serialization
+### 4.2 属性序列化
 
-- [ ] Serialize property values to JSON
-- [ ] Deserialize JSON to property values
-- [ ] Handle nested structures
-- [ ] Handle asset references
-- **Reference**: `BlueprintExtractor/Private/PropertySerializer.cpp`
+- [ ] 将属性值序列化为 JSON
+- [ ] 将 JSON 反序列化为属性值
+- [ ] 处理嵌套结构
+- [ ] 处理资产引用
+- **参考文件**: `BlueprintExtractor/Private/PropertySerializer.cpp`
 
-### 4.3 Validation
+### 4.3 验证
 
-- [ ] Validate variable names (no duplicates, valid identifiers)
-- [ ] Validate types (exist and are accessible)
-- [ ] Validate default values (match type)
-- [ ] Validate component hierarchy
-- **Reference**: `BlueprintExtractor/Private/Authoring/AuthoringHelpers.cpp::ValidatePayload()`
+- [ ] 验证变量名（无重复、有效标识符）
+- [ ] 验证类型（存在且可访问）
+- [ ] 验证默认值（匹配类型）
+- [ ] 验证组件层级结构
+- **参考文件**: `BlueprintExtractor/Private/Authoring/AuthoringHelpers.cpp::ValidatePayload()`
 
-## Phase 5: Compilation & Error Handling
+## 阶段 5：编译与错误处理
 
-### 5.1 Blueprint Compilation
+### 5.1 蓝图编译
 
-- [x] Basic compilation (already implemented)
-- [ ] Collect compilation errors
-- [ ] Collect compilation warnings
-- [ ] Format error messages for JSON output
-- **Reference**: `BlueprintExtractor/Private/Extractors/BlueprintExtractor.cpp::CompileBlueprint()`
+- [x] 基础编译（已实现）
+- [ ] 收集编译错误
+- [ ] 收集编译警告
+- [ ] 格式化错误消息为 JSON 输出
+- **参考文件**: `BlueprintExtractor/Private/Extractors/BlueprintExtractor.cpp::CompileBlueprint()`
 
-### 5.2 Error Response Format
+### 5.2 错误响应格式
 
-- [ ] Standardize error JSON format
-- [ ] Include error location (node, pin, line)
-- [ ] Include error severity
-- [ ] Include suggested fixes
-- **Reference**: `BlueprintExtractor/Private/BlueprintExtractorSubsystem.cpp`
+- [ ] 标准化错误 JSON 格式
+- [ ] 包含错误位置（节点、引脚、行）
+- [ ] 包含错误严重性
+- [ ] 包含建议修复
+- **参考文件**: `BlueprintExtractor/Private/BlueprintExtractorSubsystem.cpp`
 
-## Phase 6: Asset Management
+## 阶段 6：资产管理
 
-### 6.1 Asset Search & List
+### 6.1 资产搜索与列表
 
-- [x] Basic search (already implemented)
-- [x] Basic list (already implemented)
-- [ ] Add more filter options
-- [ ] Add sorting options
-- [ ] Add pagination support
+- [x] 基础搜索（已实现）
+- [x] 基础列表（已实现）
+- [ ] 添加更多过滤选项
+- [ ] 添加排序选项
+- [ ] 添加分页支持
 
-### 6.2 Asset Saving
+### 6.2 资产保存
 
-- [x] Basic save (already implemented)
-- [ ] Handle save failures gracefully
-- [ ] Mark packages dirty before save
-- [ ] Validate assets before save
+- [x] 基础保存（已实现）
+- [ ] 优雅处理保存失败
+- [ ] 保存前标记包为脏
+- [ ] 保存前验证资产
 
-## Phase 7: Testing & Validation
+## 阶段 7：测试与验证
 
-### 7.1 Unit Tests
+### 7.1 单元测试
 
-- [ ] Test variable creation with all types
-- [ ] Test function creation
-- [ ] Test component creation
-- [ ] Test extraction accuracy
+- [ ] 测试所有类型的变量创建
+- [ ] 测试函数创建
+- [ ] 测试组件创建
+- [ ] 测试提取准确性
 
-### 7.2 Integration Tests
+### 7.2 集成测试
 
-- [ ] Test full workflow: create → modify → compile → save
-- [ ] Test error handling
-- [ ] Test with complex Blueprints
-- [ ] Test with different parent classes
+- [ ] 测试完整工作流：创建 → 修改 → 编译 → 保存
+- [ ] 测试错误处理
+- [ ] 测试复杂蓝图
+- [ ] 测试不同父类
 
-## Implementation Priority
+## 实现优先级
 
-### High Priority (Core Functionality)
+### 高优先级（核心功能）
 
-1. Phase 3.1: Variable Operations (add, remove, modify)
-2. Phase 4.1: Type Parsing
-3. Phase 1.2: Variables Extraction
-4. Phase 2.2 & 2.3: PayloadJson parsing and initial member creation
+1. 阶段 3.1: 变量操作（添加、删除、修改）
+2. 阶段 4.1: 类型解析
+3. 阶段 1.2: 变量提取
+4. 阶段 2.2 & 2.3: PayloadJson 解析和初始成员创建
 
-### Medium Priority (Extended Functionality)
+### 中优先级（扩展功能）
 
-5. Phase 3.2: Function Operations
-6. Phase 3.3: Component Operations
-7. Phase 1.3: Components Extraction
-8. Phase 1.4: Functions Extraction
+5. 阶段 3.2: 函数操作
+6. 阶段 3.3: 组件操作
+7. 阶段 1.3: 组件提取
+8. 阶段 1.4: 函数提取
 
-### Low Priority (Advanced Features)
+### 低优先级（高级功能）
 
-9. Phase 1.5: Graph Extraction (Full)
-10. Phase 5: Enhanced compilation and error handling
-11. Phase 7: Testing
+9. 阶段 1.5: 图表提取（完整）
+10. 阶段 5: 增强的编译和错误处理
+11. 阶段 7: 测试
 
-## Key Reference Files in BlueprintExtractor
+## BlueprintExtractor 中的关键参考文件
 
-### Must Read (Core Implementation)
+### 必读（核心实现）
 
-1. `Private/Authoring/BlueprintAuthoring.cpp` - All authoring operations
-2. `Private/Authoring/AuthoringHelpers.cpp` - Type parsing, validation
-3. `Private/Extractors/BlueprintExtractor.cpp` - Extraction logic
-4. `Private/PropertySerializer.cpp` - Property serialization
+1. `Private/Authoring/BlueprintAuthoring.cpp` - 所有创建和修改操作
+2. `Private/Authoring/AuthoringHelpers.cpp` - 类型解析、验证
+3. `Private/Extractors/BlueprintExtractor.cpp` - 提取逻辑
+4. `Private/PropertySerializer.cpp` - 属性序列化
 
-### Supporting Files
+### 支持文件
 
-5. `Private/Extractors/GraphExtractor.cpp` - Graph extraction
-6. `Private/BlueprintExtractorSubsystem.cpp` - API entry points
-7. `Public/BlueprintExtractorTypes.h` - Type definitions
+5. `Private/Extractors/GraphExtractor.cpp` - 图表提取
+6. `Private/BlueprintExtractorSubsystem.cpp` - API 入口点
+7. `Public/BlueprintExtractorTypes.h` - 类型定义
 
-## Notes
+## 重要注意事项
 
-- Always use official UE Blueprint APIs (FBlueprintEditorUtils, FKismetEditorUtilities)
-- Never directly modify Blueprint->NewVariables array
-- Always compile after modifications
-- Always mark packages dirty before saving
-- Use FBlueprintEditorUtils::AddMemberVariable() instead of manual array manipulation
-- Reference BlueprintExtractor implementation - it's tested and uses official APIs
+- 始终使用官方 UE 蓝图 API（FBlueprintEditorUtils, FKismetEditorUtilities）
+- 永远不要直接修改 Blueprint->NewVariables 数组
+- 修改后始终编译
+- 保存前始终标记包为脏
+- 使用 FBlueprintEditorUtils::AddMemberVariable() 而不是手动操作数组
+- 参考 BlueprintExtractor 实现 - 它经过测试并使用官方 API
+
+## 下一步行动
+
+建议从 **阶段 3.1 的 add_variable** 开始实现，这是最常用的功能，实现后可以立即测试并验证整个架构。

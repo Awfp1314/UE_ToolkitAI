@@ -16,6 +16,11 @@ class BLUEPRINTTOOLSUE54_API UBlueprintToolsSubsystem : public UEditorSubsystem
 
 private:
 	static EBlueprintExtractionScope ParseScope(const FString& ScopeString);
+	
+	// Variable operation helpers
+	FString AddVariable(UBlueprint* Blueprint, const TSharedPtr<FJsonObject>& PayloadObject);
+	FString RemoveVariable(UBlueprint* Blueprint, const TSharedPtr<FJsonObject>& PayloadObject);
+	FString ModifyVariable(UBlueprint* Blueprint, const TSharedPtr<FJsonObject>& PayloadObject);
 
 public:
 	/** Extracts a Blueprint asset to a JSON string. Returns an error JSON object on failure.
