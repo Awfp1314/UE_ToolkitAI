@@ -19,28 +19,6 @@
     }
   },
   {
-    "name": "ExtractActiveBlueprint",
-    "description": "提取当前在 UE 编辑器中打开的蓝图的结构信息。首先获取编辑器上下文，然后提取打开的蓝图。",
-    "inputSchema": {
-      "type": "object",
-      "properties": {
-        "Scope": {
-          "type": "string",
-          "description": "提取范围：Minimal（最小）| Compact（紧凑，默认）| Full（完整）",
-          "enum": ["Minimal", "Compact", "Full"]
-        }
-      }
-    }
-  },
-  {
-    "name": "GetActiveBlueprint",
-    "description": "获取当前在 UE 编辑器中激活（打开）的蓝图信息，返回蓝图的资产路径、名称等。",
-    "inputSchema": {
-      "type": "object",
-      "properties": {}
-    }
-  },
-  {
     "name": "ExtractWidgetBlueprint",
     "description": "提取 UMG Widget 蓝图的结构信息，包括控件树、绑定、动画等。",
     "inputSchema": {
@@ -106,7 +84,7 @@
   },
   {
     "name": "GetEditorContext",
-    "description": "获取当前 UE 编辑器的上下文信息，包括当前打开的关卡、选中的 Actor 等。",
+    "description": "获取当前 UE 编辑器的上下文信息，包括当前打开的关卡、选中的 Actor、打开的蓝图等。可用于获取当前打开的蓝图路径。",
     "inputSchema": {
       "type": "object",
       "properties": {}

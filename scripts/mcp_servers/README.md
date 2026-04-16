@@ -35,7 +35,7 @@ copy config\mcp_config_template.json %APPDATA%\ue_toolkit\mcp.json
 ## 文件说明
 
 - `blueprint_extractor_bridge.py` - MCP 桥接服务器主程序
-- `blueprint_extractor_tools.json` - 工具定义文件（28 个工具）
+- `blueprint_extractor_tools.json` - 工具定义文件（26 个工具）
 - `README.md` - 本文件
 
 ## MCP 协议

@@ -21,7 +21,7 @@ UE Editor HTTP API (Blueprint Extractor 插件)
 ```
 scripts/mcp_servers/
 ├── blueprint_extractor_bridge.py    # MCP 桥接服务器
-└── blueprint_extractor_tools.json   # 工具定义文件（28 个工具）
+└── blueprint_extractor_tools.json   # 工具定义文件（26 个工具）
 
 config/
 └── mcp_config_template.json         # MCP 配置模板
@@ -69,7 +69,7 @@ AI：好的，我来调用 ExtractActiveBlueprint 工具...
 
 AI 会自动：
 
-1. 发现 Blueprint Extractor 的 28 个工具
+1. 发现 Blueprint Extractor 的 26 个工具
 2. 根据用户需求选择合适的工具
 3. 调用工具并返回结果
 
