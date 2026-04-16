@@ -161,6 +161,7 @@ class FunctionCallingCoordinator(QObject):
             iteration = 0
 
             while iteration < self.max_iterations and not cancel_token.is_cancelled():
+                iteration += 1  # ⚡ 关键修复：递增迭代计数器，防止死循环
                 
                 # 获取工具定义
                 tools = self.tools_registry.openai_tool_schemas() if self.tools_registry else None
