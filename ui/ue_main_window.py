@@ -1315,10 +1315,26 @@ class UEMainWindow(QMainWindow):
                     models = ["claude-3-5-sonnet-20241022", "claude-3-5-haiku-20241022", "claude-3-opus-20240229"]
                 elif "generativelanguage.googleapis.com" in api_url or "gemini" in api_url.lower():
                     models = ["gemini-2.0-flash-exp", "gemini-1.5-pro", "gemini-1.5-flash"]
+                elif "siliconflow.cn" in api_url:
+                    # SiliconFlow API 的常用模型
+                    models = [
+                        "deepseek-ai/DeepSeek-V3",
+                        "deepseek-ai/DeepSeek-V2.5",
+                        "Qwen/Qwen2.5-72B-Instruct",
+                        "Qwen/Qwen2.5-32B-Instruct",
+                        "Qwen/Qwen2.5-7B-Instruct",
+                        "Pro/Qwen/QwQ-32B-Preview",
+                        "THUDM/glm-4-9b-chat"
+                    ]
                 else:
-                    # 自定义 API，使用配置中的模型
-                    default_model = config.get("api_settings", {}).get("default_model", "gpt-3.5-turbo")
-                    models = [default_model]
+                    # 自定义 API，尝试从配置读取 available_models 列表
+                    available_models = config.get("api_settings", {}).get("available_models", [])
+                    if available_models:
+                        models = available_models
+                    else:
+                        # 如果没有配置 available_models，使用 default_model
+                        default_model = config.get("api_settings", {}).get("default_model", "gpt-3.5-turbo")
+                        models = [default_model]
             
             self._update_model_combo_ui(models, config)
             

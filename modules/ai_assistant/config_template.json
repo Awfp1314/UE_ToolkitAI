@@ -5,10 +5,11 @@
     "api_url": "https://api.openai.com/v1/chat/completions",
     "api_key": "",
     "default_model": "gpt-3.5-turbo",
+    "available_models": [],
     "temperature": 0.8,
     "timeout": 60,
     "supports_function_calling": true,
-    "note": "请在此处配置有效的API密钥。如果没有API密钥，可以访问 https://platform.openai.com/api-keys 获取，或使用其他兼容OpenAI的API服务。supports_function_calling 表示该模型是否支持 function calling（工具调用），DeepSeek 等模型不支持请设为 false。"
+    "note": "请在此处配置有效的API密钥。如果没有API密钥，可以访问 https://platform.openai.com/api-keys 获取，或使用其他兼容OpenAI的API服务。supports_function_calling 表示该模型是否支持 function calling（工具调用）。available_models 是可选字段，用于自定义 API 的模型列表，如 ['model1', 'model2']，留空则使用 default_model。"
   },
   "ollama_settings": {
     "base_url": "http://localhost:11434",
