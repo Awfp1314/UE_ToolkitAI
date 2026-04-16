@@ -1286,61 +1286,85 @@ class UEMainWindow(QMainWindow):
             self.ai_model_combo.blockSignals(False)
     
     def _load_api_models_for_combo(self, config):
-        """加载 API 模型列表到下拉框（从缓存或使用默认列表）"""
+        """加载 API 模型列表到下拉框（从缓存或动态获取）"""
+        from threading import Thread
+        from pathlib import Path
+        import json
+        
+        # 先显示加载中状态
+        if hasattr(self, 'ai_model_combo'):
+            self.ai_model_combo.clear()
+            self.ai_model_combo.addItem("正在加载模型...")
+        
+        api_url = config.get("api_settings", {}).get("api_url", "")
+        api_key = config.get("api_settings", {}).get("api_key", "")
+        current_model = config.get("api_settings", {}).get("default_model", "")
+        
+        self.logger.info(f"[主窗口] 开始加载 API 模型，URL: {api_url}, 当前模型: {current_model}")
+        
+        # 尝试从缓存加载
+        cache_file = Path.home() / "AppData" / "Roaming" / "ue_toolkit" / "user_data" / "cache" / "api_models_cache.json"
+        cached_models = []
+        
         try:
-            from pathlib import Path
-            import json
-            
-            # 尝试从缓存加载
-            cache_file = Path.home() / "AppData" / "Roaming" / "ue_toolkit" / "user_data" / "cache" / "api_models_cache.json"
-            models = []
-            
             if cache_file.exists():
                 cache_data = json.loads(cache_file.read_text(encoding='utf-8'))
-                api_url = config.get("api_settings", {}).get("api_url", "")
                 cached_url = cache_data.get('api_url', '')
                 
                 # 只有 URL 匹配时才使用缓存
                 if cached_url == api_url:
-                    models = cache_data.get('models', [])
-            
-            # 如果没有缓存，使用默认模型列表
-            if not models:
-                api_url = config.get("api_settings", {}).get("api_url", "")
-                if "openai.com" in api_url:
-                    models = ["gpt-4o", "gpt-4o-mini", "gpt-4-turbo", "gpt-3.5-turbo"]
-                elif "deepseek.com" in api_url:
-                    models = ["deepseek-chat", "deepseek-reasoner"]
-                elif "anthropic.com" in api_url or "claude" in api_url.lower():
-                    models = ["claude-3-5-sonnet-20241022", "claude-3-5-haiku-20241022", "claude-3-opus-20240229"]
-                elif "generativelanguage.googleapis.com" in api_url or "gemini" in api_url.lower():
-                    models = ["gemini-2.0-flash-exp", "gemini-1.5-pro", "gemini-1.5-flash"]
-                elif "siliconflow.cn" in api_url:
-                    # SiliconFlow API 的常用模型
-                    models = [
-                        "deepseek-ai/DeepSeek-V3",
-                        "deepseek-ai/DeepSeek-V2.5",
-                        "Qwen/Qwen2.5-72B-Instruct",
-                        "Qwen/Qwen2.5-32B-Instruct",
-                        "Qwen/Qwen2.5-7B-Instruct",
-                        "Pro/Qwen/QwQ-32B-Preview",
-                        "THUDM/glm-4-9b-chat"
-                    ]
-                else:
-                    # 自定义 API，尝试从配置读取 available_models 列表
-                    available_models = config.get("api_settings", {}).get("available_models", [])
-                    if available_models:
-                        models = available_models
-                    else:
-                        # 如果没有配置 available_models，使用 default_model
-                        default_model = config.get("api_settings", {}).get("default_model", "gpt-3.5-turbo")
-                        models = [default_model]
-            
-            self._update_model_combo_ui(models, config)
-            
+                    cached_models = cache_data.get('models', [])
+                    self.logger.info(f"[主窗口] 从缓存加载了 {len(cached_models)} 个模型")
         except Exception as e:
-            print(f"[WARNING] 加载 API 模型失败: {e}")
-            self._update_model_combo_ui([], config)
+            self.logger.warning(f"[主窗口] 读取缓存失败: {e}")
+        
+        # 如果有缓存，先显示缓存的模型（快速响应）
+        if cached_models:
+            self._update_model_combo_ui(cached_models, config)
+        
+        # 后台异步获取最新模型列表
+        def fetch_in_background():
+            models = []
+            
+            try:
+                if not api_key:
+                    self.logger.warning("[主窗口] API Key 为空，跳过模型获取")
+                    # 如果没有缓存，使用 default_model
+                    if not cached_models:
+                        models = [current_model] if current_model else []
+                else:
+                    from modules.ai_assistant.clients.api_llm_client import ApiLLMClient
+                    self.logger.info(f"[主窗口] 正在从 API 获取模型列表...")
+                    models = ApiLLMClient.fetch_available_models(api_url, api_key, timeout=10)
+                    self.logger.info(f"[主窗口] 成功获取 {len(models)} 个模型")
+                    
+                    # 保存到缓存
+                    try:
+                        cache_file.parent.mkdir(parents=True, exist_ok=True)
+                        cache_data = {
+                            'api_url': api_url,
+                            'models': models
+                        }
+                        cache_file.write_text(json.dumps(cache_data, ensure_ascii=False, indent=2), encoding='utf-8')
+                        self.logger.info(f"[主窗口] 模型列表已缓存")
+                    except Exception as e:
+                        self.logger.warning(f"[主窗口] 保存缓存失败: {e}")
+                
+            except Exception as e:
+                self.logger.error(f"[主窗口] 获取模型列表失败: {e}")
+                # 如果获取失败且没有缓存，使用 default_model
+                if not cached_models:
+                    models = [current_model] if current_model else []
+            
+            # 通过信号更新 UI（如果获取到了新的模型列表）
+            if models and models != cached_models:
+                # 使用 QTimer 确保在主线程更新 UI
+                from PyQt6.QtCore import QTimer
+                QTimer.singleShot(0, lambda: self._update_model_combo_ui(models, config))
+        
+        # 启动后台线程
+        thread = Thread(target=fetch_in_background, daemon=True)
+        thread.start()
     
     def _update_model_combo_ui(self, models, config):
         """更新模型下拉框 UI（主线程）"""

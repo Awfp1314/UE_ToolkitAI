@@ -31,106 +31,60 @@ SiliconFlow 支持的 DeepSeek 模型名称应该是：
 
 ### 根本原因
 
-代码中对于自定义 API，只读取 `default_model` 字段：
-
-```python
-else:
-    # 自定义 API，使用配置中的模型
-    default_model = config.get("api_settings", {}).get("default_model", "gpt-3.5-turbo")
-    models = [default_model]
-```
+代码逻辑错误：使用了硬编码的模型列表，而不是从 API 动态获取。
 
 ### 已实现的修复
 
-#### 1. 添加 SiliconFlow 支持
+#### 修改 `_load_api_models_for_combo` 方法
 
-在 `ui/ue_main_window.py` 中添加了 SiliconFlow 的常用模型列表：
+现在的逻辑：
 
-```python
-elif "siliconflow.cn" in api_url:
-    # SiliconFlow API 的常用模型
-    models = [
-        "deepseek-ai/DeepSeek-V3",
-        "deepseek-ai/DeepSeek-V2.5",
-        "Qwen/Qwen2.5-72B-Instruct",
-        "Qwen/Qwen2.5-32B-Instruct",
-        "Qwen/Qwen2.5-7B-Instruct",
-        "Pro/Qwen/QwQ-32B-Preview",
-        "THUDM/glm-4-9b-chat"
-    ]
-```
-
-#### 2. 支持自定义模型列表
-
-在配置模板中添加了 `available_models` 字段，允许用户为自定义 API 配置模型列表：
-
-```json
-{
-  "api_settings": {
-    "api_url": "https://api.siliconflow.cn/v1/chat/completions",
-    "api_key": "your-key",
-    "default_model": "deepseek-ai/DeepSeek-V2.5",
-    "available_models": [
-      "deepseek-ai/DeepSeek-V3",
-      "deepseek-ai/DeepSeek-V2.5",
-      "Qwen/Qwen2.5-72B-Instruct"
-    ],
-    ...
-  }
-}
-```
-
-#### 3. 更新加载逻辑
-
-修改了模型加载逻辑，优先使用 `available_models`，如果没有配置则使用 `default_model`：
+1. **优先使用缓存**：如果有缓存且 URL 匹配，立即显示缓存的模型（快速响应）
+2. **后台异步获取**：启动后台线程调用 `ApiLLMClient.fetch_available_models()` 从 API 的 `/v1/models` 端点获取最新模型列表
+3. **更新缓存**：获取成功后保存到缓存文件
+4. **失败回退**：如果获取失败且没有缓存，使用配置中的 `default_model`
 
 ```python
-else:
-    # 自定义 API，尝试从配置读取 available_models 列表
-    available_models = config.get("api_settings", {}).get("available_models", [])
-    if available_models:
-        models = available_models
-    else:
-        # 如果没有配置 available_models，使用 default_model
-        default_model = config.get("api_settings", {}).get("default_model", "gpt-3.5-turbo")
-        models = [default_model]
+def _load_api_models_for_combo(self, config):
+    """加载 API 模型列表到下拉框（从缓存或动态获取）"""
+    # 1. 先从缓存加载（快速响应）
+    # 2. 后台异步从 API 获取最新列表
+    # 3. 更新 UI 和缓存
 ```
+
+#### 工作流程
+
+1. 用户在设置界面点击"保存配置"
+2. 验证 API Key 成功后，保存配置
+3. 调用 `main_win._load_ai_models()` 刷新主窗口的模型下拉框
+4. `_load_ai_models()` 根据 provider 类型调用 `_load_api_models_for_combo()`
+5. 从缓存或 API 动态获取模型列表并显示
 
 ---
 
 ## 下一步操作
 
-### 方案 1: 使用 SiliconFlow 内置支持（推荐）
+### 方案：修复模型名称并重启
 
 1. 重启 UE Toolkit 应用
 2. 进入设置，将模型名称改为 `deepseek-ai/DeepSeek-V2.5` 或 `deepseek-ai/DeepSeek-V3`
-3. 保存设置
-4. 返回 AI 助手，模型下拉框应该会显示多个 SiliconFlow 支持的模型
+3. 点击"保存配置"按钮
+4. 系统会自动从 SiliconFlow API 获取可用模型列表
+5. 返回 AI 助手，模型下拉框应该会显示从 API 获取的所有可用模型
 
-### 方案 2: 手动配置模型列表
+### 如果模型列表还是只有一个
 
-1. 打开配置文件：`%APPDATA%\ue_toolkit\user_data\configs\ai_assistant\ai_assistant_config.json`
-2. 在 `api_settings` 中添加 `available_models` 字段：
+可能的原因：
 
-```json
-{
-  "api_settings": {
-    "api_url": "https://api.siliconflow.cn/v1/chat/completions",
-    "api_key": "your-key",
-    "default_model": "deepseek-ai/DeepSeek-V2.5",
-    "available_models": [
-      "deepseek-ai/DeepSeek-V3",
-      "deepseek-ai/DeepSeek-V2.5",
-      "Qwen/Qwen2.5-72B-Instruct",
-      "Qwen/Qwen2.5-32B-Instruct"
-    ],
-    ...
-  }
-}
-```
+1. API Key 无效或过期
+2. SiliconFlow API 的 `/v1/models` 端点返回错误
+3. 网络连接问题
 
-3. 保存文件
-4. 重启 UE Toolkit
+解决方法：
+
+- 检查日志文件 `logs/runtime/ue_toolkit.log` 查看详细错误信息
+- 确认 API Key 是否有效
+- 尝试手动访问 `https://api.siliconflow.cn/v1/models` 查看返回结果
 
 ---
 
@@ -144,5 +98,5 @@ else:
 
 ## 修改的文件
 
-1. `ui/ue_main_window.py` - 添加 SiliconFlow 支持和自定义模型列表支持
-2. `modules/ai_assistant/config_template.json` - 添加 `available_models` 字段说明
+1. `ui/ue_main_window.py` - 修改 `_load_api_models_for_combo` 方法，从 API 动态获取模型列表
+2. `modules/ai_assistant/config_template.json` - 移除不需要的 `available_models` 字段
