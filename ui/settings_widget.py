@@ -868,23 +868,20 @@ class AIAssistantSection(SettingsSection):
         self.ollama_widget.setVisible(is_ollama)
         self.api_url_row.setVisible(is_byok)
         
-        # 如果不是加载配置状态，则自动设置 URL 和默认模型
-        if not self._loading_config:
-            config = provider_configs.get(provider, {})
+        # 先设置默认 URL（对于非 BYOK 供应商）
+        config = provider_configs.get(provider, {})
+        if not is_byok and not is_ollama:
+            url = config.get("url", "")
+            self.api_url_input.setText(url)
             
-            # 设置 API URL（仅非 BYOK 时）
-            if not is_byok and not is_ollama:
-                url = config.get("url", "")
-                self.api_url_input.setText(url)
-                
-                # 同时设置默认模型（将在保存时使用）
+            # 同时设置默认模型（将在保存时使用）
+            if not self._loading_config:
                 model = config.get("model", "")
                 if model:
                     logger.info(f"供应商切换：将使用默认模型 {model}")
-                    logger.info(f"供应商切换：自动设置默认模型为 {model}")
-            
-            # 从配置中加载该供应商之前保存的密钥和 URL
-            self._load_provider_credentials(provider)
+        
+        # 从配置中加载该供应商之前保存的密钥和 URL（可能会覆盖默认 URL）
+        self._load_provider_credentials(provider)
         
         logger.info(f"供应商切换到: {provider}")
     
@@ -919,10 +916,19 @@ class AIAssistantSection(SettingsSection):
                 api_key = provider_config.get("api_key", "")
                 self.api_key_input.setText(api_key)
                 
-                # 加载 API URL（仅 BYOK 时）
+                # 加载 API URL
+                # BYOK: 必须从配置加载（用户自定义）
+                # 其他供应商: 如果配置中有保存的 URL，使用保存的；否则使用默认 URL（已在 _on_provider_changed 中设置）
                 if provider == "byok":
                     api_url = provider_config.get("api_url", "")
                     self.api_url_input.setText(api_url)
+                else:
+                    # 非 BYOK 供应商：如果配置中有保存的 URL，使用保存的（可能用户修改过）
+                    saved_url = provider_config.get("api_url", "")
+                    if saved_url:
+                        self.api_url_input.setText(saved_url)
+                        logger.info(f"[加载凭据] 使用保存的 URL: {saved_url}")
+                    # 否则保持 _on_provider_changed 中设置的默认 URL
                 
                 logger.info(f"[加载凭据] 已加载 {provider} 的配置，密钥长度: {len(api_key)}")
         except Exception as e:
@@ -1012,9 +1018,24 @@ class AIAssistantSection(SettingsSection):
                 self._show_api_key_error("请输入 API Key")
                 return
             
-            if not api_url:
-                self._show_api_key_error("请输入 API URL")
-                return
+            # 只有 BYOK 才需要用户输入 URL，其他供应商使用默认 URL
+            if provider == "byok":
+                if not api_url:
+                    self._show_api_key_error("请输入 API URL")
+                    return
+            else:
+                # 非 BYOK 供应商：如果 URL 为空，使用默认 URL
+                if not api_url:
+                    provider_configs = {
+                        "openai": "https://api.openai.com/v1/chat/completions",
+                        "gemini": "https://generativelanguage.googleapis.com/v1beta/chat/completions",
+                        "deepseek": "https://api.deepseek.com/v1/chat/completions",
+                        "claude": "https://api.anthropic.com/v1/messages",
+                    }
+                    api_url = provider_configs.get(provider, "")
+                    if api_url:
+                        self.api_url_input.setText(api_url)
+                        logger.info(f"[配置保存] 使用默认 URL: {api_url}")
             
             # 异步验证 API Key 并获取模型列表
             self._validate_and_save_config(api_key, api_url)
