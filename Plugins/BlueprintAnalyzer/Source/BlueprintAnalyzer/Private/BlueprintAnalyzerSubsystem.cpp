@@ -351,3 +351,48 @@ FString UBlueprintAnalyzerSubsystem::GetEditorContext()
 	FJsonSerializer::Serialize(ContextObj.ToSharedRef(), Writer);
 	return OutputString;
 }
+
+FString UBlueprintAnalyzerSubsystem::ListAssets(const FString& PackagePath, const bool bRecursive, const FString& ClassFilter)
+{
+	TArray<TSharedPtr<FJsonValue>> ResultArray;
+
+	// When non-recursive, include immediate subdirectories so users can browse the folder tree
+	if (!bRecursive)
+	{
+		TArray<FString> SubPaths;
+		IAssetRegistry::Get()->GetSubPaths(PackagePath, SubPaths, false);
+		for (const FString& SubPath : SubPaths)
+		{
+			const FString FolderName = FPaths::GetCleanFilename(SubPath);
+			const TSharedPtr<FJsonObject> FolderObj = MakeShared<FJsonObject>();
+			FolderObj->SetStringField(TEXT("path"), SubPath);
+			FolderObj->SetStringField(TEXT("name"), FolderName);
+			FolderObj->SetStringField(TEXT("class"), TEXT("Folder"));
+			ResultArray.Add(MakeShared<FJsonValueObject>(FolderObj));
+		}
+	}
+
+	TArray<FAssetData> AssetDatas;
+	IAssetRegistry::Get()->GetAssetsByPath(FName(*PackagePath), AssetDatas, bRecursive);
+
+	for (const FAssetData& AssetData : AssetDatas)
+	{
+		const FString AssetClass = AssetData.AssetClassPath.GetAssetName().ToString();
+
+		if (!ClassFilter.IsEmpty() && AssetClass != ClassFilter)
+		{
+			continue;
+		}
+
+		const TSharedPtr<FJsonObject> AssetObj = MakeShared<FJsonObject>();
+		AssetObj->SetStringField(TEXT("path"),  AssetData.GetObjectPathString());
+		AssetObj->SetStringField(TEXT("name"),  AssetData.AssetName.ToString());
+		AssetObj->SetStringField(TEXT("class"), AssetClass);
+		ResultArray.Add(MakeShared<FJsonValueObject>(AssetObj));
+	}
+
+	FString OutString;
+	const TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&OutString);
+	FJsonSerializer::Serialize(ResultArray, Writer);
+	return OutString;
+}

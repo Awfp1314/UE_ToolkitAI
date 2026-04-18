@@ -40,6 +40,17 @@ public:
 	UFUNCTION(BlueprintCallable, Category="Blueprint Analyzer")
 	FString GetEditorContext();
 
+	/**
+	 * Lists assets under a package path
+	 * Returns array of assets and folders in the specified path
+	 * @param PackagePath - Package path to list (e.g. "/Game/Blueprints")
+	 * @param bRecursive - Whether to list assets recursively in subdirectories
+	 * @param ClassFilter - Optional class filter (e.g. "Blueprint", "Material")
+	 * @return JSON array of assets and folders
+	 */
+	UFUNCTION(BlueprintCallable, Category="Blueprint Analyzer")
+	FString ListAssets(const FString& PackagePath, const bool bRecursive = true, const FString& ClassFilter = TEXT(""));
+
 private:
 	// Helper: Load asset from path
 	UObject* LoadAssetFromPath(const FString& AssetPath);

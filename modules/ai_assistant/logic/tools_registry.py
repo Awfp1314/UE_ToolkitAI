@@ -956,6 +956,32 @@ class ToolsRegistry:
             requires_confirmation=False
         ))
         
+        # 4. 列出资产
+        self.register_tool(ToolDefinition(
+            name="list_assets",
+            description="列出指定目录下的资产和文件夹。可以查看项目的文件结构，浏览不同文件夹下的资产。非递归模式下会显示子文件夹，方便逐层浏览。",
+            parameters={
+                "type": "object",
+                "properties": {
+                    "package_path": {
+                        "type": "string",
+                        "description": "包路径，例如 '/Game/Blueprints' 或 '/Game/UI'。使用 '/Game' 查看项目根目录"
+                    },
+                    "recursive": {
+                        "type": "boolean",
+                        "description": "是否递归列出所有子目录的资产。false 时只列出当前目录的资产和子文件夹（默认 false）"
+                    },
+                    "class_filter": {
+                        "type": "string",
+                        "description": "可选的类型过滤，例如 'Blueprint'、'Material'、'Texture'。留空则显示所有类型"
+                    }
+                },
+                "required": ["package_path"]
+            },
+            function=self._tool_list_assets,
+            requires_confirmation=False
+        ))
+        
         self.logger.info("Blueprint Analyzer 工具注册完成")
     
     def _tool_analyze_blueprint(self, asset_path: str) -> str:
@@ -1120,6 +1146,78 @@ class ToolsRegistry:
         except Exception as e:
             self.logger.error(f"获取编辑器上下文失败: {e}", exc_info=True)
             return f"[错误] 获取编辑器上下文时发生异常: {str(e)}"
+    
+    def _tool_list_assets(self, package_path: str, recursive: bool = False, class_filter: str = "") -> str:
+        """列出资产工具实现"""
+        try:
+            result = self.blueprint_analyzer_client.list_assets(package_path, recursive, class_filter)
+            
+            if result.get("status") == "error":
+                return f"[错误] {result.get('message', '未知错误')}"
+            
+            # 解析 JSON 响应
+            import json
+            data = json.loads(result.get("ReturnValue", "[]"))
+            
+            if not isinstance(data, list):
+                return f"[错误] 返回数据格式错误"
+            
+            if len(data) == 0:
+                return f"📁 目录 {package_path} 下没有找到资产"
+            
+            # 格式化输出
+            output = f"📁 目录：{package_path}\n"
+            if recursive:
+                output += "（递归模式：包含所有子目录）\n"
+            else:
+                output += "（非递归模式：仅当前目录）\n"
+            
+            if class_filter:
+                output += f"过滤类型：{class_filter}\n"
+            
+            output += f"\n共找到 {len(data)} 项：\n\n"
+            
+            # 分类显示：先显示文件夹，再显示资产
+            folders = [item for item in data if item.get('class') == 'Folder']
+            assets = [item for item in data if item.get('class') != 'Folder']
+            
+            if folders:
+                output += "📂 文件夹：\n"
+                for folder in folders[:20]:  # 最多显示20个文件夹
+                    output += f"  - {folder.get('name')}\n"
+                    output += f"    路径: {folder.get('path')}\n"
+                if len(folders) > 20:
+                    output += f"  ... 还有 {len(folders) - 20} 个文件夹\n"
+                output += "\n"
+            
+            if assets:
+                output += "📄 资产：\n"
+                # 按类型分组
+                assets_by_class = {}
+                for asset in assets:
+                    asset_class = asset.get('class', 'Unknown')
+                    if asset_class not in assets_by_class:
+                        assets_by_class[asset_class] = []
+                    assets_by_class[asset_class].append(asset)
+                
+                # 显示每种类型的资产
+                for asset_class, class_assets in sorted(assets_by_class.items()):
+                    output += f"\n  {asset_class} ({len(class_assets)}):\n"
+                    for asset in class_assets[:10]:  # 每种类型最多显示10个
+                        # 转换路径格式
+                        asset_path = asset.get('path', '')
+                        if '.' in asset_path:
+                            asset_path = asset_path.rsplit('.', 1)[0]
+                        output += f"    - {asset.get('name')}\n"
+                        output += f"      路径: {asset_path}\n"
+                    if len(class_assets) > 10:
+                        output += f"    ... 还有 {len(class_assets) - 10} 个 {asset_class}\n"
+            
+            return output
+            
+        except Exception as e:
+            self.logger.error(f"列出资产失败: {e}", exc_info=True)
+            return f"[错误] 列出资产时发生异常: {str(e)}"
     
     def _register_experimental_tools(self):
         """注册实验性功能工具（测试版）"""

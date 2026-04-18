@@ -75,3 +75,22 @@ class BlueprintAnalyzerClient(UEToolClient):
                 失败: {"status": "error", "message": "..."}
         """
         return self.execute_tool_rpc("GetEditorContext")
+    
+    def list_assets(self, package_path: str, recursive: bool = True, class_filter: str = "") -> dict:
+        """
+        列出指定路径下的资产
+        
+        Args:
+            package_path: 包路径，例如 "/Game/Blueprints"
+            recursive: 是否递归列出子目录
+            class_filter: 可选的类型过滤
+            
+        Returns:
+            dict: 资产列表
+                成功: {"status": "success", "data": [...]}
+                失败: {"status": "error", "message": "..."}
+        """
+        return self.execute_tool_rpc("ListAssets", 
+                                     PackagePath=package_path, 
+                                     bRecursive=recursive, 
+                                     ClassFilter=class_filter)
