@@ -171,6 +171,20 @@ class ApiLLMClient(BaseLLMClient):
                 # 添加 tools 参数（如果提供）
                 if tools:
                     payload["tools"] = tools
+                    print(f"[DEBUG] 已添加 tools 参数，工具数量: {len(tools)}")
+                    print(f"[DEBUG] 工具列表:")
+                    for i, tool in enumerate(tools):
+                        tool_name = tool.get('function', {}).get('name', 'unknown')
+                        tool_desc = tool.get('function', {}).get('description', '')[:100]
+                        print(f"[DEBUG]   {i+1}. {tool_name}: {tool_desc}")
+                    
+                    # 检查是否有重复或相似的工具名称
+                    tool_names = [t.get('function', {}).get('name', '') for t in tools]
+                    blueprint_tools = [name for name in tool_names if 'blueprint' in name.lower() or 'extract' in name.lower()]
+                    if len(blueprint_tools) > 1:
+                        print(f"[WARNING] 检测到多个蓝图相关工具，可能导致混淆: {blueprint_tools}")
+                else:
+                    print(f"[DEBUG] 未提供 tools 参数")
                 
                 # 如果是 Gemini API 且需要流式，通过 URL 参数控制
                 request_url = self.api_url

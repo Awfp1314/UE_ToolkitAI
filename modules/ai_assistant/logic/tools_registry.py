@@ -377,14 +377,23 @@ class ToolsRegistry:
         schemas = []
         
         for tool_name, tool_def in self.tools.items():
-            schemas.append({
+            schema = {
                 "type": "function",
                 "function": {
                     "name": tool_def.name,
                     "description": tool_def.description,
                     "parameters": tool_def.parameters
                 }
-            })
+            }
+            schemas.append(schema)
+            
+            # 调试：打印每个工具的定义
+            if tool_name in ['get_ue_editor_context', 'get_blueprint_info', 'analyze_blueprint', 'ExtractBlueprint']:
+                import json
+                self.logger.info(f"[工具定义] {tool_name}:")
+                self.logger.info(f"  描述: {tool_def.description[:100]}")
+                self.logger.info(f"  参数: {json.dumps(tool_def.parameters, ensure_ascii=False)}")
+                self.logger.info(f"  完整schema: {json.dumps(schema, ensure_ascii=False, indent=2)}")
         
         return schemas
     
@@ -898,22 +907,22 @@ class ToolsRegistry:
         """
         self.logger.info("注册 Blueprint Analyzer 工具...")
         
-        # 1. 分析蓝图
+        # 1. 读取蓝图信息
         self.register_tool(ToolDefinition(
-            name="analyze_blueprint",
-            description="分析虚幻引擎蓝图结构，获取变量、函数、图表和节点信息。用于帮助用户理解蓝图逻辑、排查问题或学习蓝图实现。",
+            name="get_blueprint_info",
+            description="Get detailed information about a UE asset including variables, functions, graphs and nodes.",
             parameters={
                 "type": "object",
                 "properties": {
                     "asset_path": {
                         "type": "string",
-                        "description": "蓝图资产的完整路径，例如 '/Game/Blueprints/MyBlueprint' 或 '/Game/Characters/PlayerCharacter'"
+                        "description": "Asset path in format: /Game/Folder/AssetName"
                     }
                 },
                 "required": ["asset_path"]
             },
             function=self._tool_analyze_blueprint,
-            requires_confirmation=False  # 只读工具，无需确认
+            requires_confirmation=False
         ))
         
         # 2. 分析 Widget 蓝图
@@ -1086,7 +1095,16 @@ class ToolsRegistry:
             if open_assets:
                 output += f"当前打开的资产 ({len(open_assets)}):\n"
                 for asset in open_assets[:5]:
+                    # 包含完整路径，以便 AI 可以提取并调用 get_blueprint_info
+                    # UE 的 GetPathName() 返回格式: /Game/AssetName.AssetName
+                    # 需要转换为资产路径格式: /Game/AssetName
+                    asset_path = asset.get('path', '')
+                    # 移除 .AssetName 后缀（如果存在）
+                    if '.' in asset_path:
+                        asset_path = asset_path.rsplit('.', 1)[0]
+                    
                     output += f"  - {asset.get('name')} ({asset.get('class')})\n"
+                    output += f"    资产路径: {asset_path}\n"
                 if len(open_assets) > 5:
                     output += f"  ... 还有 {len(open_assets) - 5} 个资产\n"
                 output += "\n"

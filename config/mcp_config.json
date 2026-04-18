@@ -8,7 +8,7 @@
         "http://127.0.0.1:30010"
       ],
       "env": {},
-      "disabled": false,
+      "disabled": true,
       "autoApprove": [
         "ExtractBlueprint",
         "ExtractActiveBlueprint",

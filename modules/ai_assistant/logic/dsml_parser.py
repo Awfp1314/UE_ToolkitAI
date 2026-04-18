@@ -13,13 +13,14 @@ from typing import List, Dict, Optional
 class DSMLParser:
     """DSML 格式解析器"""
     
-    # DSML 标记模式
-    FUNCTION_CALLS_START = r'<\|DSML\|function_calls>'
-    FUNCTION_CALLS_END = r'</\|DSML\|function_calls>'
-    INVOKE_START = r'<\|DSML\|invoke\s+name="([^"]+)">'
-    INVOKE_END = r'</\|DSML\|invoke>'
-    FUNCTION_ARGS_START = r'<\|DSML\|function_args>'
-    FUNCTION_ARGS_END = r'</\|DSML\|function_args>'
+    # DSML 标记模式（支持空格和全角/半角变体）
+    # 使用更宽松的匹配，支持：<|DSML|、< | DSML |、<｜DSML｜、< ｜ DSML ｜
+    FUNCTION_CALLS_START = r'<[\s｜\|]*DSML[\s｜\|]*function_calls[\s｜\|]*>'
+    FUNCTION_CALLS_END = r'</[\s｜\|]*DSML[\s｜\|]*function_calls[\s｜\|]*>'
+    INVOKE_START = r'<[\s｜\|]*DSML[\s｜\|]*invoke\s+name="([^"]+)"[\s｜\|]*>'
+    INVOKE_END = r'</[\s｜\|]*DSML[\s｜\|]*invoke[\s｜\|]*>'
+    FUNCTION_ARGS_START = r'<[\s｜\|]*DSML[\s｜\|]*(function_args|arg\s+name="[^"]+")[\s｜\|]*>'
+    FUNCTION_ARGS_END = r'</[\s｜\|]*DSML[\s｜\|]*(function_args|arg)[\s｜\|]*>'
     
     @staticmethod
     def contains_dsml(text: str) -> bool:
@@ -32,7 +33,20 @@ class DSMLParser:
         Returns:
             bool: 是否包含 DSML 标记
         """
-        return '<|DSML|' in text
+        # 支持多种格式变体：
+        # 1. <|DSML| (半角，无空格)
+        # 2. < | DSML | (半角，有空格)
+        # 3. <｜DSML｜ (全角)
+        # 4. < ｜ DSML ｜ (全角，有空格)
+        return (
+            '<|DSML|' in text or 
+            '< | DSML |' in text or 
+            '< |DSML|' in text or
+            '<｜DSML｜' in text or
+            '< ｜ DSML ｜' in text or
+            '< ｜DSML｜' in text or
+            'DSML' in text and ('function_calls' in text or 'invoke' in text)
+        )
     
     @staticmethod
     def parse_tool_calls(text: str) -> Optional[List[Dict]]:
