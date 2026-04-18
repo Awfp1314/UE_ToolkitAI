@@ -25,7 +25,7 @@ from core.services import style_service
 from ui.settings_widget import SettingsWidget
 
 # 导入版本信息
-from version import APP_NAME, get_version_string
+from version import APP_NAME, APP_DISPLAY_NAME, get_version_string
 
 # 导入 UI 常量
 from core.constants import (
@@ -111,7 +111,7 @@ class UEMainWindow(QMainWindow):
     def init_ui(self):
         """初始化UI"""
         # 设置窗口标题（从 version.py 读取版本号）
-        self.setWindowTitle(f"{APP_NAME} {get_version_string()} - 虚幻引擎工具箱")
+        self.setWindowTitle(f"{APP_DISPLAY_NAME} {get_version_string()} - 虚幻引擎工具箱")
         # 使用 16:10 黄金比例，符合人类美学
         self.setGeometry(100, 100, WINDOW_DEFAULT_WIDTH, WINDOW_DEFAULT_HEIGHT)
         self.setWindowFlags(Qt.WindowType.FramelessWindowHint)  # 无边框窗口
@@ -1087,9 +1087,9 @@ class UEMainWindow(QMainWindow):
     def _save_theme_setting(self, theme_name: str):
         """保存主题设置到配置文件"""
         try:
-            # 获取配置文件路径
+            # 获取配置文件路径（Qt 会自动使用 APP_NAME 创建目录）
             app_data = QStandardPaths.writableLocation(QStandardPaths.StandardLocation.AppDataLocation)
-            config_dir = Path(app_data) / "ue_toolkit"
+            config_dir = Path(app_data)
             config_dir.mkdir(parents=True, exist_ok=True)
             config_path = config_dir / "ui_settings.json"
 

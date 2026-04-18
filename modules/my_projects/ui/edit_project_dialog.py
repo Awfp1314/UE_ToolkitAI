@@ -35,7 +35,7 @@ def _get_backup_dir() -> Path:
     app_data = QStandardPaths.writableLocation(
         QStandardPaths.StandardLocation.AppDataLocation
     )
-    return Path(app_data) / "ue_toolkit" / "my_projects" / "rename_backup"
+    return Path(app_data) / "my_projects" / "rename_backup"
 
 
 def _find_engine_path(version: str) -> Optional[Path]:

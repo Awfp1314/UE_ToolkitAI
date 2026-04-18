@@ -43,7 +43,7 @@ class ConfigStorage:
         app_data = QStandardPaths.writableLocation(
             QStandardPaths.StandardLocation.AppDataLocation
         )
-        return Path(app_data) / "ue_toolkit" / "config_templates"
+        return Path(app_data) / "config_templates"
 
     def save_template(self, template: ConfigTemplate, source_path: Path) -> bool:
         """保存配置模板

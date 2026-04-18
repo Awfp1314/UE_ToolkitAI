@@ -29,7 +29,7 @@ class ConfigMigrationManager:
         app_data = QStandardPaths.writableLocation(
             QStandardPaths.StandardLocation.AppDataLocation
         )
-        self.config_dir = Path(app_data) / "ue_toolkit" / "user_data" / "configs"
+        self.config_dir = Path(app_data) / "user_data" / "configs"
         self.backup_dir = self.config_dir / ".migration_backups"
         self.migration_marker_path = self.config_dir / ".migration_marker.json"
     

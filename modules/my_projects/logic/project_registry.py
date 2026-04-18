@@ -46,8 +46,8 @@ class ProjectRegistry:
         )
         if app_data:
             app_data_path = Path(app_data)
-            # 当前默认路径
-            candidates.append(app_data_path / "ue_toolkit" / "my_projects")
+            # 当前默认路径（Qt 自动使用 APP_NAME = "ue_toolkit"）
+            candidates.append(app_data_path / "my_projects")
             # 兼容历史路径（目录名带空格）
             candidates.append(app_data_path / "UE Toolkit" / "ue_toolkit" / "my_projects")
             candidates.append(app_data_path / "UE Toolkit" / "my_projects")

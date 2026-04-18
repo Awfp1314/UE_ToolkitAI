@@ -117,9 +117,9 @@ class UILauncher:
             str: 主题名称
         """
         try:
-            # 从 AppData/ue_toolkit/ui_settings.json 读取主题配置
+            # 从 AppData/ue_toolkit/ui_settings.json 读取主题配置（Qt 自动使用 APP_NAME）
             app_data = QStandardPaths.writableLocation(QStandardPaths.StandardLocation.AppDataLocation)
-            config_path = Path(app_data) / "ue_toolkit" / "ui_settings.json"
+            config_path = Path(app_data) / "ui_settings.json"
 
             if config_path.exists():
                 with open(config_path, 'r', encoding='utf-8') as f:

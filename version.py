@@ -15,7 +15,7 @@
 # ============================================
 # 版本号定义 - 只需修改这一行
 # ============================================
-VERSION = "1.2.31"
+VERSION = "1.2.32"
 # ============================================
 
 
@@ -29,7 +29,8 @@ VERSION_PATCH = VERSION_INFO[2]
 VERSION_STRING = f"v{VERSION}"
 
 # 应用程序信息
-APP_NAME = "UE Toolkit"
+APP_NAME = "ue_toolkit"  # 注意：此名称用于 Qt 标准路径，不应包含空格
+APP_DISPLAY_NAME = "UE Toolkit"  # 用于界面显示的名称
 APP_ID = "HUTAO.UEToolkit"
 APP_AUTHOR = "HUTAO"
 
