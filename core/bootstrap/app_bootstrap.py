@@ -50,9 +50,16 @@ class AppBootstrap:
             int: 退出码 (0=成功, 1=初始化失败, 2=模块加载失败, 3=UI创建失败)
         """
         try:
+            # 5.1: 路径迁移检查（在日志系统初始化之前）
+            from core.bootstrap.path_migration import check_and_migrate
+            check_and_migrate()  # 此时还没有 logger，所以不传递
+            
             # 5.2: 应用初始化阶段
             self.logger.info("开始应用初始化阶段")
             self.app, self.single_instance, success = self.app_initializer.initialize()
+            
+            # 再次检查路径迁移（此时有 logger 了）
+            check_and_migrate(self.logger)
             
             # 调试：检查 single_instance 是否为 None
             self.logger.info(f"初始化完成: single_instance={self.single_instance}, success={success}")

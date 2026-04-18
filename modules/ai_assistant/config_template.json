@@ -1,6 +1,28 @@
 {
   "_version": "1.0.0",
   "llm_provider": "api",
+  "provider_credentials": {
+    "openai": {
+      "api_key": "",
+      "api_url": "https://api.openai.com/v1/chat/completions"
+    },
+    "gemini": {
+      "api_key": "",
+      "api_url": "https://generativelanguage.googleapis.com/v1beta/chat/completions"
+    },
+    "deepseek": {
+      "api_key": "",
+      "api_url": "https://api.deepseek.com/v1/chat/completions"
+    },
+    "claude": {
+      "api_key": "",
+      "api_url": "https://api.anthropic.com/v1/messages"
+    },
+    "byok": {
+      "api_key": "",
+      "api_url": ""
+    }
+  },
   "api_settings": {
     "api_url": "https://api.openai.com/v1/chat/completions",
     "api_key": "",
@@ -19,6 +41,6 @@
     "supports_function_calling": false,
     "note": "如需使用本地Ollama，请确保Ollama服务正在运行。大多数 Ollama 模型不支持 function calling。"
   },
-  "note": "首次使用前请在设置中配置API密钥或Ollama服务"
+  "note": "首次使用前请在设置中配置API密钥或Ollama服务。provider_credentials 用于保存每个供应商的独立配置，切换供应商时不会丢失之前的密钥。"
 }
 

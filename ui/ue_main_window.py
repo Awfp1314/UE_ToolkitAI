@@ -1444,13 +1444,15 @@ class UEMainWindow(QMainWindow):
         ]
         
         if not selected_model or selected_model in invalid_texts:
-            print(f"[模型切换] 跳过无效文本: {selected_model}")
+            self.logger.debug(f"[模型切换] 跳过无效文本: {selected_model}")
             return
         
         try:
             from core.config.config_manager import ConfigManager
             from pathlib import Path
             from modules.ai_assistant.config_schema import get_ai_assistant_schema
+            
+            self.logger.info(f"[模型切换] 用户选择模型: {selected_model}")
             
             template_path = Path(__file__).parent.parent / "modules" / "ai_assistant" / "config_template.json"
             config_manager = ConfigManager(
@@ -1462,27 +1464,35 @@ class UEMainWindow(QMainWindow):
             
             # 更新配置中的模型
             provider = config.get("llm_provider", "api")
+            self.logger.info(f"[模型切换] 当前供应商: {provider}")
+            
             if provider == "ollama":
                 if "ollama_settings" not in config:
                     config["ollama_settings"] = {}
+                old_model = config["ollama_settings"].get("default_model", "")
                 config["ollama_settings"]["default_model"] = selected_model
+                self.logger.info(f"[模型切换] Ollama 模型: {old_model} -> {selected_model}")
             else:
                 if "api_settings" not in config:
                     config["api_settings"] = {}
+                old_model = config["api_settings"].get("default_model", "")
                 config["api_settings"]["default_model"] = selected_model
+                self.logger.info(f"[模型切换] API 模型: {old_model} -> {selected_model}")
             
             # 保存配置
-            config_manager.save_user_config_fast(config)
-            print(f"[INFO] 已切换模型到: {selected_model}")
+            success = config_manager.save_user_config_fast(config)
+            if success:
+                self.logger.info(f"[模型切换] ✅ 配置保存成功，模型已切换到: {selected_model}")
+            else:
+                self.logger.error(f"[模型切换] ❌ 配置保存失败")
             
             # 清除缓存
             if hasattr(self, '_cached_ai_model_name'):
                 del self._cached_ai_model_name
+                self.logger.debug("[模型切换] 已清除模型名称缓存")
             
         except Exception as e:
-            print(f"[WARNING] 保存模型配置失败: {e}")
-            import traceback
-            traceback.print_exc()
+            self.logger.error(f"[模型切换] 保存模型配置失败: {e}", exc_info=True)
     
     def _save_window_state(self) -> None:
         """保存窗口位置到配置文件（退出时统一保存，包含窗口状态和当前模块）

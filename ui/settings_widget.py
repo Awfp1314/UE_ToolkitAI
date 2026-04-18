@@ -10,7 +10,7 @@ from PyQt6.QtWidgets import (
     QLineEdit, QComboBox, QRadioButton, QButtonGroup, QTabWidget,
     QScrollArea, QFileDialog, QCheckBox
 )
-from PyQt6.QtCore import Qt, QTimer, pyqtSignal
+from PyQt6.QtCore import Qt, QTimer, pyqtSignal, pyqtSlot
 from core.logger import get_logger
 
 logger = get_logger(__name__)
@@ -452,8 +452,19 @@ class AIAssistantSection(SettingsSection):
             self.api_model_combo.setCurrentIndex(0)
     
     def _get_selected_model_id(self) -> str:
-        """获取当前输入的模型名称"""
-        return self.api_model_input.text().strip()
+        """获取当前配置的模型名称"""
+        try:
+            from core.config.config_manager import ConfigManager
+            from pathlib import Path
+            
+            template_path = Path(__file__).parent.parent / "modules" / "ai_assistant" / "config_template.json"
+            config_manager = ConfigManager("ai_assistant", template_path=template_path)
+            config = config_manager.get_module_config()
+            
+            return config.get("api_settings", {}).get("default_model", "")
+        except Exception as e:
+            logger.error(f"获取模型名称失败: {e}")
+            return ""
     
     def _update_api_models_ui(self, models):
         """更新API模型下拉框（主线程）"""
@@ -866,13 +877,56 @@ class AIAssistantSection(SettingsSection):
                 url = config.get("url", "")
                 self.api_url_input.setText(url)
                 
-                # 同时设置默认模型，避免残留上一个供应商的模型
+                # 同时设置默认模型（将在保存时使用）
                 model = config.get("model", "")
                 if model:
-                    self.api_model_input.setText(model)
+                    logger.info(f"供应商切换：将使用默认模型 {model}")
                     logger.info(f"供应商切换：自动设置默认模型为 {model}")
+            
+            # 从配置中加载该供应商之前保存的密钥和 URL
+            self._load_provider_credentials(provider)
         
         logger.info(f"供应商切换到: {provider}")
+    
+    def _load_provider_credentials(self, provider):
+        """加载指定供应商的密钥配置
+        
+        Args:
+            provider: 供应商标识（openai, deepseek, gemini, claude, byok, ollama）
+        """
+        try:
+            from core.config.config_manager import ConfigManager
+            from pathlib import Path
+            from modules.ai_assistant.config_schema import get_ai_assistant_schema
+            
+            template_path = Path(__file__).parent.parent / "modules" / "ai_assistant" / "config_template.json"
+            config_manager = ConfigManager(
+                "ai_assistant", 
+                template_path=template_path,
+                config_schema=get_ai_assistant_schema()
+            )
+            config = config_manager.get_module_config()
+            
+            # 从 provider_credentials 中加载该供应商的配置
+            provider_credentials = config.get("provider_credentials", {})
+            provider_config = provider_credentials.get(provider, {})
+            
+            if provider == "ollama":
+                # Ollama 不需要密钥，跳过
+                logger.info(f"[加载凭据] Ollama 不需要密钥")
+            else:
+                # 加载 API Key
+                api_key = provider_config.get("api_key", "")
+                self.api_key_input.setText(api_key)
+                
+                # 加载 API URL（仅 BYOK 时）
+                if provider == "byok":
+                    api_url = provider_config.get("api_url", "")
+                    self.api_url_input.setText(api_url)
+                
+                logger.info(f"[加载凭据] 已加载 {provider} 的配置，密钥长度: {len(api_key)}")
+        except Exception as e:
+            logger.error(f"加载供应商凭据失败: {e}", exc_info=True)
     
     def _load_config(self):
         """加载配置"""
@@ -916,30 +970,27 @@ class AIAssistantSection(SettingsSection):
                         provider = "deepseek"
                     elif "anthropic.com" in api_url or "claude" in api_url.lower():
                         provider = "claude"
-            else:
-                # 有 provider_type，直接使用
-                api_settings = config.get("api_settings", {})
-                api_url = api_settings.get("api_url", "") or "https://api.openai.com/v1/chat/completions"
+                
+                # 迁移旧配置：将当前的 api_settings 保存到 provider_credentials
+                if not config.get("provider_credentials"):
+                    logger.info(f"[配置迁移] 检测到旧配置格式，迁移到新格式")
+                    config["provider_credentials"] = {}
+                    if provider != "ollama":
+                        config["provider_credentials"][provider] = {
+                            "api_key": api_settings.get("api_key", ""),
+                            "api_url": api_url
+                        }
+                        config_manager.save_user_config_fast(config)
+                        logger.info(f"[配置迁移] 已迁移 {provider} 的配置")
             
-            logger.info(f"[配置加载] provider_type={config.get('provider_type', '无')}, 最终供应商={provider}, URL={api_url}")
+            logger.info(f"[配置加载] provider_type={config.get('provider_type', '无')}, 最终供应商={provider}")
             
-            # 设置供应商下拉框
+            # 设置供应商下拉框（这会触发 _on_provider_changed，自动加载该供应商的凭据）
             for i in range(self.provider_combo.count()):
                 if self.provider_combo.itemData(i) == provider:
                     self.provider_combo.setCurrentIndex(i)
                     logger.info(f"[配置加载] 已设置供应商下拉框为: {provider}")
                     break
-            
-            # 加载 API Key 和 URL
-            self.api_key_input.setText(api_settings.get("api_key", ""))
-            self.api_url_input.setText(api_url)
-            
-            # API 模型在主窗口切换，这里不需要加载
-            
-            # 尝试从缓存加载完整模型列表（已移除，不再需要）
-            
-            # 加载Ollama设置（地址硬编码，不需要加载）
-            # Ollama 模型在主窗口切换，这里不需要加载模型列表
             
             logger.info("AI助手配置加载完成")
         except Exception as e:
@@ -965,14 +1016,104 @@ class AIAssistantSection(SettingsSection):
                 self._show_api_key_error("请输入 API URL")
                 return
             
-            # 异步验证 API Key
+            # 异步验证 API Key 并获取模型列表
             self._validate_and_save_config(api_key, api_url)
         else:
-            # Ollama 不需要验证，直接保存
-            success = self._save_config()
+            # Ollama：获取模型列表后保存
+            self._fetch_ollama_models_and_save()
+    
+    def _fetch_ollama_models_and_save(self):
+        """获取Ollama模型列表并保存配置"""
+        from threading import Thread
+        
+        # 显示加载状态
+        self.ollama_status_label.setText("🔄 正在获取模型列表...")
+        self.ollama_status_label.setStyleSheet("color: #3498db;")
+        
+        def fetch_in_background():
+            try:
+                import requests
+                ollama_url = "http://localhost:11434"
+                
+                logger.info(f"[配置保存] 开始获取 Ollama 模型列表")
+                
+                session = requests.Session()
+                session.trust_env = False
+                session.proxies = {'http': None, 'https': None}
+                
+                response = session.get(f"{ollama_url}/api/tags", timeout=10)
+                if response.status_code == 200:
+                    data = response.json()
+                    models = [m.get("name", "") for m in data.get("models", []) if m.get("name")]
+                    logger.info(f"[配置保存] 成功获取 {len(models)} 个 Ollama 模型")
+                    
+                    # 通过信号发送结果到主线程
+                    from PyQt6.QtCore import QMetaObject, Qt
+                    QMetaObject.invokeMethod(
+                        self,
+                        "_on_ollama_models_fetched",
+                        Qt.ConnectionType.QueuedConnection,
+                        models
+                    )
+                else:
+                    logger.error(f"[配置保存] Ollama 请求失败，状态码: {response.status_code}")
+                    QMetaObject.invokeMethod(
+                        self,
+                        "_on_ollama_fetch_error",
+                        Qt.ConnectionType.QueuedConnection,
+                        f"连接失败 (HTTP {response.status_code})"
+                    )
+            except requests.exceptions.ConnectionError as e:
+                logger.error(f"[配置保存] Ollama 连接失败: {e}")
+                from PyQt6.QtCore import QMetaObject, Qt
+                QMetaObject.invokeMethod(
+                    self,
+                    "_on_ollama_fetch_error",
+                    Qt.ConnectionType.QueuedConnection,
+                    "无法连接到 Ollama 服务，请确保 Ollama 正在运行"
+                )
+            except Exception as e:
+                logger.error(f"[配置保存] 获取 Ollama 模型失败: {e}")
+                from PyQt6.QtCore import QMetaObject, Qt
+                QMetaObject.invokeMethod(
+                    self,
+                    "_on_ollama_fetch_error",
+                    Qt.ConnectionType.QueuedConnection,
+                    str(e)
+                )
+        
+        thread = Thread(target=fetch_in_background, daemon=True)
+        thread.start()
+    
+    @pyqtSlot(list)
+    def _on_ollama_models_fetched(self, models):
+        """Ollama 模型获取成功（主线程）"""
+        if models and len(models) > 0:
+            logger.info(f"[配置保存] 收到 {len(models)} 个 Ollama 模型")
+            self.ollama_status_label.setText(f"✅ 找到 {len(models)} 个模型")
+            self.ollama_status_label.setStyleSheet("color: #27ae60;")
+            
+            # 保存配置（传入模型列表）
+            success = self._save_config(models=models)
+            
             if success:
                 from modules.asset_manager.ui.message_dialog import MessageDialog
-                MessageDialog("保存成功", "AI 助手配置已保存", "success", parent=self).exec()
+                MessageDialog("保存成功", f"Ollama 配置已保存\n找到 {len(models)} 个可用模型", "success", parent=self).exec()
+            
+            # 恢复状态
+            QTimer.singleShot(2000, lambda: self.ollama_status_label.setText(""))
+        else:
+            self.ollama_status_label.setText("⚠ 未找到模型")
+            self.ollama_status_label.setStyleSheet("color: #e67e22;")
+    
+    @pyqtSlot(str)
+    def _on_ollama_fetch_error(self, error_msg):
+        """Ollama 模型获取失败（主线程）"""
+        self.ollama_status_label.setText(f"❌ {error_msg}")
+        self.ollama_status_label.setStyleSheet("color: #e74c3c;")
+        
+        # 3秒后恢复
+        QTimer.singleShot(3000, lambda: self.ollama_status_label.setText(""))
     
     def _show_api_key_error(self, message: str):
         """显示 API Key 错误提示"""
@@ -1010,16 +1151,34 @@ class AIAssistantSection(SettingsSection):
             try:
                 from modules.ai_assistant.clients.api_llm_client import ApiLLMClient
                 
-                # 使用简单的模型列表请求来验证 API Key
-                result = ApiLLMClient.validate_api_key(api_url, api_key, timeout=10)
+                # 获取模型列表来验证 API Key（同时获取可用模型）
+                logger.info(f"[配置保存] 开始验证 API Key 并获取模型列表")
+                models = ApiLLMClient.fetch_available_models(api_url, api_key, timeout=10)
+                
+                # 验证成功，返回模型列表
+                result = {
+                    'valid': True, 
+                    'error': None,
+                    'models': models
+                }
+                logger.info(f"[配置保存] 验证成功，获取到 {len(models)} 个模型")
                 
                 # 通过信号发送结果到主线程
                 self._api_key_validated.emit(result)
                     
             except Exception as e:
                 error_msg = str(e)
-                logger.error(f"API Key 验证失败: {error_msg}")
-                self._api_key_validated.emit({'valid': False, 'error': f"验证失败: {error_msg}"})
+                logger.error(f"[配置保存] API Key 验证失败: {error_msg}")
+                
+                # 解析常见错误
+                if '401' in error_msg or 'Unauthorized' in error_msg or 'Invalid' in error_msg:
+                    error_msg = 'API Key 无效或已过期'
+                elif '403' in error_msg or 'Forbidden' in error_msg:
+                    error_msg = 'API Key 没有访问权限'
+                elif 'timeout' in error_msg.lower():
+                    error_msg = '连接超时，请检查网络或 API URL'
+                
+                self._api_key_validated.emit({'valid': False, 'error': f"验证失败: {error_msg}", 'models': []})
         
         thread = Thread(target=validate_in_background, daemon=True)
         thread.start()
@@ -1028,26 +1187,33 @@ class AIAssistantSection(SettingsSection):
         """处理 API Key 验证结果（主线程）"""
         if result.get("valid", False):
             # 验证成功
-            self.api_model_status_label.setText("✅ 验证成功")
+            models = result.get("models", [])
+            logger.info(f"[配置保存] 验证成功，收到 {len(models)} 个模型")
+            
+            self.api_model_status_label.setText(f"✅ 验证成功，找到 {len(models)} 个模型")
             self.api_model_status_label.setStyleSheet("color: #27ae60;")
             
-            # 保存配置
-            success = self._save_config()
+            # 保存配置（传入模型列表）
+            success = self._save_config(models=models)
             
             if success:
                 # 显示成功消息
                 from modules.asset_manager.ui.message_dialog import MessageDialog
-                MessageDialog("保存成功", "API Key 验证通过，配置已保存", "success", parent=self).exec()
+                MessageDialog("保存成功", f"API Key 验证通过，配置已保存\n找到 {len(models)} 个可用模型", "success", parent=self).exec()
             
             # 恢复状态
             QTimer.singleShot(2000, self._reset_api_key_style)
         else:
             # 验证失败
             error_msg = result.get("error", "API Key 无效")
-            self._show_api_key_error(f"验证失败: {error_msg}")
+            self._show_api_key_error(error_msg)
     
-    def _save_config(self):
-        """保存配置"""
+    def _save_config(self, models=None):
+        """保存配置
+        
+        Args:
+            models: 可用模型列表（从API获取），如果为None则使用配置中已有的模型
+        """
         try:
             from core.config.config_manager import ConfigManager
             from pathlib import Path
@@ -1077,26 +1243,58 @@ class AIAssistantSection(SettingsSection):
             # 保存具体的供应商类型（用于加载时准确恢复）
             config["provider_type"] = provider
             
-            # API设置
+            # 初始化 provider_credentials（每个供应商单独保存密钥）
+            if "provider_credentials" not in config:
+                config["provider_credentials"] = {}
+            
+            # 保存当前供应商的凭据到 provider_credentials
+            if provider != "ollama":
+                config["provider_credentials"][provider] = {
+                    "api_key": self.api_key_input.text().strip(),
+                    "api_url": self.api_url_input.text().strip()
+                }
+                logger.info(f"[配置保存] 已保存 {provider} 的凭据到 provider_credentials")
+            
+            # API设置（保持向后兼容，同时保存到 api_settings）
             if "api_settings" not in config:
                 config["api_settings"] = {}
             config["api_settings"]["api_key"] = self.api_key_input.text().strip()
             config["api_settings"]["api_url"] = self.api_url_input.text().strip()
             
-            # 从模型输入框读取模型名称（用户可能手动修改了）
-            model_from_input = self.api_model_input.text().strip()
-            if model_from_input:
-                config["api_settings"]["default_model"] = model_from_input
+            # 设置默认模型
+            if models and len(models) > 0:
+                # 使用从API/Ollama获取的第一个模型作为默认模型
+                if provider == "ollama":
+                    config["ollama_settings"]["default_model"] = models[0]
+                    logger.info(f"[配置保存] 使用获取到的第一个 Ollama 模型: {models[0]}")
+                else:
+                    config["api_settings"]["default_model"] = models[0]
+                    logger.info(f"[配置保存] 使用获取到的第一个 API 模型: {models[0]}")
             else:
-                # 如果输入框为空，使用供应商默认模型
-                provider_default_models = {
-                    "openai": "gpt-4o-mini",
-                    "gemini": "gemini-2.0-flash-exp",
-                    "deepseek": "deepseek-chat",
-                    "claude": "claude-3-5-sonnet-20241022",
-                    "byok": "gpt-3.5-turbo"
-                }
-                config["api_settings"]["default_model"] = provider_default_models.get(provider, "gpt-4o-mini")
+                # 如果没有获取到模型，保留配置中已有的模型（或使用供应商默认模型）
+                if provider == "ollama":
+                    current_model = config.get("ollama_settings", {}).get("default_model", "")
+                    if not current_model:
+                        # Ollama 没有默认模型，保持为空或使用常见的默认值
+                        config["ollama_settings"]["default_model"] = "llama3.2"
+                        logger.info(f"[配置保存] 使用 Ollama 默认模型: llama3.2")
+                    else:
+                        logger.info(f"[配置保存] 保留已有 Ollama 模型: {current_model}")
+                else:
+                    current_model = config.get("api_settings", {}).get("default_model", "")
+                    if not current_model:
+                        # 使用供应商的默认模型作为后备
+                        provider_default_models = {
+                            "openai": "gpt-4o-mini",
+                            "gemini": "gemini-2.0-flash-exp",
+                            "deepseek": "deepseek-chat",
+                            "claude": "claude-3-5-sonnet-20241022",
+                            "byok": "gpt-3.5-turbo"
+                        }
+                        config["api_settings"]["default_model"] = provider_default_models.get(provider, "gpt-4o-mini")
+                        logger.info(f"[配置保存] 使用供应商默认模型: {config['api_settings']['default_model']}")
+                    else:
+                        logger.info(f"[配置保存] 保留已有 API 模型: {current_model}")
             
             # Ollama设置
             if "ollama_settings" not in config:
@@ -1104,10 +1302,7 @@ class AIAssistantSection(SettingsSection):
             # Ollama 地址硬编码
             config["ollama_settings"]["base_url"] = "http://localhost:11434"
             
-            # Ollama 模型在主窗口切换，这里不需要保存
-            # 保留配置中已有的 default_model（如果有的话）
-            
-            # Ollama 不需要额外验证，直接保存即可
+            # Ollama 模型已在上面的"设置默认模型"部分处理
             
             # 打印调试信息
             saved_provider = config["llm_provider"]

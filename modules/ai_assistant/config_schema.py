@@ -19,13 +19,17 @@ def get_ai_assistant_schema() -> ConfigSchema:
             "_version"  # 配置版本号（必需）
         },
         optional_fields={
-            "llm_provider",     # LLM 供应商（api 或 ollama）
-            "api_settings",     # API 配置
-            "ollama_settings"   # Ollama 配置
+            "llm_provider",         # LLM 供应商（api 或 ollama）
+            "provider_type",        # 具体供应商类型（openai, deepseek, gemini, claude, byok, ollama）
+            "provider_credentials", # 每个供应商的独立凭据配置
+            "api_settings",         # API 配置（向后兼容）
+            "ollama_settings"       # Ollama 配置
         },
         field_types={
             "_version": str,
             "llm_provider": str,
+            "provider_type": str,
+            "provider_credentials": dict,
             "api_settings": dict,
             "ollama_settings": dict
         },
