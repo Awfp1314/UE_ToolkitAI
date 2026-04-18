@@ -1,6 +1,6 @@
 #include "BlueprintAnalyzerSubsystem.h"
 #include "Engine/Blueprint.h"
-#include "Blueprint/WidgetBlueprint.h"
+#include "WidgetBlueprint.h"
 #include "EdGraph/EdGraph.h"
 #include "EdGraph/EdGraphNode.h"
 #include "EdGraph/EdGraphPin.h"
