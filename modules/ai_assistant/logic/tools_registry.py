@@ -155,6 +155,7 @@ class ToolsRegistry:
         
         # 初始化UE工具HTTP客户端
         from modules.ai_assistant.clients.ue_tool_client import UEToolClient
+        from modules.ai_assistant.clients.blueprint_analyzer_client import BlueprintAnalyzerClient
         
         # 使用 Remote Control API (HTTP)
         ue_base_url = "http://127.0.0.1:30010"
@@ -164,7 +165,9 @@ class ToolsRegistry:
         #     ue_base_url = config_reader.get('ue_remote_control_url', 'http://127.0.0.1:30010')
         
         self.ue_client = UEToolClient(base_url=ue_base_url)
+        self.blueprint_analyzer_client = BlueprintAnalyzerClient(base_url=ue_base_url)
         self.logger.info(f"UE HTTP客户端已初始化 (目标: {ue_base_url})")
+        self.logger.info(f"Blueprint Analyzer 客户端已初始化")
         
         # 初始化 Feature Gate 权限控制系统
         from core.security.license_manager import LicenseManager
@@ -183,6 +186,9 @@ class ToolsRegistry:
         
         # 注册所有只读工具
         self._register_readonly_tools()
+        
+        # 注册 Blueprint Analyzer 工具
+        self._register_blueprint_analyzer_tools()
         
         # 注册测试功能工具
         self._register_experimental_tools()
@@ -880,6 +886,222 @@ class ToolsRegistry:
 
         return f"🔍 找到 {len(matched_sections)} 个相关章节：\n\n" + \
                "\n\n---\n\n".join(matched_sections[:3])  # 最多返回3个章节
+    
+    def _register_blueprint_analyzer_tools(self):
+        """
+        注册 Blueprint Analyzer 工具
+        
+        提供只读的蓝图分析功能：
+        - analyze_blueprint: 分析普通蓝图结构
+        - analyze_widget_blueprint: 分析 UMG Widget 蓝图
+        - get_ue_editor_context: 获取编辑器上下文
+        """
+        self.logger.info("注册 Blueprint Analyzer 工具...")
+        
+        # 1. 分析蓝图
+        self.register_tool(ToolDefinition(
+            name="analyze_blueprint",
+            description="分析虚幻引擎蓝图结构，获取变量、函数、图表和节点信息。用于帮助用户理解蓝图逻辑、排查问题或学习蓝图实现。",
+            parameters={
+                "type": "object",
+                "properties": {
+                    "asset_path": {
+                        "type": "string",
+                        "description": "蓝图资产的完整路径，例如 '/Game/Blueprints/MyBlueprint' 或 '/Game/Characters/PlayerCharacter'"
+                    }
+                },
+                "required": ["asset_path"]
+            },
+            function=self._tool_analyze_blueprint,
+            requires_confirmation=False  # 只读工具，无需确认
+        ))
+        
+        # 2. 分析 Widget 蓝图
+        self.register_tool(ToolDefinition(
+            name="analyze_widget_blueprint",
+            description="分析虚幻引擎 UMG Widget 蓝图，获取 UI 组件层级结构、变量和函数信息。用于理解 UI 布局、排查 UI 问题或学习 UMG 实现。",
+            parameters={
+                "type": "object",
+                "properties": {
+                    "asset_path": {
+                        "type": "string",
+                        "description": "Widget 蓝图资产的完整路径，例如 '/Game/UI/MainMenu' 或 '/Game/Widgets/HUD'"
+                    }
+                },
+                "required": ["asset_path"]
+            },
+            function=self._tool_analyze_widget_blueprint,
+            requires_confirmation=False
+        ))
+        
+        # 3. 获取编辑器上下文
+        self.register_tool(ToolDefinition(
+            name="get_ue_editor_context",
+            description="获取虚幻引擎编辑器的当前状态信息，包括项目名称、引擎版本、当前打开的资产、资产统计等。用于了解编辑器环境和项目状态。",
+            parameters={
+                "type": "object",
+                "properties": {},
+                "required": []
+            },
+            function=self._tool_get_ue_editor_context,
+            requires_confirmation=False
+        ))
+        
+        self.logger.info("Blueprint Analyzer 工具注册完成")
+    
+    def _tool_analyze_blueprint(self, asset_path: str) -> str:
+        """分析蓝图工具实现"""
+        try:
+            result = self.blueprint_analyzer_client.extract_blueprint(asset_path)
+            
+            if result.get("status") == "error":
+                return f"[错误] {result.get('message', '未知错误')}"
+            
+            # 解析 JSON 响应
+            import json
+            data = json.loads(result.get("ReturnValue", "{}"))
+            
+            if not data.get("success"):
+                return f"[错误] {data.get('error', '蓝图分析失败')}"
+            
+            # 格式化输出
+            output = f"📘 蓝图分析结果：{data.get('assetName', 'Unknown')}\n\n"
+            output += f"路径：{data.get('assetPath', 'N/A')}\n"
+            output += f"父类：{data.get('parentClass', 'None')}\n\n"
+            
+            # 变量
+            variables = data.get('variables', [])
+            if variables:
+                output += f"变量 ({len(variables)}):\n"
+                for var in variables[:10]:  # 最多显示10个
+                    output += f"  - {var.get('name')}: {var.get('type')}\n"
+                if len(variables) > 10:
+                    output += f"  ... 还有 {len(variables) - 10} 个变量\n"
+                output += "\n"
+            
+            # 函数
+            functions = data.get('functions', [])
+            if functions:
+                output += f"函数 ({len(functions)}):\n"
+                for func in functions[:10]:
+                    params = func.get('parameters', [])
+                    param_str = ", ".join([f"{p.get('name')}: {p.get('type')}" for p in params])
+                    output += f"  - {func.get('name')}({param_str})\n"
+                if len(functions) > 10:
+                    output += f"  ... 还有 {len(functions) - 10} 个函数\n"
+                output += "\n"
+            
+            # 图表
+            graphs = data.get('graphs', [])
+            if graphs:
+                output += f"图表 ({len(graphs)}):\n"
+                for graph in graphs:
+                    output += f"  - {graph.get('name')}: {graph.get('nodeCount', 0)} 个节点\n"
+            
+            return output
+            
+        except Exception as e:
+            self.logger.error(f"分析蓝图失败: {e}", exc_info=True)
+            return f"[错误] 分析蓝图时发生异常: {str(e)}"
+    
+    def _tool_analyze_widget_blueprint(self, asset_path: str) -> str:
+        """分析 Widget 蓝图工具实现"""
+        try:
+            result = self.blueprint_analyzer_client.extract_widget_blueprint(asset_path)
+            
+            if result.get("status") == "error":
+                return f"[错误] {result.get('message', '未知错误')}"
+            
+            # 解析 JSON 响应
+            import json
+            data = json.loads(result.get("ReturnValue", "{}"))
+            
+            if not data.get("success"):
+                return f"[错误] {data.get('error', 'Widget 蓝图分析失败')}"
+            
+            # 格式化输出
+            output = f"🎨 Widget 蓝图分析结果：{data.get('assetName', 'Unknown')}\n\n"
+            output += f"路径：{data.get('assetPath', 'N/A')}\n\n"
+            
+            # Widget 树
+            widget_tree = data.get('widgetTree', {})
+            if widget_tree:
+                output += "UI 组件层级：\n"
+                
+                def format_widget_tree(widget, indent=0):
+                    if not widget:
+                        return ""
+                    result = "  " * indent + f"- {widget.get('name')} ({widget.get('class')})"
+                    if widget.get('isVariable'):
+                        result += " [变量]"
+                    result += "\n"
+                    
+                    for child in widget.get('children', []):
+                        result += format_widget_tree(child, indent + 1)
+                    return result
+                
+                root = widget_tree.get('root')
+                if root:
+                    output += format_widget_tree(root)
+                output += "\n"
+            
+            # 变量和函数
+            variables = data.get('variables', [])
+            if variables:
+                output += f"变量 ({len(variables)}):\n"
+                for var in variables[:5]:
+                    output += f"  - {var.get('name')}: {var.get('type')}\n"
+                if len(variables) > 5:
+                    output += f"  ... 还有 {len(variables) - 5} 个变量\n"
+            
+            return output
+            
+        except Exception as e:
+            self.logger.error(f"分析 Widget 蓝图失败: {e}", exc_info=True)
+            return f"[错误] 分析 Widget 蓝图时发生异常: {str(e)}"
+    
+    def _tool_get_ue_editor_context(self) -> str:
+        """获取 UE 编辑器上下文工具实现"""
+        try:
+            result = self.blueprint_analyzer_client.get_editor_context()
+            
+            if result.get("status") == "error":
+                return f"[错误] {result.get('message', '未知错误')}"
+            
+            # 解析 JSON 响应
+            import json
+            data = json.loads(result.get("ReturnValue", "{}"))
+            
+            if not data.get("success"):
+                return f"[错误] {data.get('error', '获取编辑器上下文失败')}"
+            
+            # 格式化输出
+            output = "🎮 虚幻引擎编辑器状态\n\n"
+            output += f"项目：{data.get('projectName', 'N/A')}\n"
+            output += f"引擎版本：{data.get('engineVersion', 'N/A')}\n"
+            output += f"PIE 状态：{'运行中' if data.get('isPlayInEditor') else '未运行'}\n\n"
+            
+            # 打开的资产
+            open_assets = data.get('openAssets', [])
+            if open_assets:
+                output += f"当前打开的资产 ({len(open_assets)}):\n"
+                for asset in open_assets[:5]:
+                    output += f"  - {asset.get('name')} ({asset.get('class')})\n"
+                if len(open_assets) > 5:
+                    output += f"  ... 还有 {len(open_assets) - 5} 个资产\n"
+                output += "\n"
+            
+            # 资产统计
+            output += "资产统计：\n"
+            output += f"  - 总资产数：{data.get('totalAssets', 0)}\n"
+            output += f"  - 蓝图数：{data.get('blueprintCount', 0)}\n"
+            output += f"  - Widget 蓝图数：{data.get('widgetBlueprintCount', 0)}\n"
+            
+            return output
+            
+        except Exception as e:
+            self.logger.error(f"获取编辑器上下文失败: {e}", exc_info=True)
+            return f"[错误] 获取编辑器上下文时发生异常: {str(e)}"
     
     def _register_experimental_tools(self):
         """注册实验性功能工具（测试版）"""
