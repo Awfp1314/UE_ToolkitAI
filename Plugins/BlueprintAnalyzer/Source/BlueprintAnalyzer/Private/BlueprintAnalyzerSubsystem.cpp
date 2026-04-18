@@ -22,6 +22,26 @@
 
 UObject* UBlueprintAnalyzerSubsystem::LoadAssetFromPath(const FString& AssetPath)
 {
+	// First, try to get the asset from the editor if it's currently open
+	// This ensures we get the latest in-memory version, not the saved version on disk
+	if (GEditor)
+	{
+		UAssetEditorSubsystem* AssetEditorSubsystem = GEditor->GetEditorSubsystem<UAssetEditorSubsystem>();
+		if (AssetEditorSubsystem)
+		{
+			TArray<UObject*> EditedAssets = AssetEditorSubsystem->GetAllEditedAssets();
+			for (UObject* Asset : EditedAssets)
+			{
+				if (Asset && Asset->GetPathName() == AssetPath)
+				{
+					// Found the asset in the editor, return the in-memory version
+					return Asset;
+				}
+			}
+		}
+	}
+	
+	// If not found in editor, load from disk
 	FSoftObjectPath SoftPath(AssetPath);
 	return SoftPath.TryLoad();
 }
