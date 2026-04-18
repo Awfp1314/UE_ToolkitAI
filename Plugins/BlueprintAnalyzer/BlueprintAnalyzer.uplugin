@@ -1,0 +1,26 @@
+{
+	"FileVersion": 3,
+	"Version": 1,
+	"VersionName": "1.0.0",
+	"FriendlyName": "Blueprint Analyzer",
+	"Description": "Provides read-only blueprint analysis tools for AI assistant integration",
+	"Category": "Editor",
+	"CreatedBy": "UE Toolkit",
+	"EnabledByDefault": true,
+	"CanContainContent": false,
+	"IsBetaVersion": false,
+	"Installed": false,
+	"Plugins": [
+		{
+			"Name": "RemoteControl",
+			"Enabled": true
+		}
+	],
+	"Modules": [
+		{
+			"Name": "BlueprintAnalyzer",
+			"Type": "Editor",
+			"LoadingPhase": "Default"
+		}
+	]
+}
