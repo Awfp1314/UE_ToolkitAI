@@ -32,19 +32,24 @@ result = client.execute_tool_rpc("ExtractBlueprint", AssetPath="/Game/BP_Test")
 
 **配置**：UE 编辑器 → 项目设置 → Remote Control → 启用 Web Server
 
-### BlueprintToAI 插件开发规范（硬性要求）
+### Blueprint Analyzer 插件（当前使用）
 
-**参考工程**：`Plugins/temp_blueprint_extractor/` (blueprint-extractor)
+**插件路径**：`Plugins/BlueprintAnalyzer/`
 
-**强制规则**：
+**Subsystem 路径**：`/Script/BlueprintAnalyzer.Default__BlueprintAnalyzerSubsystem`
 
-1. 所有蓝图操作必须参考 `blueprint-extractor` 实现
-2. 使用官方 API：`FBlueprintEditorUtils::AddMemberVariable()` 等
-3. 禁止直接操作 `Blueprint->NewVariables` 数组
-4. 类型解析参考 `AuthoringHelpers.cpp::ParsePinType()`
-5. 实现前先在参考工程中搜索相关函数
+**MCP 桥接**：通过 `scripts/mcp_servers/blueprint_extractor_bridge.py` 暴露工具给 AI 助手
 
-**参考文件**：`Authoring/BlueprintAuthoring.cpp`, `Authoring/AuthoringHelpers.cpp`
+**核心蓝图工具（4个）**：
+
+- `ExtractBlueprint` - 提取蓝图结构
+- `ExtractWidgetBlueprint` - 提取 Widget 蓝图
+- `GetEditorContext` - 获取编辑器上下文（含当前打开的资产）
+- `ListAssets` - 列出指定目录的资产
+
+**工具定义**：`scripts/mcp_servers/blueprint_extractor_tools.json`
+
+**注意**：旧版本使用 `BlueprintToolsUE54` 和内置工具注册表，已废弃。现在统一使用 MCP 协议
 
 ### 连接检测
 
@@ -137,7 +142,7 @@ Git 提交规范：`[类型] 描述` 或 `[类型] 描述 v版本号`
 6. 模块间直接依赖 - 通过 `core.services` 解耦
 7. UE 连接检测 - 使用 Remote Control API (30010)
 8. 过度文档化 - 在聊天中说明，不要自动创建文档
-9. BlueprintToAI 实现 - 必须参考 `blueprint-extractor` 工程，使用官方 API
+9. 蓝图工具调用 - 通过 MCP 协议调用 Blueprint Analyzer 插件，不要直接使用旧的内置工具注册表
 
 ## 模块结构
 
