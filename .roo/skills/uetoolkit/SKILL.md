@@ -44,10 +44,17 @@ result = client.execute_tool_rpc("ExtractBlueprint", AssetPath="/Game/BP_Test")
 
 - `ExtractBlueprint` - 提取蓝图结构
 - `ExtractWidgetBlueprint` - 提取 Widget 蓝图
-- `GetEditorContext` - 获取编辑器上下文（含当前打开的资产）
+- `GetEditorContext` - 获取编辑器上下文（含当前打开的资产、UE 版本）
 - `ListAssets` - 列出指定目录的资产
 
 **工具定义**：`scripts/mcp_servers/blueprint_extractor_tools.json`
+
+**AI 行为指南**：MCP 服务器通过 `instructions` 字段定义 AI 助手行为规则，包括：
+
+- 自动感知项目状态（对话开始时调用 GetEditorContext）
+- 分步骤引导工作流（分析→指导→验证→继续）
+- 用户友好语言（避免 JSON 术语，用"事件图表"而非"EventGraph"）
+- 节点验证策略（建议常见节点，不确定时提醒用户验证）
 
 **注意**：旧版本使用 `BlueprintToolsUE54` 和内置工具注册表，已废弃。现在统一使用 MCP 协议
 
