@@ -316,28 +316,27 @@ FString UBlueprintAnalyzerSubsystem::GetEditorContext()
 	FAssetRegistryModule& AssetRegistryModule = FModuleManager::LoadModuleChecked<FAssetRegistryModule>("AssetRegistry");
 	IAssetRegistry& AssetRegistry = AssetRegistryModule.Get();
 	
+	// Get only project assets (exclude engine content)
 	TArray<FAssetData> AllAssets;
-	AssetRegistry.GetAllAssets(AllAssets);
+	AssetRegistry.GetAssetsByPath(FName("/Game"), AllAssets, true);
 	
 	ContextObj->SetNumberField(TEXT("totalAssets"), AllAssets.Num());
 	
-	// Count blueprints
+	// Count blueprints using correct class name
 	int32 BlueprintCount = 0;
 	int32 WidgetBlueprintCount = 0;
 	
 	for (const FAssetData& AssetData : AllAssets)
 	{
-		FString ClassName = AssetData.AssetClass.ToString();
-		if (ClassName.Contains(TEXT("Blueprint")))
+		FString ClassName = AssetData.AssetClassPath.GetAssetName().ToString();
+		
+		if (ClassName == TEXT("Blueprint") || ClassName == TEXT("BlueprintGeneratedClass"))
 		{
-			if (ClassName.Contains(TEXT("Widget")))
-			{
-				WidgetBlueprintCount++;
-			}
-			else
-			{
-				BlueprintCount++;
-			}
+			BlueprintCount++;
+		}
+		else if (ClassName == TEXT("WidgetBlueprint"))
+		{
+			WidgetBlueprintCount++;
 		}
 	}
 	
