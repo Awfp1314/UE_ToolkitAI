@@ -42,12 +42,12 @@ result = client.execute_tool_rpc("ExtractBlueprint", AssetPath="/Game/BP_Test")
 
 **核心蓝图工具（4个）**：
 
-- `ExtractBlueprint` - 提取蓝图结构（免费）
-- `CreateBlueprint` - 创建新蓝图（付费）
-- `AddBlueprintVariable` - 添加蓝图变量（付费）
-- `AddBlueprintFunction` - 添加蓝图函数（付费）
+- `ExtractBlueprint` - 提取蓝图结构
+- `ExtractWidgetBlueprint` - 提取 Widget 蓝图
+- `GetEditorContext` - 获取编辑器上下文（含当前打开的资产）
+- `ListAssets` - 列出指定目录的资产
 
-**工具定义**：`scripts/mcp_servers/blueprint_extractor_tools.json`（共 27 个工具）
+**工具定义**：`scripts/mcp_servers/blueprint_extractor_tools.json`
 
 **注意**：旧版本使用 `BlueprintToolsUE54` 和内置工具注册表，已废弃。现在统一使用 MCP 协议
 
