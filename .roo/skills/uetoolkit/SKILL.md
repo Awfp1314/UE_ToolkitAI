@@ -38,17 +38,18 @@ result = client.execute_tool_rpc("ExtractBlueprint", AssetPath="/Game/BP_Test")
 
 **Subsystem 路径**：`/Script/BlueprintAnalyzer.Default__BlueprintAnalyzerSubsystem`
 
-**客户端使用**：
+**MCP 桥接**：通过 `scripts/mcp_servers/blueprint_extractor_bridge.py` 暴露工具给 AI 助手
 
-```python
-from modules.ai_assistant.clients.blueprint_analyzer_client import BlueprintAnalyzerClient
-client = BlueprintAnalyzerClient(base_url="http://127.0.0.1:30010")
-result = client.extract_blueprint("/Game/Blueprints/BP_Test")
-```
+**核心蓝图工具（4个）**：
 
-**MCP 桥接**：`scripts/mcp_servers/blueprint_extractor_bridge.py` 使用相同的 Subsystem 路径
+- `ExtractBlueprint` - 提取蓝图结构（免费）
+- `CreateBlueprint` - 创建新蓝图（付费）
+- `AddBlueprintVariable` - 添加蓝图变量（付费）
+- `AddBlueprintFunction` - 添加蓝图函数（付费）
 
-**注意**：旧版本使用 `BlueprintToolsUE54`，已废弃，必须使用 `BlueprintAnalyzer`
+**工具定义**：`scripts/mcp_servers/blueprint_extractor_tools.json`（共 27 个工具）
+
+**注意**：旧版本使用 `BlueprintToolsUE54` 和内置工具注册表，已废弃。现在统一使用 MCP 协议
 
 ### 连接检测
 
@@ -141,7 +142,7 @@ Git 提交规范：`[类型] 描述` 或 `[类型] 描述 v版本号`
 6. 模块间直接依赖 - 通过 `core.services` 解耦
 7. UE 连接检测 - 使用 Remote Control API (30010)
 8. 过度文档化 - 在聊天中说明，不要自动创建文档
-9. BlueprintToAI 实现 - 必须参考 `blueprint-extractor` 工程，使用官方 API
+9. 蓝图工具调用 - 通过 MCP 协议调用 Blueprint Analyzer 插件，不要直接使用旧的内置工具注册表
 
 ## 模块结构
 
