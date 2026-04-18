@@ -462,7 +462,7 @@ class ChatController(QObject):
                 messages=messages,
                 tools_registry=self.tools_registry,
                 llm_client=llm_client,
-                max_iterations=5,
+                max_iterations=20,  # 支持复杂的多步骤蓝图分析
             )
 
             self.current_coordinator.tool_start.connect(self._on_tool_start)

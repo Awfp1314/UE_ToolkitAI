@@ -2,7 +2,7 @@
 ; SEE THE DOCUMENTATION FOR DETAILS ON CREATING INNO SETUP SCRIPT FILES!
 
 #define MyAppName "UeToolkit"
-#define MyAppVersion "1.2.44"
+#define MyAppVersion "1.2.45"
 #define MyAppPublisher "Hutao"
 #define MyAppURL "https://unrealenginetookit.top"
 #define MyAppExeName "UE_Toolkit.exe"

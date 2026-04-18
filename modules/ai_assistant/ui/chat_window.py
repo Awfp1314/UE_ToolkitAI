@@ -871,17 +871,30 @@ class ChatWindow(BaseModuleWidget):
         self.current_ai_bubble = None
 
     def _on_tool_start(self, tool_name: str):
-        """工具开始执行 → 更新思考动画"""
+        """工具开始执行 → 显示工具调用标记"""
         if self.thinking_indicator:
             chinese_name = self.controller.get_tool_chinese_name(tool_name)
             self.thinking_indicator.update_text(f"调用{chinese_name}")
+        
+        # 在聊天窗口中显示工具调用标记（确保换行）
+        if self.current_ai_bubble:
+            tool_indicator = f"\n\n🔧 调用工具：{tool_name}\n"
+            self.current_ai_bubble.append_text(tool_indicator)
 
     def _on_tool_complete(self, tool_name: str, result: dict):
-        """工具执行完成（当前仅日志）"""
+        """工具执行完成 → 显示完成标记"""
         success = result.get('success', False)
-        if not success:
-            error = result.get('error', '未知错误')
-            print(f"[WARNING] 工具 {tool_name} 执行失败: {error}")
+        
+        # 在聊天窗口中显示完成标记（确保换行）
+        if self.current_ai_bubble:
+            if success:
+                complete_indicator = f"✅ 工具执行完成\n\n"
+            else:
+                error = result.get('error', '未知错误')
+                complete_indicator = f"❌ 工具执行失败：{error}\n\n"
+                print(f"[WARNING] 工具 {tool_name} 执行失败: {error}")
+            
+            self.current_ai_bubble.append_text(complete_indicator)
 
     # ------------------------------------------------------------------
     # 消息气泡管理
