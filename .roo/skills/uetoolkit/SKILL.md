@@ -32,19 +32,23 @@ result = client.execute_tool_rpc("ExtractBlueprint", AssetPath="/Game/BP_Test")
 
 **配置**：UE 编辑器 → 项目设置 → Remote Control → 启用 Web Server
 
-### BlueprintToAI 插件开发规范（硬性要求）
+### Blueprint Analyzer 插件（当前使用）
 
-**参考工程**：`Plugins/temp_blueprint_extractor/` (blueprint-extractor)
+**插件路径**：`Plugins/BlueprintAnalyzer/`
 
-**强制规则**：
+**Subsystem 路径**：`/Script/BlueprintAnalyzer.Default__BlueprintAnalyzerSubsystem`
 
-1. 所有蓝图操作必须参考 `blueprint-extractor` 实现
-2. 使用官方 API：`FBlueprintEditorUtils::AddMemberVariable()` 等
-3. 禁止直接操作 `Blueprint->NewVariables` 数组
-4. 类型解析参考 `AuthoringHelpers.cpp::ParsePinType()`
-5. 实现前先在参考工程中搜索相关函数
+**客户端使用**：
 
-**参考文件**：`Authoring/BlueprintAuthoring.cpp`, `Authoring/AuthoringHelpers.cpp`
+```python
+from modules.ai_assistant.clients.blueprint_analyzer_client import BlueprintAnalyzerClient
+client = BlueprintAnalyzerClient(base_url="http://127.0.0.1:30010")
+result = client.extract_blueprint("/Game/Blueprints/BP_Test")
+```
+
+**MCP 桥接**：`scripts/mcp_servers/blueprint_extractor_bridge.py` 使用相同的 Subsystem 路径
+
+**注意**：旧版本使用 `BlueprintToolsUE54`，已废弃，必须使用 `BlueprintAnalyzer`
 
 ### 连接检测
 

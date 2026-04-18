@@ -36,8 +36,8 @@ class BlueprintExtractorBridge:
     
     def __init__(self, base_url: str = "http://127.0.0.1:30010"):
         self.base_url = base_url
-        self.subsystem_path = "/Script/BlueprintToolsUE54.Default__BlueprintToolsSubsystem"
-        logger.info(f"初始化 Blueprint Extractor Bridge，目标: {base_url}")
+        self.subsystem_path = "/Script/BlueprintAnalyzer.Default__BlueprintAnalyzerSubsystem"
+        logger.info(f"初始化 Blueprint Analyzer Bridge，目标: {base_url}")
     
     def get_tools(self) -> List[Dict[str, Any]]:
         """返回所有可用工具的定义"""

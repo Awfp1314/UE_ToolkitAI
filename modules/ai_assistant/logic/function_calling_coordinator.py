@@ -161,8 +161,6 @@ class FunctionCallingCoordinator(QObject):
             iteration = 0
 
             while iteration < self.max_iterations and not cancel_token.is_cancelled():
-                iteration += 1  # ⚡ 关键修复：递增迭代计数器，防止死循环
-                
                 # 获取工具定义
                 tools = self.tools_registry.openai_tool_schemas() if self.tools_registry else None
                 
@@ -174,6 +172,9 @@ class FunctionCallingCoordinator(QObject):
                 else:
                     # 工具调用后的后续轮次：用非流式检测是否还有 tool_calls
                     response_data = self._call_llm_non_streaming(self.messages, tools)
+
+                # ⚡ 递增迭代计数器（放在调用后，避免第一次判断错误）
+                iteration += 1
 
                 if cancel_token.is_cancelled():
                     break
@@ -324,6 +325,7 @@ class FunctionCallingCoordinator(QObject):
             got_tool_calls = False
             accumulated_content = ""
             accumulated_usage = None
+            dsml_detected = False  # ⚡ DSML 检测标志
 
             for chunk in self.llm_client.generate_response(messages, stream=True, tools=tools):
                 if self._should_stop or cancel_token.is_cancelled():
@@ -349,15 +351,32 @@ class FunctionCallingCoordinator(QObject):
                         text = chunk.get('text', '')
                         if text:
                             accumulated_content += text
-                            self.chunk_received.emit(text)
+                            
+                            # ⚡ 实时检测 DSML 标记
+                            if not dsml_detected and '<|DSML|' in accumulated_content:
+                                dsml_detected = True
+                                self.logger.info(f"[API调用 #{self.api_call_count}] 检测到 DSML 标记，停止输出")
+                            
+                            # 如果没有检测到 DSML，正常输出
+                            if not dsml_detected:
+                                self.chunk_received.emit(text)
 
                     elif chunk_type == 'token_usage':
                         accumulated_usage = chunk.get('usage', {})
                         self.token_usage.emit(accumulated_usage)
                 else:
                     # 字符串（向后兼容）
-                    accumulated_content += str(chunk)
-                    self.chunk_received.emit(str(chunk))
+                    text = str(chunk)
+                    accumulated_content += text
+                    
+                    # ⚡ 实时检测 DSML 标记
+                    if not dsml_detected and '<|DSML|' in accumulated_content:
+                        dsml_detected = True
+                        self.logger.info(f"[API调用 #{self.api_call_count}] 检测到 DSML 标记，停止输出")
+                    
+                    # 如果没有检测到 DSML，正常输出
+                    if not dsml_detected:
+                        self.chunk_received.emit(text)
 
             elapsed = time.time() - start_time
             self.logger.info(f"[API调用 #{self.api_call_count}] 流式完成 - 耗时: {elapsed:.2f}s, 内容长度: {len(accumulated_content)}")
@@ -540,19 +559,30 @@ class FunctionCallingCoordinator(QObject):
                 delay += random.uniform(0.02, 0.04)
             time.sleep(max(0.001, delay))
 
-    def _stream_final_response(self, messages: List[Dict], tools):
+    def _stream_final_response(self, messages: List[Dict], tools, recursion_depth: int = 0, max_recursion: int = 3):
         """
         流式输出最终响应
         
         Args:
             messages: 消息列表
             tools: 工具定义列表（可以为None表示无工具模式）
+            recursion_depth: 当前递归深度
+            max_recursion: 最大递归深度（防止无限循环）
         
         ⚠️ 修复说明：移除了重试逻辑，避免重复 API 调用
         如果模型不支持工具，应该在初始化时检测，而不是在运行时重试
         """
-        # print(f"[DEBUG] [流式输出] 开始流式输出，tools={tools}")  # 打包时自动注释
-        self.logger.info(f"[流式输出] 开始流式输出最终响应，消息数:{len(messages)}")
+        # ⚡ 递归深度检查
+        if recursion_depth >= max_recursion:
+            self.logger.error(f"[流式输出] 递归深度超过限制 ({max_recursion})，停止递归")
+            error_msg = f"工具调用递归次数过多（{max_recursion} 次），已终止。请检查 LLM 是否陷入循环。"
+            self.chunk_received.emit(f"\n\n⚠️ {error_msg}")
+            self.error_occurred.emit(error_msg)
+            self.request_finished.emit()
+            return
+        
+        # print(f"[DEBUG] [流式输出] 开始流式输出，tools={tools}, recursion_depth={recursion_depth}")  # 打包时自动注释
+        self.logger.info(f"[流式输出] 开始流式输出最终响应，消息数:{len(messages)}，递归深度:{recursion_depth}")
         
         chunk_count = 0
         accumulated_content = ""  # ⚡ 累积内容用于 DSML 检测
@@ -655,8 +685,8 @@ class FunctionCallingCoordinator(QObject):
                     self.messages.append(tool_message)
                 
                 # 递归调用，获取工具执行后的最终回复
-                self.logger.info(f"[流式输出] 工具执行完毕，递归获取最终回复")
-                self._stream_final_response(self.messages, tools=None)
+                self.logger.info(f"[流式输出] 工具执行完毕，递归获取最终回复（深度: {recursion_depth + 1}）")
+                self._stream_final_response(self.messages, tools=None, recursion_depth=recursion_depth + 1)
                 return
             else:
                 self.logger.warning(f"[流式输出] DSML 解析失败，输出原始内容")
