@@ -980,6 +980,20 @@ class UEMainWindow(QMainWindow):
 
         # 切换到设置页面
         self.content_stack.setCurrentIndex(self.settings_page_index)
+        
+        # 重置标签页到"常规"（索引 0），并重新加载 AI 助手配置
+        if hasattr(self.settings_widget, 'findChild'):
+            from PyQt6.QtWidgets import QTabWidget
+            tab_widget = self.settings_widget.findChild(QTabWidget, "SettingsTabWidget")
+            if tab_widget:
+                tab_widget.setCurrentIndex(0)  # 重置到"常规"标签页
+                self.logger.info("🔄 已重置设置标签页到常规")
+        
+        # 重新加载 AI 助手配置（确保显示已保存的配置）
+        if hasattr(self.settings_widget, 'ai_assistant_section') and self.settings_widget.ai_assistant_section:
+            self.settings_widget.ai_assistant_section._load_config()
+            self.logger.info("🔄 已重新加载 AI 助手配置")
+        
         self.logger.info("🔄 已切换到设置界面")
 
     def toggle_theme(self):
@@ -1026,9 +1040,6 @@ class UEMainWindow(QMainWindow):
         if hasattr(self, 'settings_widget') and self.settings_widget:
             if hasattr(self.settings_widget, 'refresh_scrollbar_style'):
                 self.settings_widget.refresh_scrollbar_style()
-            # 同步更新设置界面的主题选择下拉框
-            if hasattr(self.settings_widget, 'update_theme_selection'):
-                self.settings_widget.update_theme_selection(new_theme)
 
         self.logger.info(f"已切换到{'深色' if new_theme == 'modern_dark' else '浅色'}主题")
 

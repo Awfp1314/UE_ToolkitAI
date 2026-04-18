@@ -1473,50 +1473,15 @@ class GeneralSection(SettingsSection):
 
     def __init__(self, parent=None):
         super().__init__("常规设置", "⚙️", parent)
-        self._updating_theme = False  # 标志位，防止循环触发
         self._updating_close_behavior = False  # 标志位，防止循环触发
         self._updating_floating = False  # 标志位，防止循环触发
         self._updating_autostart = False  # 标志位，防止循环触发
         self.setup_content()
-        self._init_theme_combo()  # 初始化主题选择
         self._init_close_behavior()  # 初始化关闭行为选择
         self._init_floating_toggle()  # 初始化悬浮窗开关
         self._init_autostart_toggle()  # 初始化开机自启开关
     
     def setup_content(self):
-        # 主题设置标题
-        theme_label = QLabel("主题设置")
-        theme_label.setObjectName("SubSectionLabel")
-        self.content_layout.addWidget(theme_label)
-        
-        # 选择主题
-        self.theme_combo = QComboBox()
-        self.theme_combo.setObjectName("SettingComboBox")
-        self.theme_combo.addItem("深色主题")
-        self.theme_combo.addItem("浅色主题")
-        self.theme_combo.setFixedWidth(180)
-        # 设置弹出列表样式
-        self.theme_combo.view().window().setWindowFlags(
-            Qt.WindowType.Popup | 
-            Qt.WindowType.FramelessWindowHint | 
-            Qt.WindowType.NoDropShadowWindowHint
-        )
-        self.theme_combo.view().window().setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
-        
-        # 连接主题切换信号
-        self.theme_combo.currentIndexChanged.connect(self._on_theme_changed)
-        
-        self.add_setting_row("选择主题", self.theme_combo, "切换应用的外观主题")
-        
-        # 自定义主题按钮
-        theme_btn_row = self.create_theme_buttons_row()
-        self.add_setting_row("自定义主题", theme_btn_row, "导入或导出自定义主题文件（JSON格式）")
-        
-        # 添加间距
-        spacer = QWidget()
-        spacer.setFixedHeight(8)
-        self.content_layout.addWidget(spacer)
-        
         # 关闭方式设置标题
         close_label = QLabel("关闭方式设置")
         close_label.setObjectName("SubSectionLabel")
@@ -1545,27 +1510,6 @@ class GeneralSection(SettingsSection):
         self.autostart_toggle = QCheckBox("开机自动启动")
         self.autostart_toggle.stateChanged.connect(self._on_autostart_toggled)
         self.add_setting_row("开机自启", self.autostart_toggle, "Windows 启动时自动运行 UE Toolkit")
-    
-    def create_theme_buttons_row(self):
-        """创建主题按钮行"""
-        container = QWidget()
-        layout = QHBoxLayout(container)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(8)
-        
-        import_btn = QPushButton("导入主题...")
-        import_btn.setObjectName("BrowseButton")
-        import_btn.setFixedWidth(100)
-        layout.addWidget(import_btn)
-        
-        export_btn = QPushButton("导出主题...")
-        export_btn.setObjectName("BrowseButton")
-        export_btn.setFixedWidth(100)
-        layout.addWidget(export_btn)
-        
-        layout.addStretch()
-        
-        return container
     
     def create_close_behavior_row(self):
         """创建关闭行为选择行"""
@@ -1598,50 +1542,6 @@ class GeneralSection(SettingsSection):
         layout.addStretch()
         
         return container
-    
-    def _init_theme_combo(self):
-        """初始化主题下拉框的选中状态"""
-        try:
-            from core.services import style_service
-            current_theme = style_service.get_current_theme()
-            
-            # 根据当前主题设置下拉框选中项
-            self._updating_theme = True
-            if current_theme == 'modern_dark':
-                self.theme_combo.setCurrentIndex(0)  # 深色主题
-            else:
-                self.theme_combo.setCurrentIndex(1)  # 浅色主题
-            self._updating_theme = False
-        except Exception as e:
-            logger.warning("初始化主题下拉框失败: %s", e)
-    
-    def _on_theme_changed(self, index):
-        """主题下拉框改变时触发"""
-        if self._updating_theme:
-            return
-        
-        # 获取主窗口并调用主题切换
-        try:
-            main_window = self.window()
-            if main_window and hasattr(main_window, 'toggle_theme'):
-                # 检查当前主题，如果和目标主题不同才切换
-                from core.services import style_service
-                current_theme = style_service.get_current_theme()
-                target_theme = 'modern_dark' if index == 0 else 'modern_light'
-                
-                if current_theme != target_theme:
-                    main_window.toggle_theme()
-        except Exception as e:
-            logger.warning("切换主题失败: %s", e)
-    
-    def update_theme_combo(self, theme_name):
-        """从外部更新主题下拉框状态（右上角按钮切换时调用）"""
-        self._updating_theme = True
-        if theme_name == 'modern_dark':
-            self.theme_combo.setCurrentIndex(0)
-        else:
-            self.theme_combo.setCurrentIndex(1)
-        self._updating_theme = False
     
     def _init_close_behavior(self):
         """初始化关闭行为选择"""
@@ -2294,6 +2194,7 @@ class SettingsWidget(QWidget):
         self.module_provider = module_provider
         self.scroll_areas = []  # 保存所有滚动区域的引用
         self.general_section = None  # 保存常规设置区块的引用
+        self.ai_assistant_section = None  # 保存 AI 助手设置区块的引用
         self.init_ui()
     
     def init_ui(self):
@@ -2315,8 +2216,12 @@ class SettingsWidget(QWidget):
         tab_widget.addTab(asset_tab, "资产设置")
         
         # AI助手选项卡
-        ai_tab = self.create_tab_page(AIAssistantSection())
+        self.ai_assistant_section = AIAssistantSection()
+        ai_tab = self.create_tab_page(self.ai_assistant_section)
         tab_widget.addTab(ai_tab, "AI助手")
+        
+        # 监听标签页切换事件，切换到 AI 助手时重新加载配置
+        tab_widget.currentChanged.connect(lambda index: self._on_tab_changed(index, tab_widget))
         
         main_layout.addWidget(tab_widget)
     
@@ -2380,7 +2285,15 @@ class SettingsWidget(QWidget):
         except Exception as e:
             logger.warning("刷新滚动条样式失败: %s", e)
     
-    def update_theme_selection(self, theme_name):
-        """更新主题选择下拉框（从主窗口调用）"""
-        if self.general_section and hasattr(self.general_section, 'update_theme_combo'):
-            self.general_section.update_theme_combo(theme_name)
+    def _on_tab_changed(self, index, tab_widget):
+        """标签页切换事件处理
+        
+        Args:
+            index: 当前标签页索引
+            tab_widget: QTabWidget 实例
+        """
+        # AI 助手标签页的索引是 2（常规=0, 资产设置=1, AI助手=2）
+        if index == 2 and self.ai_assistant_section:
+            # 切换到 AI 助手标签页时，重新加载配置（丢弃未保存的修改）
+            logger.info("[设置界面] 切换到 AI 助手标签页，重新加载配置")
+            self.ai_assistant_section._load_config()
