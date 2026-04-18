@@ -15,7 +15,6 @@ public class BlueprintAnalyzer : ModuleRules
 		{
 			"CoreUObject",
 			"Engine",
-			"EditorSubsystem",
 			"UnrealEd",
 			"BlueprintGraph",
 			"Kismet",
@@ -26,7 +25,8 @@ public class BlueprintAnalyzer : ModuleRules
 			"UMG",
 			"UMGEditor",
 			"Slate",
-			"SlateCore"
+			"SlateCore",
+			"EditorSubsystem"
 		});
 	}
 }

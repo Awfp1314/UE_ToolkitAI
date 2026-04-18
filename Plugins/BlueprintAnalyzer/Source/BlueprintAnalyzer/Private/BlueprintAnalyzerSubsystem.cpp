@@ -9,10 +9,15 @@
 #include "K2Node_Event.h"
 #include "AssetRegistry/AssetRegistryModule.h"
 #include "Editor.h"
-#include "Json.h"
+#include "Subsystems/AssetEditorSubsystem.h"
+#include "Dom/JsonObject.h"
+#include "Serialization/JsonWriter.h"
+#include "Serialization/JsonSerializer.h"
 #include "JsonObjectConverter.h"
 #include "Components/Widget.h"
 #include "Components/PanelWidget.h"
+#include "Misc/App.h"
+#include "Misc/EngineVersion.h"
 
 UObject* UBlueprintAnalyzerSubsystem::LoadAssetFromPath(const FString& AssetPath)
 {
@@ -321,7 +326,7 @@ FString UBlueprintAnalyzerSubsystem::GetEditorContext()
 	
 	for (const FAssetData& AssetData : AllAssets)
 	{
-		FString ClassName = AssetData.AssetClassPath.ToString();
+		FString ClassName = AssetData.AssetClass.ToString();
 		if (ClassName.Contains(TEXT("Blueprint")))
 		{
 			if (ClassName.Contains(TEXT("Widget")))
