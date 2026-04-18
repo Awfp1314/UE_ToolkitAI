@@ -111,7 +111,7 @@ class FunctionCallingCoordinator(QObject):
         messages: List[Dict],
         tools_registry,
         llm_client,
-        max_iterations: int = 5
+        max_iterations: int = 20  # 增加到 20 次，支持复杂的多步骤蓝图分析
     ):
         """
         初始化协调器
@@ -120,7 +120,7 @@ class FunctionCallingCoordinator(QObject):
             messages: 初始消息列表
             tools_registry: 工具注册表实例
             llm_client: LLM 客户端实例
-            max_iterations: 最大迭代次数（防止无限循环）
+            max_iterations: 最大迭代次数（防止无限循环，默认 20 次）
         """
         super().__init__()
         self.messages = messages.copy()
@@ -565,7 +565,7 @@ class FunctionCallingCoordinator(QObject):
                 delay += random.uniform(0.02, 0.04)
             time.sleep(max(0.001, delay))
 
-    def _stream_final_response(self, messages: List[Dict], tools, recursion_depth: int = 0, max_recursion: int = 5):
+    def _stream_final_response(self, messages: List[Dict], tools, recursion_depth: int = 0, max_recursion: int = 20):
         """
         流式输出最终响应
         
@@ -573,7 +573,7 @@ class FunctionCallingCoordinator(QObject):
             messages: 消息列表
             tools: 工具定义列表（可以为None表示无工具模式）
             recursion_depth: 当前递归深度
-            max_recursion: 最大递归深度（设置为999以观察循环行为）
+            max_recursion: 最大递归深度（默认 20 次，支持复杂的多步骤操作）
         
         ⚠️ 修复说明：移除了重试逻辑，避免重复 API 调用
         如果模型不支持工具，应该在初始化时检测，而不是在运行时重试
