@@ -1031,7 +1031,21 @@ class ToolsRegistry:
             if graphs:
                 output += f"图表 ({len(graphs)}):\n"
                 for graph in graphs:
-                    output += f"  - {graph.get('name')}: {graph.get('nodeCount', 0)} 个节点\n"
+                    graph_name = graph.get('name', 'Unknown')
+                    node_count = graph.get('nodeCount', 0)
+                    output += f"  - {graph_name}: {node_count} 个节点\n"
+                    
+                    # 显示节点详细信息（重要：用于验证是否有输入节点）
+                    nodes = graph.get('nodes', [])
+                    if nodes:
+                        output += f"    节点列表：\n"
+                        for node in nodes[:50]:  # 最多显示50个节点
+                            node_title = node.get('title', 'Unknown')
+                            node_class = node.get('class', 'Unknown')
+                            output += f"      • {node_title} ({node_class})\n"
+                        if len(nodes) > 50:
+                            output += f"      ... 还有 {len(nodes) - 50} 个节点\n"
+                    output += "\n"
             
             return output
             

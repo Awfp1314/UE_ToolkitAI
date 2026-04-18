@@ -410,11 +410,13 @@ class AIMessageBubble(QFrame):
             ul, ol {
                 margin: 1.2em 0;
                 padding-left: 30px;
+                line-height: 1.8em;
             }
             
             li {
-                margin: 0.6em 0;
-                line-height: 2.2em;
+                margin: 0.4em 0;
+                line-height: 1.8em;
+                display: list-item;
             }
             
             code {
@@ -563,11 +565,13 @@ class AIMessageBubble(QFrame):
             ul, ol {
                 margin: 1.2em 0;
                 padding-left: 30px;
+                line-height: 1.8em;
             }
             
             li {
-                margin: 0.6em 0;
-                line-height: 2.2em;
+                margin: 0.4em 0;
+                line-height: 1.8em;
+                display: list-item;
             }
             
             code {
