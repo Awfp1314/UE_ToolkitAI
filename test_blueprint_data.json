@@ -1,0 +1,160 @@
+﻿{
+	"assetPath": "/Game/ThirdPerson/Blueprints/BP_ThirdPersonCharacter",
+	"assetName": "BP_ThirdPersonCharacter",
+	"parentClass": "Character",
+	"success": true,
+	"variables": [],
+	"functions": [
+		{
+			"name": "UserConstructionScript",
+			"parameters": [
+				{
+					"name": "then",
+					"type": "exec"
+				}
+			],
+			"nodeCount": 1
+		}
+	],
+	"graphs": [
+		{
+			"name": "EventGraph",
+			"nodeCount": 33,
+			"nodes": [
+				{
+					"title": "è·³è·\nç®æ æ¯è§è²",
+					"class": "K2Node_CallFunction"
+				},
+				{
+					"title": "æ·»å æ§å¶å¨Pitchè¾å¥\nç®æ æ¯Pawn",
+					"class": "K2Node_CallFunction"
+				},
+				{
+					"title": "æ·»å æ§å¶å¨Yawè¾å¥\nç®æ æ¯Pawn",
+					"class": "K2Node_CallFunction"
+				},
+				{
+					"title": "æ·»å ç§»å¨è¾å¥\nç®æ æ¯Pawn",
+					"class": "K2Node_CallFunction"
+				},
+				{
+					"title": "æ·»å ç§»å¨è¾å¥\nç®æ æ¯Pawn",
+					"class": "K2Node_CallFunction"
+				},
+				{
+					"title": "è·åæ§å¶æè½¬\nç®æ æ¯Pawn",
+					"class": "K2Node_CallFunction"
+				},
+				{
+					"title": "åæ­¢è·³è·\nç®æ æ¯è§è²",
+					"class": "K2Node_CallFunction"
+				},
+				{
+					"title": "è·ååååé",
+					"class": "K2Node_CallFunction"
+				},
+				{
+					"title": "è·ååå³åé",
+					"class": "K2Node_CallFunction"
+				},
+				{
+					"title": "è·åæ§å¶æè½¬\nç®æ æ¯Pawn",
+					"class": "K2Node_CallFunction"
+				},
+				{
+					"title": "Camera Input",
+					"class": "EdGraphNode_Comment"
+				},
+				{
+					"title": "Movement Input",
+					"class": "EdGraphNode_Comment"
+				},
+				{
+					"title": "Jump Input - Jump can be configured in the CharacterMovementComponent",
+					"class": "EdGraphNode_Comment"
+				},
+				{
+					"title": "EnhancedInputAction IA_Jump",
+					"class": "K2Node_EnhancedInputAction"
+				},
+				{
+					"title": "Cast To PlayerController",
+					"class": "K2Node_DynamicCast"
+				},
+				{
+					"title": "æ·»å æ å°ä¸ä¸æ\nç®æ æ¯å¢å¼ºè¾å¥å­ç³»ç»æ¥å£",
+					"class": "K2Node_CallFunction"
+				},
+				{
+					"title": "å¢å¼ºè¾å¥æ¬å°ç©å®¶å­ç³»ç»",
+					"class": "K2Node_GetSubsystemFromPC"
+				},
+				{
+					"title": "Add Input Mapping",
+					"class": "EdGraphNode_Comment"
+				},
+				{
+					"title": "EnhancedInputAction IA_Move",
+					"class": "K2Node_EnhancedInputAction"
+				},
+				{
+					"title": "EnhancedInputAction IA_Look",
+					"class": "K2Node_EnhancedInputAction"
+				},
+				{
+					"title": "åæ´è·¯çº¿èç¹",
+					"class": "K2Node_Knot"
+				},
+				{
+					"title": "åæ´è·¯çº¿èç¹",
+					"class": "K2Node_Knot"
+				},
+				{
+					"title": "åæ´è·¯çº¿èç¹",
+					"class": "K2Node_Knot"
+				},
+				{
+					"title": "åæ´è·¯çº¿èç¹",
+					"class": "K2Node_Knot"
+				},
+				{
+					"title": "åæ´è·¯çº¿èç¹",
+					"class": "K2Node_Knot"
+				},
+				{
+					"title": "Left/Right",
+					"class": "EdGraphNode_Comment"
+				},
+				{
+					"title": "Forward / Backward",
+					"class": "EdGraphNode_Comment"
+				},
+				{
+					"title": "Left/Right",
+					"class": "EdGraphNode_Comment"
+				},
+				{
+					"title": "Up/Down",
+					"class": "EdGraphNode_Comment"
+				},
+				{
+					"title": "äºä»¶å¼å§è¿è¡",
+					"class": "K2Node_Event",
+					"eventName": "ReceiveBeginPlay"
+				},
+				{
+					"title": "è·åæ§å¶å¨\nç®æ æ¯Pawn",
+					"class": "K2Node_CallFunction"
+				},
+				{
+					"title": "Is Valid",
+					"class": "K2Node_MacroInstance"
+				},
+				{
+					"title": "åæ´è·¯çº¿èç¹",
+					"class": "K2Node_Knot"
+				}
+			]
+		}
+	]
+}
