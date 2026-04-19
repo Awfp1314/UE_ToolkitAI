@@ -21,6 +21,8 @@
 
 UE Toolkit 是一个面向 Unreal Engine 开发者的 AI 助手桌面应用，旨在通过 AI 技术提升开发效率。
 
+> **开发说明**：本项目使用 AI 辅助开发工具（Cursor、Claude）完成，展示了 AI 协作开发的完整流程。项目包含完整的需求分析、架构设计、代码实现和文档系统。
+
 ### 核心亮点
 
 - 🤖 **多模型 LLM 集成**：支持 Ollama 本地模型和 OpenAI/Claude/DeepSeek 云端 API
