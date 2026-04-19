@@ -1,193 +1,346 @@
-# UE Toolkit — 虚幻引擎工具箱
+# UE Toolkit - AI-Powered Unreal Engine Toolbox
 
-> 一款面向虚幻引擎（Unreal Engine）开发者的 Windows 桌面工具箱，集工程管理、资产管理、AI 助手、配置工具和资源推荐于一体，帮助开发者提升日常工作效率。
+<div align="center">
 
----
+![Version](https://img.shields.io/badge/version-1.2.9-blue)
+![Python](https://img.shields.io/badge/python-3.9+-green)
+![License](https://img.shields.io/badge/license-MIT-orange)
+![Platform](https://img.shields.io/badge/platform-Windows-lightgrey)
 
-## 目录
+**一款面向虚幻引擎开发者的 AI 驱动桌面工具箱**
 
-- [软件概览](#软件概览)
-- [功能模块](#功能模块)
-  - [我的工程](#1-我的工程)
-  - [资产库](#2-资产库)
-  - [AI 助手](#3-ai-助手)
-  - [工程配置](#4-工程配置)
-  - [作者推荐](#5-作者推荐)
-- [通用功能](#通用功能)
-  - [主题切换](#主题切换)
-  - [设置中心](#设置中心)
-  - [自动更新](#自动更新)
-  - [系统托盘](#系统托盘)
-  - [问题反馈](#问题反馈)
-- [安装与运行](#安装与运行)
-- [操作注意事项](#操作注意事项)
+集成多模型 LLM、Function Calling 和实时 UE 编辑器通信
+
+[功能特性](#-功能特性) • [技术架构](#-技术架构) • [快速开始](#-快速开始) • [项目结构](#-项目结构)
+
+</div>
 
 ---
 
-## 软件概览
+## 🎯 项目简介
 
-| 项目     | 说明                                |
-| -------- | ----------------------------------- |
-| 名称     | UE Toolkit（虚幻引擎工具箱 专业版） |
-| 平台     | Windows                             |
-| 技术栈   | Python 3.9 + PyQt6                  |
-| 当前版本 | 以程序标题栏显示为准                |
+UE Toolkit 是一个面向 Unreal Engine 开发者的 AI 助手桌面应用，旨在通过 AI 技术提升开发效率。
 
-程序启动后会显示一个带有进度提示的启动画面，加载完成后进入主界面。主界面采用左侧导航栏 + 右侧内容区的经典布局，通过左侧按钮切换不同功能模块。
+### 核心亮点
 
----
-
-## 功能模块
-
-### 1. 我的工程
-
-管理本地所有虚幻引擎工程项目。
-
-- 自动扫描本机已安装的 UE 引擎版本
-- 发现并列出本地所有 `.uproject` 工程
-- 支持按分类管理工程（自定义分类）
-- 支持从引擎模板创建新工程（空白、第三人称、第一人称、载具等多种模板）
-- 支持创建 C++ 工程或蓝图工程
-- 工程卡片展示缩略图、引擎版本、最后修改时间等信息
-- 右键菜单可快速打开工程、打开工程目录、编辑工程信息
-- 工程注册表自动备份，防止数据丢失
-
-### 2. 资产库
-
-管理和浏览虚幻引擎资产资源。
-
-- 支持添加、编辑、删除资产
-- 支持拖放添加资产
-- 资产卡片展示缩略图、名称、大小、时间等信息
-- 支持搜索资产（包括拼音搜索）
-- 支持按分类筛选资产
-- 支持切换卡片视图模式（标准/紧凑）
-- 缩略图自动生成与缓存，提升浏览性能
-- 资产详情弹窗查看完整信息
-- 支持分类管理（新增、编辑、删除分类）
-- 支持工程搜索窗口，快速定位资产在工程中的位置
-- 懒加载机制，大量资产时也能流畅浏览
-
-### 3. AI 助手
-
-内置的 AI 聊天助手，支持与大语言模型对话。
-
-- ChatGPT 风格的聊天界面
-- 支持两种 LLM 供应商：
-  - API 模式：兼容 OpenAI 格式的在线 API（如 OpenAI、DeepSeek 等）
-  - Ollama 模式：连接本地 Ollama 服务，使用本地模型
-- 支持流式输出，实时显示 AI 回复
-- 支持多轮对话，保持上下文
-- 支持 Markdown 渲染
-- 内置工具调用系统，AI 可以读取资产信息、配置信息、分析日志等
-- 支持获取和验证可用模型列表
-- 模型采用延迟加载策略，不影响程序启动速度
-
-### 4. 工程配置
-
-管理虚幻引擎工程的配置文件。
-
-- 支持创建和管理配置模板
-- 可将常用配置保存为模板，方便复用
-- 支持快速打开配置文件所在目录
-- 右键菜单提供编辑、删除等操作
-- 配置自动保存
-
-### 5. 作者推荐
-
-精选的虚幻引擎相关资源站点推荐。
-
-- 按分类展示推荐站点（资源网站、工具、论坛、学习等）
-- 站点卡片展示名称和简要描述
-- 点击卡片直接在浏览器中打开对应网站
-- 帮助开发者快速找到优质的学习资源、资产商店和开发者社区
+- 🤖 **多模型 LLM 集成**：支持 Ollama 本地模型和 OpenAI/Claude/DeepSeek 云端 API
+- 🛠️ **Function Calling 系统**：26+ 业务工具 + 112 个 UE 编辑器操作工具
+- 🔌 **MCP 协议集成**：标准化的工具发现和调用协议
+- 🔍 **语义检索**：基于 sentence-transformers 和 FAISS 的向量检索
+- 🔄 **实时通信**：与 UE 编辑器的双向通信（Socket + HTTP）
+- 💎 **Freemium 模式**：免费基础功能 + 付费高级功能
 
 ---
 
-## 通用功能
+## ✨ 功能特性
 
-### 主题切换
+### 1. AI 助手模块
 
-- 支持深色主题和浅色主题
-- 点击右上角的太阳/月亮图标即可切换
-- 主题设置会自动保存，下次启动时恢复
-- 所有模块界面会同步切换主题
+- **多模型支持**：Ollama（本地）+ OpenAI/Claude（云端）
+- **流式响应**：SSE 实时输出，ChatGPT 风格交互
+- **工具调用**：
+  - 资产搜索与管理
+  - 配置模板对比
+  - UE 蓝图提取与分析
+  - 日志分析
+  - 站点推荐
+- **上下文管理**：多轮对话、会话管理、智能记忆
 
-### 设置中心
+### 2. 资产管理模块
 
-点击右上角齿轮图标进入设置界面，可配置：
+- **智能搜索**：支持拼音搜索、模糊匹配
+- **批量操作**：拖放添加、批量导入
+- **预览系统**：自动生成缩略图、实时预览
+- **迁移工具**：一键迁移资产到 UE 工程
+- **分类管理**：自定义分类、标签系统
 
-- AI 助手设置
-  - LLM 供应商选择（API / Ollama）
-  - API Key、API URL、模型名称配置
-  - Ollama 服务地址和模型选择
-  - 支持测试连接和验证模型可用性
-- 其他应用设置
+### 3. 工程管理模块
 
-### 自动更新
+- **自动发现**：扫描本机所有 UE 引擎和工程
+- **快速创建**：从模板创建新工程（C++/蓝图）
+- **分类管理**：自定义工程分类
+- **快速启动**：右键菜单快速打开工程
 
-- 程序启动时自动检查更新
-- 标题栏提供「检查更新」按钮，可手动检查
-- 发现新版本时弹出更新对话框，显示版本号和更新日志
-- 支持「立即更新」「稍后提醒」「跳过此版本」三种选择
-- 有新版本可用时，标题栏会显示小红点提示
+### 4. 配置工具模块
 
-### 系统托盘
+- **模板管理**：保存和复用常用配置
+- **快速应用**：一键应用配置到工程
+- **版本对比**：对比不同版本的配置差异
 
-- 程序运行时在系统托盘显示图标
-- 单击或双击托盘图标可恢复主窗口
-- 右键托盘图标可选择「显示主窗口」或「退出程序」
-- 关闭窗口时可选择最小化到托盘或直接退出，并可记住选择
+### 5. 站点推荐模块
 
-### 问题反馈
-
-- 左侧导航栏底部提供「问题反馈」按钮
-- 可直接在程序内提交问题描述或建议
+- 精选 UE 资源站点
+- 按分类展示（资源、工具、论坛、学习）
+- 一键访问
 
 ---
 
-## 安装与运行
+## 🏗️ 技术架构
 
-### 方式一：使用安装包（推荐）
+### 技术栈
 
-下载安装包后直接安装运行即可，无需额外配置。
-
-### 方式二：从源码运行
-
-1. 确保已安装 Python 3.9+
-2. 安装依赖：
-   ```bash
-   pip install -r requirements.txt
-   ```
-   国内用户建议使用镜像源加速：
-   ```bash
-   pip install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple/
-   ```
-3. 运行程序：
-   ```bash
-   python main.py
-   ```
-
-### 打包为安装包
-
-```bash
-python -m PyInstaller scripts/package/config/ue_toolkit.spec
+```
+AI/ML:    Ollama, OpenAI API, sentence-transformers, FAISS, MCP
+前端:     Python 3.9, PyQt6, QSS
+后端:     Flask, Vercel Serverless
+数据库:   SQLite (本地), Turso libSQL (云端)
+插件:     C++, Unreal Engine 5.6/5.7
+工具:     Git, PyInstaller, pytest, mypy
 ```
 
-> 注意：请使用 `python -m PyInstaller` 而非直接调用 `pyinstaller` 命令。
+### 系统架构
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                    桌面客户端                             │
+│  ┌──────────────┐    Socket 9998    ┌────────────────┐  │
+│  │  AI 助手      │◄────────────────►│  UE 插件        │  │
+│  │  Python+PyQt6 │                  │  C++ + Python   │  │
+│  └──────┬───────┘                  └────────────────┘  │
+│         │ HTTPS                                         │
+└─────────┼───────────────────────────────────────────────┘
+          │
+          ▼
+┌──────────────────┐     libSQL      ┌──────────────┐
+│  Web 服务端       │◄──────────────►│  Turso 数据库  │
+│  Flask + Vercel   │                │  东京节点      │
+└──────────────────┘                └──────────────┘
+```
+
+### 核心模块
+
+```
+Client/
+├── core/                       # 核心系统
+│   ├── bootstrap/              # 启动引导（6 阶段）
+│   ├── security/               # 授权系统
+│   ├── config/                 # 配置管理
+│   ├── services/               # 核心服务
+│   └── utils/                  # 工具类
+├── modules/                    # 功能模块
+│   ├── ai_assistant/           # AI 助手（16,129 行）
+│   ├── asset_manager/          # 资产管理（11,780 行）
+│   ├── my_projects/            # 工程管理（3,715 行）
+│   ├── config_tool/            # 配置工具（1,278 行）
+│   └── site_recommendations/   # 站点推荐（587 行）
+├── ui/                         # UI 组件
+├── resources/                  # 资源文件
+└── Plugins/                    # UE 插件
+    ├── BlueprintExtractor/     # 蓝图提取插件（112 工具）
+    └── BlueprintAnalyzer/      # 蓝图分析插件（旧版）
+```
 
 ---
 
-## 操作注意事项
+## 🚀 快速开始
 
-1. 本程序仅支持 Windows 系统。
-2. 程序采用单实例运行机制，同一时间只能运行一个实例。如果程序已在运行，再次启动会自动激活已有窗口。
-3. 用户数据存储在 `%APPDATA%\ue_toolkit\user_data\` 目录下，卸载程序不会自动删除用户数据。如需完全清除，请手动删除该目录。
-4. AI 助手功能需要配置 LLM 供应商：
-   - 使用 API 模式需要填写有效的 API Key 和 API URL。
-   - 使用 Ollama 模式需要先在本机安装并启动 [Ollama](https://ollama.com/) 服务。
-5. 资产库的资产路径请确保指向有效的本地目录，路径变更后需要重新扫描。
-6. 我的工程模块会自动扫描本机已安装的 UE 引擎，首次使用时扫描可能需要一些时间。
-7. 主题切换后如果个别界面样式未及时刷新，可以切换到其他模块再切回来。
-8. 如遇到程序异常，可查看日志文件排查问题，日志位于用户数据目录下。
-9. 关闭窗口时可以选择「最小化到托盘」保持后台运行，或「退出程序」完全关闭。勾选「记住我的选择」后下次关闭不再询问。
+### 环境要求
+
+- Windows 10/11
+- Python 3.9+
+- （可选）Ollama（用于本地模型）
+
+### 安装依赖
+
+```bash
+# 克隆仓库
+git clone https://github.com/Awfp1314/UE_ToolkitAI.git
+cd UE_ToolkitAI/Client
+
+# 安装依赖（推荐使用国内镜像）
+pip install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple/
+```
+
+### 运行程序
+
+```bash
+# 开发模式
+python main.py
+
+# 打包为可执行文件
+python -m PyInstaller packaging/ue_toolkit.spec
+```
+
+### 配置 AI 助手
+
+1. **使用 Ollama（本地模型）**
+
+   ```bash
+   # 安装 Ollama
+   # 下载：https://ollama.com/
+
+   # 拉取模型
+   ollama pull qwen2.5:7b
+
+   # 在程序设置中选择 Ollama 模式
+   ```
+
+2. **使用 API（云端模型）**
+   - 在程序设置中选择 API 模式
+   - 填写 API Key 和 API URL
+   - 支持 OpenAI、Claude、DeepSeek 等
+
+---
+
+## 📁 项目结构
+
+```
+Client/
+├── main.py                     # 程序入口
+├── version.py                  # 版本号
+├── requirements.txt            # 依赖列表
+├── core/                       # 核心系统（~20,000 行）
+├── modules/                    # 功能模块（~33,000 行）
+├── ui/                         # UI 组件
+├── resources/                  # 资源文件
+│   ├── icons/                  # SVG 图标
+│   └── styles/                 # QSS 样式
+├── Plugins/                    # UE 插件
+├── Docs/                       # 文档
+└── tests/                      # 测试
+```
+
+---
+
+## 🎨 功能演示
+
+### AI 助手
+
+- 支持多轮对话
+- 流式输出
+- Markdown 渲染
+- 工具调用（资产搜索、配置对比、蓝图分析）
+
+### 资产管理
+
+- 拼音搜索
+- 批量添加
+- 自动生成缩略图
+- 一键迁移到工程
+
+### 工程管理
+
+- 自动发现 UE 引擎
+- 从模板创建工程
+- 分类管理
+- 快速启动
+
+---
+
+## 🔧 开发指南
+
+### 代码规范
+
+- 文件编码：UTF-8
+- 日志：使用 `get_logger(__name__)`
+- 异常处理：必须记录日志
+- 类型提示：推荐使用 `typing` 模块
+
+### 模块开发
+
+每个模块必须实现 `IModule` 接口：
+
+```python
+from core.module_interface import IModule
+
+class MyModule(IModule):
+    def get_metadata(self) -> ModuleMetadata:
+        pass
+
+    def get_widget(self) -> QWidget:
+        pass
+
+    def initialize(self) -> bool:
+        pass
+
+    def cleanup(self) -> CleanupResult:
+        pass
+```
+
+### 测试
+
+```bash
+# 运行测试
+pytest
+
+# 代码覆盖率
+pytest --cov=core --cov=modules
+```
+
+---
+
+## 📊 项目统计
+
+| 指标           | 数值                       |
+| -------------- | -------------------------- |
+| 总代码量       | ~100,000 行                |
+| 模块数量       | 5 个                       |
+| 工具数量       | 138 个（26 业务 + 112 UE） |
+| 支持的 UE 版本 | 5.4, 5.6, 5.7              |
+| 打包体积       | 50-80 MB（优化后）         |
+
+---
+
+## 🤝 贡献指南
+
+欢迎贡献代码、报告问题或提出建议！
+
+1. Fork 本仓库
+2. 创建特性分支 (`git checkout -b feature/AmazingFeature`)
+3. 提交更改 (`git commit -m 'feat: Add some AmazingFeature'`)
+4. 推送到分支 (`git push origin feature/AmazingFeature`)
+5. 提交 Pull Request
+
+### Commit 规范
+
+使用 Conventional Commits：
+
+```
+feat: 新增功能
+fix: 修复问题
+docs: 文档更新
+refactor: 重构
+chore: 杂项维护
+```
+
+---
+
+## 📄 许可证
+
+本项目采用 MIT 许可证 - 详见 [LICENSE](LICENSE) 文件
+
+---
+
+## 🔗 相关链接
+
+- **官网**：[unrealenginetookit.top](https://unrealenginetookit.top)
+- **文档**：[查看文档](Docs/)
+- **问题反馈**：[GitHub Issues](https://github.com/Awfp1314/UE_ToolkitAI/issues)
+
+---
+
+## 📮 联系方式
+
+- **作者**：HUTAO
+- **邮箱**：[你的邮箱]
+- **GitHub**：[@Awfp1314](https://github.com/Awfp1314)
+
+---
+
+## 🙏 致谢
+
+- [Ollama](https://ollama.com/) - 本地 LLM 运行时
+- [PyQt6](https://www.riverbankcomputing.com/software/pyqt/) - GUI 框架
+- [sentence-transformers](https://www.sbert.net/) - 文本向量化
+- [FAISS](https://github.com/facebookresearch/faiss) - 向量检索
+- [Blueprint Extractor](https://github.com/SunGrow/ue-blueprint-extractor) - UE 插件
+
+---
+
+<div align="center">
+
+**⭐ 如果这个项目对你有帮助，请给个 Star！**
+
+Made with ❤️ by HUTAO
+
+</div>
