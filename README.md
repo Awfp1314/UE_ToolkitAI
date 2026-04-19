@@ -2,6 +2,8 @@
 
 <div align="center">
 
+**中文 | [English](README_EN.md)**
+
 ![Version](https://img.shields.io/badge/version-1.2.52-blue)
 ![Python](https://img.shields.io/badge/python-3.9+-green)
 ![License](https://img.shields.io/badge/license-MIT-orange)

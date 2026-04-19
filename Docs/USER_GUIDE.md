@@ -1,5 +1,9 @@
 # UeToolkit 使用文档
 
+**中文 | [English](USER_GUIDE_EN.md)**
+
+---
+
 # 快速开始
 
 ## 工程管理
