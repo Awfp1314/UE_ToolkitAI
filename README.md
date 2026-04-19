@@ -321,9 +321,9 @@ chore: 杂项维护
 
 ## 📮 联系方式
 
-- **作者**：HUTAO
-- **邮箱**：[你的邮箱]
 - **GitHub**：[@Awfp1314](https://github.com/Awfp1314)
+- **官网**：[unrealenginetookit.top](https://unrealenginetookit.top)
+- **问题反馈**：[GitHub Issues](https://github.com/Awfp1314/UE_ToolkitAI/issues)
 
 ---
 
@@ -341,6 +341,6 @@ chore: 杂项维护
 
 **⭐ 如果这个项目对你有帮助，请给个 Star！**
 
-Made with ❤️ by HUTAO
+Made with ❤️ and AI
 
 </div>
