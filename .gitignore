@@ -32,6 +32,10 @@ env/
 *.swo
 *~
 
+# Kiro IDE 个人配置（保留 specs、skills、hooks）
+.kiro/settings/
+.kiro/scripts/
+
 # OS
 .DS_Store
 Thumbs.db
