@@ -21,9 +21,7 @@ Integrated with Multi-Model LLM, Function Calling, and Real-time UE Editor Commu
 
 ## 🎯 Project Overview
 
-UE Toolkit is an AI assistant desktop application for Unreal Engine developers, designed to improve development efficiency through AI technology.
-
-> **Development Note**: This project was developed with AI-assisted tools (Cursor, Claude), demonstrating a complete AI collaboration workflow. It includes comprehensive requirement analysis, architecture design, code implementation, and documentation system.
+UE Toolkit is a desktop toolbox for Unreal Engine developers, designed to improve development efficiency through modern technology stack.
 
 ### Key Highlights
 
