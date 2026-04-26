@@ -87,15 +87,37 @@ class ModuleInterface:
 
 ```python
 from core.config.config_manager import ConfigManager
+from pathlib import Path
+
+# 全局配置实例（用户ID、跳过版本等）
+global_config_manager = ConfigManager(
+    module_name="global",
+    template_path=Path("core/config_templates/global_config_template.json")
+)
 
 # 获取配置
-config = config_manager.get_module_config()
+config = global_config_manager.get_module_config()
+
+# 获取用户ID
+user_id = config.get("user_id")
+
+# 设置用户ID
+if not user_id:
+    import uuid
+    user_id = str(uuid.uuid4())
+    global_config_manager.update_config_value("user_id", user_id)
+
+# 模块配置实例（现有用法）
+module_config_manager = ConfigManager(
+    module_name="module_name",
+    template_path=Path("modules/module_name/config_template.json")
+)
 
 # 保存配置
-config_manager.save_user_config(config, backup_reason="user_change")
+module_config_manager.save_user_config(config, backup_reason="user_change")
 
 # 更新单个值
-config_manager.update_config_value("settings.theme", "dark")
+module_config_manager.update_config_value("settings.theme", "dark")
 ```
 
 **特性**:

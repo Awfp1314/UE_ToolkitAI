@@ -36,6 +36,11 @@ env/
 .kiro/settings/
 .kiro/scripts/
 
+# AI Agent 工作目录
+.agents/
+.roo/
+.kiro/
+
 # OS
 .DS_Store
 Thumbs.db

@@ -34,6 +34,7 @@ config_templates = [
     'modules/config_tool/config_template.json',
     'modules/site_recommendations/config_template.json',
     'core/config_templates/app_config_template.json',
+    'core/config_templates/global_config_template.json',
 ]
 
 for template in config_templates:
@@ -97,7 +98,7 @@ hiddenimports = [
     
     # 项目模块
     'core.logger',
-    'core.config_manager',
+    'core.config.config_manager',
     'core.module_manager',
     'core.app_manager',
     'core.update_checker',

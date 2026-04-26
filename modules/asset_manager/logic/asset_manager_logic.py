@@ -38,7 +38,6 @@ from .asset_core import AssetCore
 from .asset_scanner import AssetScanner
 from .thumbnail_manager import ThumbnailManager
 from .asset_preview_coordinator import AssetPreviewCoordinator
-from .asset_local_config_manager import AssetLocalConfigManager
 from .file_operations import FileOperations
 from .search_engine import SearchEngine
 from .screenshot_processor import ScreenshotProcessor
@@ -109,7 +108,16 @@ class AssetManagerLogic(QObject):
             screenshot_processor=self._screenshot_processor,
             logger=logger
         )
-        self._local_config = AssetLocalConfigManager(self.config_manager, logger)
+
+        # ─── 本地配置路径（按需初始化）────────────────────
+        self.local_config_path: Optional[Path] = None
+        self.thumbnails_dir: Optional[Path] = None
+        self.documents_dir: Optional[Path] = None
+
+        # ─── 备份策略状态 ─────────────────────────────────
+        self._last_backup_time: Optional[datetime] = None
+        self._last_backup_asset_count: int = 0
+        self._backup_interval_seconds: int = 300  # 5分钟
 
         # ─── 向后兼容的属性引用 ────────────────────────────
         self.assets = self._asset_core.assets
@@ -120,30 +128,6 @@ class AssetManagerLogic(QObject):
         logger.info("资产管理逻辑初始化完成")
 
     # ─── 向后兼容的属性 ────────────────────────────────────
-
-    @property
-    def local_config_path(self):
-        return self._local_config.local_config_path
-
-    @local_config_path.setter
-    def local_config_path(self, value):
-        self._local_config.local_config_path = value
-
-    @property
-    def thumbnails_dir(self):
-        return self._local_config.thumbnails_dir
-
-    @thumbnails_dir.setter
-    def thumbnails_dir(self, value):
-        self._local_config.thumbnails_dir = value
-
-    @property
-    def documents_dir(self):
-        return self._local_config.documents_dir
-
-    @documents_dir.setter
-    def documents_dir(self, value):
-        self._local_config.documents_dir = value
 
     @property
     def current_preview_process(self):
@@ -166,8 +150,8 @@ class AssetManagerLogic(QObject):
 
     def _load_config(self) -> None:
         """加载配置 - 优先从缓存加载，异步扫描检查变化"""
-        config = self._local_config.load_global_config()
-        config = self._local_config.migrate_global_config(config)
+        config = self._load_global_config()
+        config = self._migrate_global_config(config)
 
         # 优先读取新格式的 current_asset_library，兼容旧格式
         asset_library_path = (config.get("current_asset_library", "")
@@ -186,17 +170,17 @@ class AssetManagerLogic(QObject):
             return
 
         # 设置本地路径
-        self._local_config.setup_local_paths(asset_library_path)
+        self._setup_local_paths(asset_library_path)
 
         # 加载本地配置
-        local_config = self._local_config.load_local_config()
+        local_config = self._load_local_config()
         if local_config:
             lib_config = local_config
         else:
             asset_library_configs = config.get("asset_library_configs", {})
             lib_config = asset_library_configs.get(asset_library_path, {})
             if lib_config:
-                self._local_config.save_local_config(lib_config)
+                self._save_local_config(lib_config)
 
         # 加载分类（就地修改，保持与 _asset_core.categories 的引用一致）
         new_categories = lib_config.get("categories", config.get("categories", ["默认分类"]))
@@ -254,9 +238,9 @@ class AssetManagerLogic(QObject):
             self._scan_asset_library(Path(asset_library_path), cached_assets_data)
 
     def _save_config(self) -> None:
-        """保存配置 - 委托给 _local_config"""
+        """保存配置"""
         current_lib_path = self.get_asset_library_path()
-        self._local_config.save_full_config(self.assets, self.categories, current_lib_path)
+        self._save_full_config(self.assets, self.categories, current_lib_path)
 
     def _scan_asset_library(self, library_path: Path,
                              cached_assets_data: List[Dict[str, Any]]) -> None:
@@ -399,34 +383,312 @@ class AssetManagerLogic(QObject):
 
     # ─── 向后兼容的配置委托方法 ────────────────────────────
 
+    def _setup_local_paths(self, asset_library_path: str) -> None:
+        """根据资产库路径设置本地配置路径"""
+        asset_config_dir = Path(asset_library_path) / ".asset_config"
+        self.local_config_path = asset_config_dir / "config.json"
+        self.thumbnails_dir = asset_config_dir / "thumbnails"
+        self.documents_dir = asset_config_dir / "documents"
+
+    def _load_global_config(self) -> Dict[str, Any]:
+        """加载全局配置"""
+        config = self.config_manager.load_user_config()
+        if not config:
+            config = {
+                "_version": "2.0.0",
+                "asset_libraries": [],
+                "current_asset_library": "",
+                "preview_projects": [],
+                "last_preview_project": "",
+                "last_target_project": ""
+            }
+        return config
+
+    def _migrate_global_config(self, config: Dict[str, Any]) -> Dict[str, Any]:
+        """迁移旧配置格式到新的多路径格式"""
+        version = config.get("_version", "1.0.0")
+
+        # 如果已包含新格式字段，无需迁移
+        if config.get("current_asset_library") is not None or config.get("asset_libraries") is not None:
+            logger.debug("配置已是新格式，跳过迁移")
+            return config
+
+        if version == "2.0.0" and not config.get("asset_library_path"):
+            logger.debug("配置已是最新版本2.0.0")
+            return config
+
+        logger.info(f"检测到旧配置版本 {version}，开始迁移到新格式...")
+
+        try:
+            old_asset_library_path = config.get("asset_library_path", "")
+            old_categories = config.get("categories", ["默认分类"])
+            old_assets = config.get("assets", [])
+
+            new_config = {
+                "_version": "2.0.0",
+                "current_asset_library": old_asset_library_path,
+                "asset_libraries": [],
+                "preview_projects": [],
+                "last_preview_project": config.get("last_preview_project_name", ""),
+                "last_target_project": config.get("last_target_project_path", ""),
+            }
+
+            if old_asset_library_path:
+                new_config["asset_libraries"] = [
+                    {"path": old_asset_library_path, "name": "主资产库", "last_opened": ""}
+                ]
+                logger.info(f"已迁移资产库路径: {old_asset_library_path}")
+
+            # 迁移预览工程
+            old_projects = (config.get("additional_preview_projects_with_names")
+                            or config.get("preview_projects", []))
+            if not old_projects:
+                old_single = config.get("preview_project_path", "")
+                if old_single and Path(old_single).exists():
+                    old_projects = [{"path": old_single, "name": "默认工程"}]
+            new_config["preview_projects"] = old_projects or []
+
+            save_result = self.config_manager.save_user_config(new_config, backup_reason="config_migration")
+            if not save_result:
+                logger.error("保存迁移后的配置失败")
+                return config
+
+            logger.info("配置迁移完成（旧格式→新格式）")
+            return new_config
+
+        except Exception as e:
+            logger.error(f"配置迁移失败: {e}", exc_info=True)
+            return config
+
     def _load_local_config(self) -> Optional[Dict[str, Any]]:
-        """委托给 AssetLocalConfigManager"""
-        return self._local_config.load_local_config()
+        """从本地配置文件加载资产库配置"""
+        if not self.local_config_path or not self.local_config_path.exists():
+            logger.info(f"本地配置文件不存在: {self.local_config_path}")
+            return None
 
-    def _save_local_config(self, config: Dict[str, Any],
-                            create_backup: bool = False) -> bool:
-        """委托给 AssetLocalConfigManager"""
-        return self._local_config.save_local_config(config, create_backup)
+        try:
+            config = ConfigUtils.read_json(self.local_config_path, default=None)
+            if config is None:
+                return None
+            
+            # 调试：检查配置中的资产数据
+            assets = config.get('assets', [])
+            if assets:
+                first_asset = assets[0]
+                print(f"[DEBUG load_local_config] 配置文件: {self.local_config_path}")
+                print(f"[DEBUG load_local_config] 第一个资产: {first_asset.get('name')}")
+                print(f"[DEBUG load_local_config] engine_min_version: '{first_asset.get('engine_min_version', 'KEY_NOT_FOUND')}'")
+                if len(assets) > 1:
+                    second_asset = assets[1]
+                    print(f"[DEBUG load_local_config] 第二个资产: {second_asset.get('name')}, engine_min_version: '{second_asset.get('engine_min_version', 'KEY_NOT_FOUND')}')")
 
-    def _migrate_config(self, config: Dict[str, Any]) -> Dict[str, Any]:
-        """委托给 AssetLocalConfigManager"""
-        return self._local_config.migrate_global_config(config)
+            version = config.get("_version", "1.0.0")
+            if version != "2.0.0":
+                logger.info(f"检测到本地配置版本 {version}，需要迁移到 2.0.0")
+                config = self._migrate_local_config(config)
+                self._save_local_config(config)
 
-    def _validate_config_before_save(self, config: Dict[str, Any]) -> bool:
-        """委托给 AssetLocalConfigManager"""
-        return self._local_config.validate_config_before_save(config, len(self.assets))
+            logger.info(f"成功加载本地配置: {self.local_config_path}")
+            return config
+        except Exception as e:
+            logger.error(f"加载本地配置失败: {e}", exc_info=True)
+            return None
 
-    def _should_create_backup(self) -> bool:
-        """委托给 AssetLocalConfigManager"""
-        return self._local_config.should_create_backup(len(self.assets))
+    def _migrate_local_config(self, config: Dict[str, Any]) -> Dict[str, Any]:
+        """迁移本地配置文件到新版本"""
+        version = config.get("_version", "1.0.0")
+        logger.info(f"开始迁移本地配置，从版本 {version} 到 2.0.0")
+
+        if version == "2.0.0":
+            return config
+
+        config["_version"] = "2.0.0"
+        return config
+
+    def _save_local_config(self, config: Dict[str, Any], create_backup: bool = False) -> bool:
+        """保存资产库配置到本地文件"""
+        if not self.local_config_path:
+            logger.warning("本地配置路径未设置，无法保存本地配置")
+            return False
+
+        try:
+            if "_version" not in config:
+                config["_version"] = "2.0.0"
+
+            if create_backup and self.local_config_path.exists():
+                self._backup_current_config()
+
+            ConfigUtils.write_json(self.local_config_path, config, create_backup=False)
+
+            logger.debug(f"成功保存本地配置: {self.local_config_path}")
+            return True
+        except Exception as e:
+            logger.error(f"保存本地配置失败: {e}", exc_info=True)
+            return False
+
+    def _validate_config(self, config: Dict[str, Any], current_asset_count: int) -> bool:
+        """验证配置完整性，防止保存损坏的配置"""
+        try:
+            assets = config.get("assets", [])
+
+            if current_asset_count > 0 and len(assets) == 0:
+                logger.error(
+                    f"配置验证失败：当前有 {current_asset_count} 个资产，但新配置为空"
+                )
+                return False
+
+            if current_asset_count > 5 and len(assets) < current_asset_count * 0.5:
+                logger.error(
+                    f"配置验证失败：资产数量从 {current_asset_count} 骤降到 {len(assets)}，"
+                    f"拒绝保存以防止数据丢失"
+                )
+                return False
+
+            for i, asset_data in enumerate(assets):
+                if not asset_data.get("id"):
+                    logger.error(f"配置验证失败：资产 {i} 缺少 id 字段")
+                    return False
+                if not asset_data.get("name"):
+                    logger.error(f"配置验证失败：资产 {i} 缺少 name 字段")
+                    return False
+                if not asset_data.get("path"):
+                    logger.error(f"配置验证失败：资产 {i} 缺少 path 字段")
+                    return False
+
+            return True
+
+        except Exception as e:
+            logger.error(f"配置验证异常: {e}")
+            return False
+
+    def _should_create_backup(self, current_asset_count: int) -> bool:
+        """判断是否需要创建备份"""
+        if current_asset_count != self._last_backup_asset_count:
+            return True
+
+        if self._last_backup_time is None:
+            return True
+
+        time_since_last_backup = (datetime.now() - self._last_backup_time).total_seconds()
+        if time_since_last_backup >= self._backup_interval_seconds:
+            return True
+
+        return False
+
+    def _update_backup_record(self, asset_count: int) -> None:
+        """更新备份记录"""
+        self._last_backup_time = datetime.now()
+        self._last_backup_asset_count = asset_count
 
     def _backup_current_config(self) -> bool:
-        """委托给 AssetLocalConfigManager"""
-        return self._local_config._backup_current_config()
+        """备份当前的配置文件"""
+        try:
+            if not self.local_config_path or not self.local_config_path.exists():
+                return False
+
+            backup_dir = self.local_config_path.parent / "backup"
+            backup_dir.mkdir(parents=True, exist_ok=True)
+
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            backup_path = backup_dir / f"config_{timestamp}.json"
+
+            shutil.copy2(self.local_config_path, backup_path)
+            logger.info(f"已备份当前配置: {backup_path}")
+
+            self._cleanup_old_backups(backup_dir, keep_count=20)
+
+            return True
+
+        except Exception as e:
+            logger.warning(f"备份当前配置失败: {e}")
+            return False
 
     def _cleanup_old_backups(self, backup_dir: Path, keep_count: int = 20) -> None:
-        """委托给 AssetLocalConfigManager"""
-        self._local_config._cleanup_old_backups(backup_dir, keep_count)
+        """清理旧备份，保留指定数量的最新备份"""
+        try:
+            backup_files = sorted(backup_dir.glob("config_*.json"), reverse=True)
+
+            for old_backup in backup_files[keep_count:]:
+                try:
+                    old_backup.unlink()
+                    logger.debug(f"已删除旧备份: {old_backup}")
+                except Exception as e:
+                    logger.warning(f"删除旧备份失败: {e}")
+
+        except Exception as e:
+            logger.warning(f"清理旧备份失败: {e}")
+
+    def _save_full_config(self, assets: List[Asset], categories: List[str],
+                          current_lib_path: Optional[Path]) -> None:
+        """保存完整配置（序列化资产列表并写入本地配置文件）"""
+        if not current_lib_path:
+            return
+
+        # 安全检查：确保 local_config_path 与当前资产库路径一致
+        expected_local_config_path = current_lib_path / ".asset_config" / "config.json"
+        if self.local_config_path and self.local_config_path != expected_local_config_path:
+            logger.warning(
+                f"检测到配置路径不一致，跳过保存以防止数据覆盖。"
+                f"当前路径: {self.local_config_path}, 期望路径: {expected_local_config_path}"
+            )
+            return
+
+        # 安全检查：验证资产路径是否在当前资产库下
+        if assets:
+            first_asset_path = assets[0].path
+            try:
+                first_asset_path.relative_to(current_lib_path)
+            except ValueError:
+                logger.warning(
+                    f"检测到资产路径与资产库路径不一致，跳过保存以防止数据覆盖。"
+                    f"资产路径: {first_asset_path}, 资产库路径: {current_lib_path}"
+                )
+                return
+
+        lib_config = {"categories": categories}
+
+        assets_data = []
+        for asset in assets:
+            pkg_type_value = asset.package_type.value if hasattr(asset.package_type, 'value') else "content"
+            assets_data.append({
+                "id": asset.id,
+                "name": asset.name,
+                "asset_type": asset.asset_type.value,
+                "path": str(asset.path),
+                "category": asset.category,
+                "package_type": pkg_type_value,
+                "file_extension": asset.file_extension,
+                "thumbnail_path": str(asset.thumbnail_path) if asset.thumbnail_path else None,
+                "thumbnail_source": asset.thumbnail_source,
+                "size": asset.size,
+                "created_time": asset.created_time.isoformat(),
+                "description": asset.description,
+                "engine_min_version": getattr(asset, 'engine_min_version', ''),
+                "project_file": getattr(asset, 'project_file', '')
+            })
+            
+            # 调试：打印保存的 package_type
+            if "tactical" in asset.name.lower():
+                logger.info(f"[保存配置] {asset.name}: package_type={asset.package_type}, value={pkg_type_value}")
+
+        lib_config["assets"] = assets_data
+
+        # 验证配置
+        if not self._validate_config(lib_config, len(assets)):
+            logger.error("配置验证失败，跳过保存以防止数据丢失")
+            return
+
+        # 智能备份
+        do_backup = self._should_create_backup(len(assets))
+        self._save_local_config(lib_config, create_backup=do_backup)
+
+        if do_backup:
+            self._update_backup_record(len(assets))
+
+        logger.debug(
+            f"已保存 {len(assets)} 个资产的配置到本地: "
+            f"{self.local_config_path} (备份: {do_backup})"
+        )
 
 
     # ─── 资产 CRUD 操作 ────────────────────────────────────
@@ -2252,12 +2514,6 @@ class AssetManagerLogic(QObject):
 
         logger.info(f"已加载 {len(self.assets)} 个资产")
         self.assets_loaded.emit(self.assets)
-
-    # ─── 向后兼容：_migrate_local_config ───────────────────
-
-    def _migrate_local_config(self, config: Dict[str, Any]) -> Dict[str, Any]:
-        """委托给 AssetLocalConfigManager"""
-        return self._local_config._migrate_local_config(config)
 
     # ─── 资产自动检测 ──────────────────────────────────────
 
