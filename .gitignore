@@ -32,7 +32,6 @@ env/
 *.swo
 *~
 
-
 # AI Agent 工作目录
 .agents/
 .roo/
