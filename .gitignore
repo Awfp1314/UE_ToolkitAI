@@ -32,9 +32,6 @@ env/
 *.swo
 *~
 
-# Kiro IDE 个人配置（保留 specs、skills、hooks）
-.kiro/settings/
-.kiro/scripts/
 
 # AI Agent 工作目录
 .agents/
