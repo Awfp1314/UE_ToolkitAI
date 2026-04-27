@@ -8,6 +8,7 @@
 """
 
 import os
+import sys
 import tempfile
 import zipfile
 import subprocess
@@ -122,12 +123,13 @@ class ArchiveExtractor:
         
         # 尝试从 PATH 环境变量查找
         try:
+            creationflags = subprocess.CREATE_NO_WINDOW if sys.platform == 'win32' else 0
             result = subprocess.run(
                 ["where", "7z.exe"],
                 capture_output=True,
                 text=True,
                 timeout=5,
-                creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == 'win32' else 0
+                creationflags=creationflags
             )
             if result.returncode == 0:
                 path = Path(result.stdout.strip().split('\n')[0])
@@ -147,13 +149,14 @@ class ArchiveExtractor:
                     continue
                 
                 # 使用 PowerShell 快速搜索（比 Python 递归快）
+                creationflags = subprocess.CREATE_NO_WINDOW if sys.platform == 'win32' else 0
                 result = subprocess.run(
                     ["powershell", "-Command", 
                      f"Get-ChildItem -Path '{base_dir}' -Filter '7z.exe' -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty FullName"],
                     capture_output=True,
                     text=True,
                     timeout=30,
-                    creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == 'win32' else 0
+                    creationflags=creationflags
                 )
                 if result.returncode == 0 and result.stdout.strip():
                     path = Path(result.stdout.strip())
@@ -556,13 +559,7 @@ class ArchiveExtractor:
                 cmd.append("-p")
             
             # 执行解压（隐藏命令行窗口）
-            import sys
-            startupinfo = None
-            creationflags = 0
-            
-            if sys.platform == 'win32':
-                # Windows: 隐藏命令行窗口
-                creationflags = subprocess.CREATE_NO_WINDOW
+            creationflags = subprocess.CREATE_NO_WINDOW if sys.platform == 'win32' else 0
             
             result = subprocess.run(
                 cmd,

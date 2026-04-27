@@ -75,11 +75,13 @@ class FastFileOperations:
         
         # 3. PATH 环境变量
         try:
+            creationflags = subprocess.CREATE_NO_WINDOW if sys.platform == 'win32' else 0
             result = subprocess.run(
                 ["where", "7z.exe"],
                 capture_output=True,
                 text=True,
-                timeout=5
+                timeout=5,
+                creationflags=creationflags
             )
             if result.returncode == 0:
                 path = result.stdout.strip().split('\n')[0]
@@ -134,13 +136,15 @@ class FastFileOperations:
             if progress_callback:
                 progress_callback(0, 100, f"正在解压: {archive_path.name}")
             
+            creationflags = subprocess.CREATE_NO_WINDOW if sys.platform == 'win32' else 0
             process = subprocess.Popen(
                 cmd,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True,
                 encoding='utf-8',
-                errors='ignore'
+                errors='ignore',
+                creationflags=creationflags
             )
             
             # 解析进度
@@ -255,13 +259,14 @@ class FastFileOperations:
             # 方法1: 使用 Get-PhysicalDisk 查询磁盘类型
             ps_cmd = f'powershell -Command "Get-PhysicalDisk | Select-Object MediaType, SpindleSpeed | ConvertTo-Json"'
             
+            creationflags = subprocess.CREATE_NO_WINDOW if sys.platform == 'win32' else 0
             result = subprocess.run(
                 ps_cmd,
                 shell=True,
                 capture_output=True,
                 text=True,
                 timeout=5,
-                creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == 'win32' else 0
+                creationflags=creationflags
             )
             
             if result.returncode == 0:
@@ -301,13 +306,14 @@ class FastFileOperations:
             
             # 方法2: 如果 PowerShell 失败，使用 wmic 作为备用
             wmic_cmd = 'wmic diskdrive get MediaType'
+            creationflags = subprocess.CREATE_NO_WINDOW if sys.platform == 'win32' else 0
             result2 = subprocess.run(
                 wmic_cmd,
                 shell=True,
                 capture_output=True,
                 text=True,
                 timeout=3,
-                creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == 'win32' else 0
+                creationflags=creationflags
             )
             
             if result2.returncode == 0:
@@ -373,13 +379,7 @@ class FastFileOperations:
             ]
             
             # Windows 下隐藏命令行窗口
-            startupinfo = None
-            creationflags = 0
-            if sys.platform == 'win32':
-                startupinfo = subprocess.STARTUPINFO()
-                startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
-                startupinfo.wShowWindow = subprocess.SW_HIDE
-                creationflags = subprocess.CREATE_NO_WINDOW
+            creationflags = subprocess.CREATE_NO_WINDOW if sys.platform == 'win32' else 0
             
             # 启动 robocopy 进程
             self._logger.info(f"📝 [robocopy] 命令: {' '.join(cmd)}")
@@ -389,7 +389,6 @@ class FastFileOperations:
                 cmd,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
-                startupinfo=startupinfo,
                 creationflags=creationflags
             )
             
