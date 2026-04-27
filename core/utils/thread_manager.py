@@ -44,6 +44,7 @@ class EnhancedThreadManager:
         on_result: Optional[Callable] = None,
         on_error: Optional[Callable] = None,
         on_timeout: Optional[Callable] = None,
+        on_progress: Optional[Callable[[int], None]] = None,
         *args,
         **kwargs,
     ) -> Tuple[Optional[QThread], Optional[Worker], str]:
@@ -70,6 +71,7 @@ class EnhancedThreadManager:
             "on_result": on_result,
             "on_error": on_error,
             "on_timeout": on_timeout,
+            "on_progress": on_progress,
             "args": args,
             "kwargs": kwargs,
             "cancel_token": cancel_token,  # v5.2.1: 添加到 metadata
@@ -126,6 +128,7 @@ class EnhancedThreadManager:
                 on_result = meta.get("on_result")
                 on_error = meta.get("on_error")
                 on_timeout = meta.get("on_timeout")
+                on_progress = meta.get("on_progress")
                 args = meta.get("args", ())
                 kwargs = meta.get("kwargs", {})
                 cancel_token = meta.get("cancel_token")
@@ -170,17 +173,35 @@ class EnhancedThreadManager:
                 logger.error(f"Failed to create worker/thread for {task_id}: {e}", exc_info=True)
                 raise ThreadError(f"Failed to create task worker: {e}") from e
 
-            # Wire signals
-            thread.started.connect(worker.run)
-            worker.finished.connect(thread.quit)
-            worker.finished.connect(worker.deleteLater)
-            thread.finished.connect(thread.deleteLater)
+            # Wire signals with explicit QueuedConnection for thread safety
+            from PyQt6.QtCore import Qt
+            thread.started.connect(worker.run, Qt.ConnectionType.QueuedConnection)
+            worker.finished.connect(thread.quit, Qt.ConnectionType.QueuedConnection)
+            worker.finished.connect(worker.deleteLater, Qt.ConnectionType.QueuedConnection)
+            thread.finished.connect(thread.deleteLater, Qt.ConnectionType.QueuedConnection)
 
+            # Connect callbacks with safety wrapper
             if on_result:
-                worker.result.connect(on_result)
+                worker.result.connect(
+                    lambda result: self._safe_callback(task_id, on_result, result),
+                    Qt.ConnectionType.QueuedConnection
+                )
             if on_error:
-                worker.error.connect(on_error)
-            worker.error.connect(lambda err: self._handle_task_error(task_id, err))
+                worker.error.connect(
+                    lambda err: self._safe_callback(task_id, on_error, err),
+                    Qt.ConnectionType.QueuedConnection
+                )
+            if on_progress:
+                worker.progress.connect(
+                    lambda progress: self._safe_callback(task_id, on_progress, progress),
+                    Qt.ConnectionType.QueuedConnection
+                )
+            
+            # Always connect error handler for monitoring
+            worker.error.connect(
+                lambda err: self._handle_task_error(task_id, err),
+                Qt.ConnectionType.QueuedConnection
+            )
 
             # Setup timeout handling
             timeout_timer = None
@@ -244,6 +265,38 @@ class EnhancedThreadManager:
             if task_id in self._active_tasks:
                 self._active_tasks[task_id].state = ThreadState.FAILED
         self.monitor.record_task_failed(task_id, error_message)
+
+    def _safe_callback(self, task_id: str, callback: Optional[Callable], *args) -> None:
+        """安全执行回调，防止竞态条件导致的崩溃
+        
+        在执行回调前检查任务是否仍然活跃且处于 RUNNING 状态。
+        这是防御性编程的关键：防止任务已取消/超时但回调仍被触发。
+        
+        Args:
+            task_id: 任务ID
+            callback: 回调函数（可能为None）
+            *args: 传递给回调的参数
+            
+        Thread-safe: Yes (使用 self._lock)
+        """
+        if callback is None:
+            return
+            
+        # 检查任务是否仍然活跃
+        with self._lock:
+            task_info = self._active_tasks.get(task_id)
+            if task_info is None:
+                logger.debug(f"任务 {task_id} 已清理，跳过回调执行")
+                return
+            if task_info.state != ThreadState.RUNNING:
+                logger.debug(f"任务 {task_id} 状态为 {task_info.state.value}，跳过回调执行")
+                return
+        
+        # 任务仍在运行，安全执行回调
+        try:
+            callback(*args)
+        except Exception as e:
+            logger.error(f"回调执行失败 (task_id={task_id}): {e}", exc_info=True)
 
     def _cleanup_task(self, task_id: str):
         """Clean up task resources.

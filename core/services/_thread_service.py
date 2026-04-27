@@ -52,7 +52,7 @@ class ThreadService:
             on_result: 结果回调函数
             on_error: 错误回调函数
             on_finished: 完成回调函数 (v5.2.1: 暂不支持，使用 on_result/on_error 代替)
-            on_progress: 进度回调函数 (v5.2.1: 暂不支持)
+            on_progress: 进度回调函数 (v5.3.1: 已支持)
             *args: 任务函数的位置参数
             **kwargs: 任务函数的关键字参数
         
@@ -85,11 +85,9 @@ class ThreadService:
         module_name = "ThreadService"
         task_name = task_func.__name__ if hasattr(task_func, '__name__') else "anonymous_task"
         
-        # on_finished 和 on_progress 暂时忽略（EnhancedThreadManager 不支持）
+        # v5.3.1: on_progress 现已支持
         if on_finished:
             logger.warning("on_finished 回调在 v5.2.1 中暂不支持")
-        if on_progress:
-            logger.warning("on_progress 回调在 v5.2.1 中暂不支持")
         
         thread, worker, task_id = self._thread_manager.run_in_thread(
             task_func,
@@ -97,6 +95,7 @@ class ThreadService:
             task_name=task_name,
             on_result=on_result,
             on_error=on_error,
+            on_progress=on_progress,
             *args,
             **kwargs
         )
