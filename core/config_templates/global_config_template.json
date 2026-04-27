@@ -5,5 +5,6 @@
   "pending_events": [],
   "last_check": null,
   "created_at": null,
-  "updated_at": null
+  "updated_at": null,
+  "has_shown_tray_hint": false
 }

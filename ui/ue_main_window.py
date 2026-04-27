@@ -1797,13 +1797,9 @@ class UEMainWindow(QMainWindow):
             self.logger.info("根据用户偏好最小化到托盘")
             event.ignore()
             self.hide()
-            # 显示托盘提示
+            # 显示托盘提示（仅在首次最小化时显示）
             if self.system_tray:
-                self.system_tray.show_message(
-                    "UE Toolkit",
-                    "程序已最小化到系统托盘",
-                    duration=2000
-                )
+                self._show_tray_hint_if_first_time()
             return
         
         # 显示关闭确认对话框
@@ -1822,13 +1818,9 @@ class UEMainWindow(QMainWindow):
                 self._save_close_preference("minimize")
             event.ignore()
             self.hide()
-            # 显示托盘提示
+            # 显示托盘提示（仅在首次最小化时显示）
             if self.system_tray:
-                self.system_tray.show_message(
-                    "UE Toolkit",
-                    "程序已最小化到系统托盘\n双击托盘图标可恢复窗口",
-                    duration=3000
-                )
+                self._show_tray_hint_if_first_time()
         else:
             # 用户取消
             event.ignore()
@@ -1895,6 +1887,44 @@ class UEMainWindow(QMainWindow):
                 self.logger.warning("无法获取 app 配置")
         except Exception as e:
             self.logger.error(f"保存关闭偏好失败: {e}", exc_info=True)
+    
+    def _show_tray_hint_if_first_time(self):
+        """仅在首次最小化到托盘时显示提示"""
+        try:
+            from core.config.config_manager import ConfigManager
+            from pathlib import Path
+            
+            # 获取全局配置管理器
+            global_config_manager = ConfigManager(
+                module_name="global",
+                template_path=Path("core/config_templates/global_config_template.json")
+            )
+            
+            # 读取配置
+            global_config = global_config_manager.get_module_config()
+            has_shown = global_config.get("has_shown_tray_hint", False)
+            
+            # 只有在未显示过时才显示提示
+            if not has_shown:
+                self.system_tray.show_message(
+                    "UE Toolkit",
+                    "程序已最小化到系统托盘\n双击托盘图标可恢复窗口",
+                    duration=3000
+                )
+                # 更新标记并持久化保存
+                global_config_manager.update_config_value("has_shown_tray_hint", True)
+                self.logger.info("首次显示托盘提示，已更新标记")
+            else:
+                self.logger.debug("已显示过托盘提示，跳过")
+                
+        except Exception as e:
+            self.logger.error(f"显示托盘提示失败: {e}", exc_info=True)
+            # 出错时仍显示提示，确保用户体验
+            self.system_tray.show_message(
+                "UE Toolkit",
+                "程序已最小化到系统托盘",
+                duration=2000
+            )
 
     # ⭐ 旧的内联样式方法已删除,现在使用外部QSS系统
     # 样式文件位置: resources/styles/widgets/main_window.qss
