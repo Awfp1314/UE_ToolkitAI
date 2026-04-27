@@ -13,7 +13,7 @@ from typing import Optional, Dict, List
 from datetime import datetime
 from .nlu_templates import NEUTRAL_TEMPLATES, TEMPLATE_GENERATION_PROMPT
 from PyQt6.QtCore import QObject, pyqtSignal
-from core.utils.thread_utils import CancellationToken
+from core.utils.thread_models import CancellationToken
 
 
 class IntentClassifier:

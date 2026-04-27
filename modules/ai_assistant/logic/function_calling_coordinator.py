@@ -14,7 +14,7 @@ import time
 from typing import Dict, List, Callable, Optional, Any
 from PyQt6.QtCore import QObject, pyqtSignal
 from core.utils.error_handler import ErrorHandler
-from core.utils.thread_utils import CancellationToken
+from core.utils.thread_models import CancellationToken
 from core.logger import get_logger
 from .dsml_parser import DSMLParser
 

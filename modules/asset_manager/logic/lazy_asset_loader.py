@@ -7,7 +7,7 @@
 
 from typing import Optional, Callable, List
 from core.logger import get_logger
-from core.utils.thread_utils import CancellationToken
+from core.utils.thread_models import CancellationToken
 
 logger = get_logger(__name__)
 

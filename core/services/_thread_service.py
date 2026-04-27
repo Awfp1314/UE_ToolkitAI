@@ -8,7 +8,7 @@ v5.2.1: 已迁移到 EnhancedThreadManager
 from typing import Callable, Optional, Tuple, Dict, Union, Any
 import logging
 from PyQt6.QtCore import QThread
-from core.utils.thread_utils import Worker, CancellationToken
+from core.utils.thread_models import Worker, CancellationToken
 from core.utils.thread_manager import EnhancedThreadManager
 from core.config.thread_config import ThreadConfiguration
 

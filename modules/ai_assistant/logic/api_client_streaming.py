@@ -7,7 +7,7 @@
 import time
 from typing import Dict, Any, Generator, Optional
 from PyQt6.QtCore import QObject, pyqtSignal
-from core.utils.thread_utils import CancellationToken
+from core.utils.thread_models import CancellationToken
 
 
 class ChunkBuffer:

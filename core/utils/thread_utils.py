@@ -3,6 +3,9 @@
 """
 线程工具 - 用于处理耗时操作，防止UI阻塞
 
+注意：Worker 和 CancellationToken 已移至 core/utils/thread_models.py
+请使用: from core.utils.thread_models import Worker, CancellationToken
+
 使用示例:
     thread_manager = ThreadManager()
     
@@ -27,6 +30,11 @@ from core.logger import get_logger
 
 logger = get_logger(__name__)
 
+
+# ============================================================================
+# 注意：以下类已移至 core/utils/thread_models.py
+# 为保持向后兼容，这里保留定义，但建议使用新的导入路径
+# ============================================================================
 
 class CancellationToken:
     """取消令牌 - 用于在任务函数中检查是否被取消

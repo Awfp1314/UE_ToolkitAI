@@ -11,7 +11,7 @@
 
 from typing import List, Dict, Optional
 from PyQt6.QtCore import QObject, pyqtSignal, QTimer
-from core.utils.thread_utils import CancellationToken
+from core.utils.thread_models import CancellationToken
 import logging
 
 

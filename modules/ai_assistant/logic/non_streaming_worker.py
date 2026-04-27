@@ -11,7 +11,7 @@ import time
 import traceback
 from typing import Dict, List, Optional
 from PyQt6.QtCore import QObject, pyqtSignal
-from core.utils.thread_utils import CancellationToken
+from core.utils.thread_models import CancellationToken
 
 
 class NonStreamingWorker(QObject):

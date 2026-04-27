@@ -13,8 +13,7 @@ from core.config.thread_config import ThreadConfiguration
 from core.logger import get_logger
 from core.exceptions import ThreadError
 from core.utils.thread_monitor import ThreadMonitor
-from core.utils.thread_models import TaskInfo, ThreadInfo, ThreadState
-from core.utils.thread_utils import CancellationToken, Worker
+from core.utils.thread_models import TaskInfo, ThreadInfo, ThreadState, CancellationToken, Worker
 
 logger = get_logger(__name__)
 
