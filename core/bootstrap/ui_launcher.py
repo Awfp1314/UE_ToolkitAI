@@ -82,12 +82,22 @@ class UILauncher:
                 self.splash.finish()
                 self.logger.info("启动界面已关闭")
 
+            # 检查是否为开机自启动（--minimized 参数）
+            from core.utils.startup_manager import is_minimized_start
+            is_minimized = is_minimized_start()
+            
             # 显示主窗口
             if self.main_window:
-                self.main_window.show()
-                self.main_window.raise_()
-                self.main_window.activateWindow()
-                self.logger.info("主窗口已显示")
+                if is_minimized:
+                    # 开机自启动：最小化到系统托盘，不显示主窗口
+                    self.logger.info("检测到 --minimized 参数，最小化启动")
+                    # 不调用 show()，直接让系统托盘接管
+                else:
+                    # 正常启动：显示主窗口
+                    self.main_window.show()
+                    self.main_window.raise_()
+                    self.main_window.activateWindow()
+                    self.logger.info("主窗口已显示")
 
             # ⚡ 延迟加载初始模块，避免阻塞窗口显示
             from PyQt6.QtCore import QTimer
@@ -96,8 +106,9 @@ class UILauncher:
                 if self.main_window:
                     def on_complete():
                         self.logger.info("初始模块加载完成")
-                        # 延迟检查资产库路径
-                        QTimer.singleShot(100, lambda: self._check_asset_library_path(app, module_provider))
+                        # 延迟检查资产库路径（仅在非最小化启动时检查）
+                        if not is_minimized:
+                            QTimer.singleShot(100, lambda: self._check_asset_library_path(app, module_provider))
                     
                     self.main_window.load_initial_module(on_complete=on_complete)
 

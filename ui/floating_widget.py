@@ -702,42 +702,20 @@ class FloatingWidget(QWidget):
     # ------------------------------------------------------------------
     # 开机自启 — Windows 注册表 (Req 5.4)
     # ------------------------------------------------------------------
-    AUTOSTART_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
-    AUTOSTART_NAME = "UEToolkit"
 
     def _is_autostart_enabled(self) -> bool:
-        try:
-            import winreg
-            key = winreg.OpenKey(
-                winreg.HKEY_CURRENT_USER, self.AUTOSTART_KEY,
-                0, winreg.KEY_READ
-            )
-            winreg.QueryValueEx(key, self.AUTOSTART_NAME)
-            winreg.CloseKey(key)
-            return True
-        except Exception:
-            return False
+        """检查开机自启动是否已启用"""
+        from core.utils.startup_manager import is_autostart_enabled
+        return is_autostart_enabled()
 
     @staticmethod
     def _set_autostart_registry(enabled: bool):
+        """设置开机自启动状态"""
+        from core.utils.startup_manager import set_autostart_enabled
         try:
-            import winreg
-            key = winreg.OpenKey(
-                winreg.HKEY_CURRENT_USER,
-                FloatingWidget.AUTOSTART_KEY,
-                0, winreg.KEY_SET_VALUE
-            )
-            if enabled:
-                exe_path = sys.executable
-                winreg.SetValueEx(
-                    key, FloatingWidget.AUTOSTART_NAME,
-                    0, winreg.REG_SZ, f'"{exe_path}"'
-                )
-            else:
-                try:
-                    winreg.DeleteValue(key, FloatingWidget.AUTOSTART_NAME)
-                except FileNotFoundError:
-                    pass
+            set_autostart_enabled(enabled)
+        except Exception as e:
+            logger.error(f"设置开机自启失败: {e}")
             winreg.CloseKey(key)
         except Exception as e:
             logger.error(f"设置开机自启失败: {e}")

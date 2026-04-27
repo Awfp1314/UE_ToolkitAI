@@ -1663,62 +1663,12 @@ class GeneralSection(SettingsSection):
     # 开机自启 (Req 6.3, 6.6, 6.9, 6.10)
     # ------------------------------------------------------------------
 
-    AUTOSTART_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
-    AUTOSTART_NAME = "UEToolkit"
-
-    def _is_autostart_enabled(self) -> bool:
-        """从 Windows 注册表读取开机自启状态"""
-        try:
-            import winreg
-            key = winreg.OpenKey(
-                winreg.HKEY_CURRENT_USER, self.AUTOSTART_KEY,
-                0, winreg.KEY_READ,
-            )
-            winreg.QueryValueEx(key, self.AUTOSTART_NAME)
-            winreg.CloseKey(key)
-            return True
-        except Exception:
-            return False
-
-    def _set_autostart_registry(self, enabled: bool):
-        """写入/删除 Windows 注册表开机自启项"""
-        try:
-            import sys
-            import winreg
-            from pathlib import Path
-            key = winreg.OpenKey(
-                winreg.HKEY_CURRENT_USER, self.AUTOSTART_KEY,
-                0, winreg.KEY_SET_VALUE,
-            )
-            if enabled:
-                if getattr(sys, 'frozen', False):
-                    # 打包环境：直接使用 exe 路径
-                    cmd = f'"{sys.executable}"'
-                else:
-                    # 开发环境：用 pythonw.exe 启动 main.py（隐藏命令行窗口）
-                    pythonw = Path(sys.executable).parent / "pythonw.exe"
-                    if not pythonw.exists():
-                        pythonw = Path(sys.executable)
-                    main_py = Path(__file__).resolve().parents[1] / "main.py"
-                    cmd = f'"{pythonw}" "{main_py}"'
-                winreg.SetValueEx(
-                    key, self.AUTOSTART_NAME,
-                    0, winreg.REG_SZ, cmd,
-                )
-            else:
-                try:
-                    winreg.DeleteValue(key, self.AUTOSTART_NAME)
-                except FileNotFoundError:
-                    pass
-            winreg.CloseKey(key)
-        except Exception as e:
-            logger.error("设置开机自启失败: %s", e)
-
     def _init_autostart_toggle(self):
         """初始化开机自启开关（从注册表读取实际状态）"""
+        from core.utils.startup_manager import is_autostart_enabled
         try:
             self._updating_autostart = True
-            enabled = self._is_autostart_enabled()
+            enabled = is_autostart_enabled()
             self.autostart_toggle.setChecked(enabled)
         except Exception as e:
             logger.warning("初始化开机自启开关失败: %s", e)
@@ -1727,12 +1677,16 @@ class GeneralSection(SettingsSection):
 
     def _on_autostart_toggled(self, state):
         """开机自启开关改变时触发"""
+        from core.utils.startup_manager import set_autostart_enabled
         if self._updating_autostart:
             return
         enabled = state == Qt.CheckState.Checked.value
-        self._set_autostart_registry(enabled)
-        self.autostart_toggled.emit(enabled)
-        logger.info("[设置] 开机自启: %s", enabled)
+        try:
+            set_autostart_enabled(enabled)
+            self.autostart_toggled.emit(enabled)
+            logger.info("[设置] 开机自启: %s", enabled)
+        except Exception as e:
+            logger.error("设置开机自启失败: %s", e)
 
     def update_autostart_state(self, enabled: bool):
         """外部同步开机自启状态（悬浮窗右键菜单调用）"""
