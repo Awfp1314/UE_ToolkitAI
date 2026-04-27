@@ -194,6 +194,8 @@ exe = EXE(
     upx=True,        # 启用UPX压缩（如果安装了UPX）
     upx_exclude=[],
     runtime_tmpdir=None,  # 使用系统临时目录（%TEMP%），避免安装在 Program Files 时权限不足
+    # 注意：runtime_tmpdir=None 是默认值，PyInstaller 会自动使用 %TEMP% 目录
+    # 不要设置为相对路径（如 '.' 或 '_UE_Toolkit'），否则会在程序目录创建临时文件
     console=False,   # 不显示控制台窗口
     disable_windowed_traceback=False,
     argv_emulation=False,

@@ -4,6 +4,44 @@
 
 ---
 
+## Program Files 权限问题修复 v1.2.56 (2026-04-27)
+
+### 问题描述
+
+程序打包后安装在 `C:\Program Files` 目录下运行时报错：
+
+```
+LOADER: failed to create runtime-tmpdir... 拒绝访问
+```
+
+### 根本原因
+
+1. `main.py` 中的 `os.chdir(exe_dir)` 导致工作目录设置为受保护的 Program Files 目录
+2. MCP 服务器日志尝试写入项目目录而非用户目录
+3. 临时目录清理逻辑不必要且可能导致权限问题
+
+### 修复内容
+
+**核心改动**:
+
+- 移除打包环境下的 `os.chdir(exe_dir)` 调用
+- MCP 服务器日志路径改为用户目录（`%APPDATA%/ue_toolkit/user_data/logs/mcp`）
+- 简化临时目录清理逻辑（PyInstaller 自动管理）
+- 确认 `.spec` 文件中 `runtime_tmpdir=None` 配置正确
+
+**影响范围**:
+
+- `main.py` - 工作目录管理
+- `scripts/mcp_servers/blueprint_extractor_bridge.py` - 日志路径
+- `scripts/package/config/ue_toolkit.spec` - 打包配置注释
+
+**验证**:
+
+- 所有运行时数据（日志、配置、临时文件）均使用系统用户目录
+- 程序可在 Program Files 目录下以普通用户权限正常运行
+
+---
+
 ## 配置管理器重构 v2.0 (2026-04-27)
 
 ### 重构概述

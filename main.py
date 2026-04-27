@@ -15,40 +15,22 @@ from core.bootstrap import AppBootstrap
 
 
 def _cleanup_temp_dir():
-    """清理 PyInstaller 临时目录（静默失败，不弹窗）"""
-    # 使用 runtime_tmpdir='_UE_Toolkit' 后，PyInstaller 不会自动删除临时目录
-    # 我们在启动时清理旧的临时目录，避免退出时的删除失败警告
+    """清理 PyInstaller 临时目录（静默失败，不弹窗）
+    
+    注意：使用 runtime_tmpdir=None 后，PyInstaller 会自动管理临时目录的清理
+    此函数保留为空，避免手动清理导致的权限问题
+    """
     pass
 
 
 def _cleanup_old_temp_dirs():
-    """清理旧的 PyInstaller 临时目录"""
-    if getattr(sys, 'frozen', False):
-        try:
-            import tempfile
-            temp_root = tempfile.gettempdir()
-            
-            # 查找所有 _UE_Toolkit 和 _MEI 开头的目录
-            for item in os.listdir(temp_root):
-                if item.startswith('_UE_Toolkit') or item.startswith('_MEI'):
-                    old_temp = os.path.join(temp_root, item)
-                    # 跳过当前运行的临时目录
-                    current_temp = getattr(sys, '_MEIPASS', None)
-                    if current_temp and os.path.exists(current_temp):
-                        try:
-                            if os.path.samefile(old_temp, current_temp):
-                                continue
-                        except (OSError, FileNotFoundError):
-                            pass
-                    
-                    # 尝试删除旧目录（静默失败）
-                    try:
-                        if os.path.isdir(old_temp):
-                            shutil.rmtree(old_temp, ignore_errors=True)
-                    except Exception:
-                        pass  # 静默失败，不影响启动
-        except Exception:
-            pass  # 静默失败
+    """清理旧的 PyInstaller 临时目录
+    
+    注意：使用 runtime_tmpdir=None 后，PyInstaller 会在系统临时目录（%TEMP%）创建临时文件
+    系统临时目录有正确的权限，不需要手动清理
+    此函数保留为空，避免手动清理导致的权限问题
+    """
+    pass
 
 
 def _reset_license():
@@ -136,12 +118,10 @@ def main():
             pass
     
     # 确保工作目录正确（特别是在安装程序"立即运行"时）
-    if getattr(sys, 'frozen', False):
-        # 打包环境：设置工作目录为 exe 所在目录
-        exe_dir = Path(sys.executable).parent
-        os.chdir(exe_dir)
-    else:
-        # 开发环境：设置工作目录为项目根目录
+    # 注意：不要在打包环境下 chdir 到 exe 所在目录，因为可能是 Program Files（权限受限）
+    # PyInstaller 会自动处理资源路径，不需要手动 chdir
+    if not getattr(sys, 'frozen', False):
+        # 仅在开发环境：设置工作目录为项目根目录
         os.chdir(project_root)
     
     # 注册退出时的清理函数

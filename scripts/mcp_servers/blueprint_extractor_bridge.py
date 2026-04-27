@@ -17,8 +17,24 @@ from typing import Dict, Any, List
 import requests
 from pathlib import Path
 
-# 配置日志
-log_dir = Path(__file__).parent.parent.parent / "logs" / "mcp"
+# 配置日志 - 使用用户目录避免权限问题
+import os
+import sys
+from pathlib import Path
+
+# 获取用户日志目录（跨平台兼容）
+if sys.platform == "win32":
+    # Windows: %APPDATA%/ue_toolkit/logs/mcp
+    appdata = os.getenv('APPDATA', os.path.expanduser('~'))
+    log_dir = Path(appdata) / "ue_toolkit" / "user_data" / "logs" / "mcp"
+elif sys.platform == "darwin":
+    # macOS: ~/Library/Application Support/ue_toolkit/logs/mcp
+    log_dir = Path.home() / "Library" / "Application Support" / "ue_toolkit" / "user_data" / "logs" / "mcp"
+else:
+    # Linux: ~/.local/share/ue_toolkit/logs/mcp
+    xdg_data_home = os.getenv('XDG_DATA_HOME', os.path.expanduser('~/.local/share'))
+    log_dir = Path(xdg_data_home) / "ue_toolkit" / "user_data" / "logs" / "mcp"
+
 log_dir.mkdir(parents=True, exist_ok=True)
 logging.basicConfig(
     level=logging.INFO,
