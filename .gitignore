@@ -47,6 +47,7 @@ Thumbs.db
 # Logs
 *.log
 logs/
+project-logs/
 
 # User data
 user_data/
