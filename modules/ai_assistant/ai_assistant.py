@@ -386,12 +386,15 @@ class AIAssistantModule:
             from modules.ai_assistant.ui.session_list_widget import SessionListWidget
             from PyQt6.QtWidgets import QWidget, QHBoxLayout
             
-            # 创建包装容器（不设置 parent，由调用方设置）
+            # 创建包装容器（设置 parent 为模块的 parent，防止成为独立窗口）
             # 结构: VBox[ HBox[ sidebar | left_spacer | ChatWindow | stretch ] ]
-            wrapper = QWidget()
+            wrapper = QWidget(self.parent)
             # 设置窗口标志，确保不会被当作独立窗口
             from PyQt6.QtCore import Qt
             wrapper.setWindowFlags(Qt.WindowType.Widget)
+            # 防御性设置：确保不会自动显示
+            wrapper.setAttribute(Qt.WidgetAttribute.WA_DontShowOnScreen, False)
+            wrapper.setVisible(False)
             
             from PyQt6.QtWidgets import QVBoxLayout, QPushButton, QLabel
             outer_layout = QVBoxLayout(wrapper)
@@ -445,9 +448,22 @@ class AIAssistantModule:
                     self.chat_window._position_sidebar()
             wrapper.resizeEvent = _wrapper_resize
             
-            # wrapper showEvent 时确保按钮可见
+            # wrapper showEvent 时确保按钮可见，并检查 parent
             original_show = wrapper.showEvent
             def _wrapper_show(event):
+                # 防御性检查：如果没有 parent，说明出现了 parenting 丢失问题
+                if wrapper.parent() is None:
+                    logger.error("⚠️ 检测到 AI 助手 wrapper 没有 parent，这会导致它成为独立窗口！")
+                    # 尝试找到主窗口并重新设置 parent
+                    from PyQt6.QtWidgets import QApplication
+                    app = QApplication.instance()
+                    if app:
+                        main_windows = [w for w in app.topLevelWidgets() if w.__class__.__name__ == 'UEMainWindow']
+                        if main_windows:
+                            logger.info("尝试将 wrapper 重新绑定到主窗口")
+                            wrapper.setParent(main_windows[0])
+                            wrapper.setWindowFlags(Qt.WindowType.Widget)
+                
                 original_show(event)
                 # 确保按钮在最上层且可见
                 if hasattr(self.chat_window, 'sidebar_toggle_btn'):
@@ -485,6 +501,8 @@ class AIAssistantModule:
             wrapper.update_theme = wrapper_update_theme
             
             logger.info("AI 助手聊天窗口创建完成")
+            # 确保 wrapper 在返回前是隐藏的，由调用方决定何时显示
+            wrapper.setVisible(False)
             return wrapper
         else:
             logger.info("返回已存在的 AI 助手窗口实例")
@@ -539,6 +557,22 @@ class AIAssistantModule:
         logger.info("清理 AI 助手模块资源")
         try:
             if self.chat_window:
+                # 获取 wrapper（如果存在）
+                wrapper = None
+                if hasattr(self.chat_window, '_wrapper'):
+                    wrapper = self.chat_window._wrapper
+                
+                # 先清理 chat_window
+                if hasattr(self.chat_window, 'cleanup'):
+                    self.chat_window.cleanup()
+                
+                # 显式关闭和删除 wrapper
+                if wrapper:
+                    wrapper.setVisible(False)
+                    wrapper.close()
+                    wrapper.deleteLater()
+                    logger.info("AI 助手 wrapper 已显式关闭和删除")
+                
                 self.chat_window = None
 
             logger.info("AI 助手模块资源清理完成")

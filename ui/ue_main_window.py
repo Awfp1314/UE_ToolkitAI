@@ -882,6 +882,12 @@ class UEMainWindow(QMainWindow):
                 print(f"[ERROR] 模块 {module_key} 的 get_widget() 返回 None")
                 return
 
+            # 防御性检查：确保 widget 有正确的 parent
+            if widget.parent() is None:
+                self.logger.warning(f"模块 {module_key} 的 widget 没有 parent，设置为主窗口")
+                widget.setParent(self)
+                widget.setWindowFlags(Qt.WindowType.Widget)
+
             # 用真实模块UI替换掉当前索引位置的占位页
             if self.content_stack is not None:
                 # 先移除旧的占位页
@@ -898,6 +904,11 @@ class UEMainWindow(QMainWindow):
                 # 确保显示的是刚加载的模块
                 self.content_stack.setCurrentIndex(index)
                 print(f"[DEBUG] 设置 currentIndex 为 {index}")
+                
+                # 显式设置 widget 可见（在嵌入后）
+                widget.setVisible(True)
+                print(f"[DEBUG] 设置 widget 可见")
+                
                 self.logger.info(f"懒加载模块 UI 成功: {module_name}")
                 print(f"[SUCCESS] 懒加载模块 UI 成功: {module_name}")
 

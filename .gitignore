@@ -32,6 +32,9 @@ env/
 *.swo
 *~
 
+# Environment variables
+.env
+
 # AI Agent 工作目录
 .agents/
 .roo/
