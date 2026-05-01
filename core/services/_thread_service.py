@@ -166,6 +166,21 @@ class ThreadService:
         
         if active_count > 0:
             logger.info("发现 %s 个活跃线程，正在取消...", active_count)
+            
+            # 记录活跃任务详情
+            active_threads = self._thread_manager.get_active_threads()
+            if active_threads:
+                logger.info("活跃任务详情:")
+                for idx, thread_info in enumerate(active_threads, 1):
+                    logger.info(
+                        "  [%d/%d] %s.%s | 运行时长: %dms | 开始于: %s | [ID: %s]",
+                        idx, len(active_threads),
+                        thread_info.module_name,
+                        thread_info.task_name,
+                        thread_info.elapsed_ms,
+                        thread_info.started_at,
+                        thread_info.task_id
+                    )
         
         # v5.2.1: 调用 EnhancedThreadManager 的清理方法
         success = self._thread_manager.cleanup(timeout_ms=timeout_ms)

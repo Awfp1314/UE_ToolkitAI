@@ -544,7 +544,20 @@ class EnhancedThreadManager:
             time.sleep(0.05)  # 50ms polling interval
 
         if self._active_tasks:
-            logger.warning("%d tasks still active after cleanup timeout", len(self._active_tasks))
+            stuck_tasks = self.get_active_threads()
+            logger.warning("%d tasks still active after cleanup timeout (%dms)", len(stuck_tasks), timeout_ms)
+            logger.warning("未完成任务详情:")
+            for idx, task in enumerate(stuck_tasks, 1):
+                logger.warning(
+                    "  [%d/%d] %s.%s | 已运行: %dms | 开始于: %s | 状态: %s | [ID: %s]",
+                    idx, len(stuck_tasks),
+                    task.module_name,
+                    task.task_name,
+                    task.elapsed_ms,
+                    task.started_at,
+                    task.state,
+                    task.task_id
+                )
             return False
         return True
 
