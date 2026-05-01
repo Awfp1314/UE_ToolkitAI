@@ -81,6 +81,35 @@ class AssetStructureAnalyzer:
     定位 Content 文件夹用于后续添加到资产库。
     """
     
+    def _scan_files_by_extensions(self, root: Path, extensions: set, max_depth: int = None) -> List[Path]:
+        """使用 os.walk 扫描指定扩展名的文件（性能优化）
+        
+        Args:
+            root: 根目录
+            extensions: 扩展名集合（小写，如 {'.uasset', '.umap'}）
+            max_depth: 最大递归深度，None 表示无限制
+            
+        Returns:
+            匹配的文件路径列表
+        """
+        import os
+        results = []
+        root_depth = len(root.parts)
+        
+        for dirpath, dirnames, filenames in os.walk(str(root)):
+            # 深度限制
+            if max_depth is not None:
+                current_depth = len(Path(dirpath).parts) - root_depth
+                if current_depth >= max_depth:
+                    dirnames.clear()  # 不再递归子目录
+            
+            # 收集匹配的文件
+            for filename in filenames:
+                if Path(filename).suffix.lower() in extensions:
+                    results.append(Path(dirpath) / filename)
+        
+        return results
+    
     def _extract_nested_archives(self, root: Path) -> None:
         """解压嵌套的压缩包（只解压一层，避免无限递归）
         
@@ -111,12 +140,8 @@ class AssetStructureAnalyzer:
         if has_rarfile:
             archive_extensions.add('.rar')
         
-        archives_to_extract = []
-        
-        # 查找所有压缩包文件
-        for item in root.rglob('*'):
-            if item.is_file() and item.suffix.lower() in archive_extensions:
-                archives_to_extract.append(item)
+        # 查找所有压缩包文件（限制深度为 3 层，压缩包通常在浅层）
+        archives_to_extract = self._scan_files_by_extensions(root, archive_extensions, max_depth=3)
         
         if not archives_to_extract:
             return
@@ -199,20 +224,26 @@ class AssetStructureAnalyzer:
         # 预处理：解压嵌套的压缩包（只解压一层，避免无限递归）
         self._extract_nested_archives(extracted_dir)
         
-        # 统计文件
-        total_files = list(extracted_dir.rglob('*'))
-        total_file_count = sum(1 for f in total_files if f.is_file())
+        # 统计文件（使用 os.walk 直接统计，避免构建完整列表）
+        import os
+        total_file_count = sum(
+            len(filenames) 
+            for _, _, filenames in os.walk(str(extracted_dir))
+        )
         
-        # 诊断：列出所有文件及其扩展名
+        # 诊断：列出所有文件及其扩展名（使用 os.walk 避免重复遍历）
         logger.info(f"[诊断] 解压目录包含 {total_file_count} 个文件")
         file_extensions = {}
         sample_files = []
-        for f in total_files:
-            if f.is_file():
-                ext = f.suffix.lower()
+        sample_count = 0
+        for dirpath, _, filenames in os.walk(str(extracted_dir)):
+            for filename in filenames:
+                ext = Path(filename).suffix.lower()
                 file_extensions[ext] = file_extensions.get(ext, 0) + 1
-                if len(sample_files) < 20:  # 只记录前20个文件作为样本
-                    sample_files.append(f"{f.relative_to(extracted_dir)} ({ext})")
+                if sample_count < 20:
+                    rel_path = Path(dirpath).relative_to(extracted_dir) / filename
+                    sample_files.append(f"{rel_path} ({ext})")
+                    sample_count += 1
         logger.info(f"[诊断] 文件扩展名统计: {file_extensions}")
         logger.info(f"[诊断] 文件样本（前20个）: {sample_files}")
         
@@ -306,15 +337,10 @@ class AssetStructureAnalyzer:
                 else:
                     break
 
-            ue_assets = []
-            for ext in ('.uasset', '.umap'):
-                ue_assets.extend(effective_content.rglob(f'*{ext}'))
+            ue_assets = self._scan_files_by_extensions(effective_content, {'.uasset', '.umap'})
             
             # 检查是否有 3D 模型文件
-            raw_3d_files = []
-            for item in effective_content.rglob('*'):
-                if item.is_file() and item.suffix.lower() in RAW_3D_EXTENSIONS:
-                    raw_3d_files.append(item)
+            raw_3d_files = self._scan_files_by_extensions(effective_content, RAW_3D_EXTENSIONS)
             
             if ue_assets:
                 asset_count = len(ue_assets)
@@ -356,15 +382,10 @@ class AssetStructureAnalyzer:
         # 特殊情况 2：检查 root 的父目录是否是 Content
         if root.parent and root.parent.name.lower() == 'content':
             logger.info(f"检测到用户选择了 Content 的子文件夹: {root}")
-            ue_assets = []
-            for ext in ('.uasset', '.umap'):
-                ue_assets.extend(root.rglob(f'*{ext}'))
+            ue_assets = self._scan_files_by_extensions(root, {'.uasset', '.umap'})
             
             # 检查是否有 3D 模型文件
-            raw_3d_files = []
-            for item in root.rglob('*'):
-                if item.is_file() and item.suffix.lower() in RAW_3D_EXTENSIONS:
-                    raw_3d_files.append(item)
+            raw_3d_files = self._scan_files_by_extensions(root, RAW_3D_EXTENSIONS)
             
             if ue_assets:
                 asset_count = len(ue_assets)
@@ -412,15 +433,10 @@ class AssetStructureAnalyzer:
         model_only_contents = []  # 只有 3D 模型文件的 Content 文件夹
         
         for content_dir in content_dirs:
-            ue_assets = []
-            for ext in ('.uasset', '.umap'):
-                ue_assets.extend(content_dir.rglob(f'*{ext}'))
+            ue_assets = self._scan_files_by_extensions(content_dir, {'.uasset', '.umap'})
             
             # 检查是否有 3D 模型文件
-            raw_3d_files = []
-            for item in content_dir.rglob('*'):
-                if item.is_file() and item.suffix.lower() in RAW_3D_EXTENSIONS:
-                    raw_3d_files.append(item)
+            raw_3d_files = self._scan_files_by_extensions(content_dir, RAW_3D_EXTENSIONS)
             
             if ue_assets:
                 valid_contents.append((content_dir, len(ue_assets)))
@@ -488,9 +504,7 @@ class AssetStructureAnalyzer:
         结构2：AssetName/AssetName/资产文件夹（无 Content）
         这种情况下取内层文件夹作为 asset_root。
         """
-        ue_assets = []
-        for ext in ('.uasset', '.umap'):
-            ue_assets.extend(root.rglob(f'*{ext}'))
+        ue_assets = self._scan_files_by_extensions(root, {'.uasset', '.umap'})
         
         if not ue_assets:
             logger.info("未找到 UE 资产文件")
@@ -555,7 +569,7 @@ class AssetStructureAnalyzer:
         Returns:
             AnalysisResult 或 None
         """
-        uproject_files = list(root.rglob('*.uproject'))
+        uproject_files = self._scan_files_by_extensions(root, {'.uproject'}, max_depth=3)
         if not uproject_files:
             return None
         
@@ -566,7 +580,7 @@ class AssetStructureAnalyzer:
         
         ue_asset_count = 0
         if content_dir.exists():
-            ue_assets = list(content_dir.rglob('*.uasset')) + list(content_dir.rglob('*.umap'))
+            ue_assets = self._scan_files_by_extensions(content_dir, {'.uasset', '.umap'})
             ue_asset_count = len(ue_assets)
         
         suggested_name = uproject.stem
@@ -608,7 +622,7 @@ class AssetStructureAnalyzer:
         Returns:
             AnalysisResult 或 None
         """
-        uplugin_files = list(root.rglob('*.uplugin'))
+        uplugin_files = self._scan_files_by_extensions(root, {'.uplugin'}, max_depth=3)
         if not uplugin_files:
             return None
         
@@ -629,7 +643,7 @@ class AssetStructureAnalyzer:
         
         ue_asset_count = 0
         if content_dir.exists():
-            ue_assets = list(content_dir.rglob('*.uasset')) + list(content_dir.rglob('*.umap'))
+            ue_assets = self._scan_files_by_extensions(content_dir, {'.uasset', '.umap'})
             ue_asset_count = len(ue_assets)
         
         suggested_name = uplugin.stem
@@ -675,9 +689,7 @@ class AssetStructureAnalyzer:
         Returns:
             AnalysisResult 或 None
         """
-        ue_files = []
-        for ext in UE_ASSET_EXTENSIONS:
-            ue_files.extend(root.rglob(f'*{ext}'))
+        ue_files = self._scan_files_by_extensions(root, UE_ASSET_EXTENSIONS)
         
         if not ue_files:
             return None
@@ -715,16 +727,8 @@ class AssetStructureAnalyzer:
         Returns:
             AnalysisResult 或 None
         """
-        raw_files = []
-        # 大小写不敏感匹配
         logger.info(f"[MODEL_FILES] 开始搜索 3D 模型文件，支持的扩展名: {RAW_3D_EXTENSIONS}")
-        for item in root.rglob('*'):
-            if item.is_file():
-                logger.debug(f"[MODEL_FILES] 检查文件: {item.name}, 扩展名: {item.suffix.lower()}")
-                if item.suffix.lower() in RAW_3D_EXTENSIONS:
-                    logger.info(f"[MODEL_FILES] 找到 3D 模型文件: {item}")
-                    raw_files.append(item)
-        
+        raw_files = self._scan_files_by_extensions(root, RAW_3D_EXTENSIONS)
         logger.info(f"[MODEL_FILES] 搜索完成，找到 {len(raw_files)} 个 3D 模型文件")
         if not raw_files:
             return None

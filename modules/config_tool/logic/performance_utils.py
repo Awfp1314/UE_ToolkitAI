@@ -91,25 +91,27 @@ def copytree_with_progress(
         是否成功
     """
     try:
-        # 计算总文件数
-        total_files = sum(1 for _ in src.rglob('*') if _.is_file())
+        # 极速预计算总文件数（不触发 stat）
+        total_files = sum(len(files) for _, _, files in os.walk(src))
         copied_files = 0
         
         # 创建目标目录
         dst.mkdir(parents=True, exist_ok=True)
         
-        # 遍历源目录
-        for item in src.rglob('*'):
-            # 计算相对路径
-            rel_path = item.relative_to(src)
-            target_path = dst / rel_path
+        # 遍历并复制
+        for root, dirs, files in os.walk(src):
+            rel_root = Path(root).relative_to(src)
+            target_root = dst / rel_root
             
-            if item.is_dir():
-                # 创建目录
-                target_path.mkdir(parents=True, exist_ok=True)
-            else:
-                # 复制文件
-                shutil.copy2(item, target_path)
+            # 创建目录
+            for dir_name in dirs:
+                (target_root / dir_name).mkdir(parents=True, exist_ok=True)
+            
+            # 复制文件
+            for file_name in files:
+                src_file = Path(root) / file_name
+                dst_file = target_root / file_name
+                shutil.copy2(src_file, dst_file)
                 copied_files += 1
                 
                 # 报告进度
@@ -155,19 +157,16 @@ def cleanup_temp_files(project_path: Path) -> int:
         dir_path = project_path / dir_name
         if dir_path.exists():
             try:
-                # 计算文件数
-                file_count = sum(1 for _ in dir_path.rglob('*') if _.is_file())
-                
-                # 删除目录
+                # 直接删除目录
                 shutil.rmtree(dir_path)
-                cleaned_count += file_count
+                cleaned_count += 1
                 
-                logger.info(f"清理临时目录: {dir_path}, 文件数: {file_count}")
+                logger.info(f"清理临时目录: {dir_path}")
                 
             except Exception as e:
                 logger.warning(f"清理临时目录失败: {dir_path}, 错误: {e}")
     
-    logger.info(f"临时文件清理完成，共清理 {cleaned_count} 个文件")
+    logger.info(f"临时文件清理完成，共清理 {cleaned_count} 个目录")
     return cleaned_count
 
 
@@ -183,9 +182,11 @@ def get_directory_size(path: Path) -> int:
     total_size = 0
     
     try:
-        for item in path.rglob('*'):
-            if item.is_file():
-                total_size += item.stat().st_size
+        for entry in os.scandir(path):
+            if entry.is_file(follow_symlinks=False):
+                total_size += entry.stat().st_size
+            elif entry.is_dir(follow_symlinks=False):
+                total_size += get_directory_size(Path(entry.path))
     except Exception as e:
         logger.warning(f"计算目录大小失败: {path}, 错误: {e}")
     

@@ -144,13 +144,14 @@ class APIClient(QObject):
     
     def start(self):
         """启动 API 请求（使用 ThreadManager）"""
-        from core.utils.thread_utils import get_thread_manager
+        from core.utils.thread_manager import get_thread_manager
         thread_manager = get_thread_manager()
 
         try:
-            # run_in_thread返回(QThread, Worker)
-            thread, worker = thread_manager.run_in_thread(
+            _, _, _ = thread_manager.run_in_thread(
                 func=self._execute_request,
+                module_name="ai_assistant",
+                task_name="api_request",
                 on_error=lambda msg: self.error_occurred.emit(msg)
             )
             print(f"[API_CLIENT] 任务已提交")

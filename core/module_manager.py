@@ -11,7 +11,7 @@ from enum import Enum
 from core.logger import get_logger
 from core.config.config_manager import ConfigManager
 from core.utils.path_utils import PathUtils
-from core.utils.thread_utils import get_thread_manager
+from core.utils.thread_manager import get_thread_manager
 from core.utils.cleanup_result import CleanupResult
 
 
@@ -465,8 +465,10 @@ class ModuleManager:
                     on_error(error_msg)
                 return False
         
-        self.thread_manager.run_in_thread(
-            load_task,
+        _, _, _ = self.thread_manager.run_in_thread(
+            func=load_task,
+            module_name="core",
+            task_name="load_modules",
             on_result=on_complete,
             on_error=on_error,
             on_progress=on_progress
@@ -598,8 +600,10 @@ class ModuleManager:
                     on_error(error_msg)
                 return False
         
-        self.thread_manager.run_in_thread(
-            init_task,
+        _, _, _ = self.thread_manager.run_in_thread(
+            func=init_task,
+            module_name="core",
+            task_name="initialize_modules",
             on_result=on_complete,
             on_error=on_error,
             on_progress=on_progress

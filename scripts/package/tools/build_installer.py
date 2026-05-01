@@ -32,6 +32,14 @@ from pathlib import Path
 from datetime import datetime
 import glob
 
+# 自动切换到虚拟环境：如果当前不是虚拟环境的 Python，则用虚拟环境重新启动
+_project_root = Path(__file__).parent.parent.parent.parent
+_venv_python = _project_root / "venv" / "Scripts" / "python.exe"
+if _venv_python.exists() and Path(sys.executable).resolve() != _venv_python.resolve():
+    import os
+    result = subprocess.run([str(_venv_python)] + sys.argv, cwd=os.getcwd())
+    sys.exit(result.returncode)
+
 # 添加项目根目录到 Python 路径
 # build_installer.py 位于 scripts/package/tools/
 # 需要回到项目根目录：tools -> package -> scripts -> 根目录
@@ -311,11 +319,20 @@ def pre_build_checks():
                 ('Pillow', 'PIL'),
             ]
             missing_deps = []
-            
+
+            # 优先使用虚拟环境的 Python，回退到当前解释器
+            venv_python = project_root / "venv" / "Scripts" / "python.exe"
+            check_python = str(venv_python) if venv_python.exists() else sys.executable
+
             for dep_name, import_name in critical_deps:
                 try:
-                    __import__(import_name)
-                except ImportError:
+                    result = subprocess.run(
+                        [check_python, "-c", f"import {import_name}"],
+                        capture_output=True, timeout=10
+                    )
+                    if result.returncode != 0:
+                        missing_deps.append(dep_name)
+                except Exception:
                     missing_deps.append(dep_name)
             
             if missing_deps:

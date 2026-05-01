@@ -10,7 +10,7 @@ from typing import Dict, Any, Optional, Callable, List
 
 from core.logger import get_logger
 from core.utils.path_utils import PathUtils
-from core.utils.thread_utils import get_thread_manager
+from core.utils.thread_manager import get_thread_manager
 from core.utils.config_utils import ConfigUtils
 from core.exceptions import ConfigError
 from .config_validator import ConfigValidator, ConfigSchema
@@ -251,8 +251,10 @@ class ConfigManager:
             if on_complete:
                 on_complete(success)
 
-        self.thread_manager.run_in_thread(
-            save_task,
+        _, _, _ = self.thread_manager.run_in_thread(
+            func=save_task,
+            module_name="config",
+            task_name=f"save_config_{self.module_name}",
             on_result=on_result,
             on_error=on_error
         )
@@ -442,8 +444,10 @@ class ConfigManager:
         def load_task():
             return self.get_module_config(force_reload)
         
-        self.thread_manager.run_in_thread(
-            load_task,
+        _, _, _ = self.thread_manager.run_in_thread(
+            func=load_task,
+            module_name="config",
+            task_name=f"load_config_{self.module_name}",
             on_result=on_complete,
             on_error=on_error
         )

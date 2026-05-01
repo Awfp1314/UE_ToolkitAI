@@ -172,8 +172,6 @@ class UEMainWindow(QMainWindow):
         
         # 初始化系统托盘
         self.init_system_tray()
-
-        # 授权状态 UI 已在 _create_license_status_widget 中刷新，无需重复调用
     
     def init_system_tray(self):
         """初始化系统托盘"""
@@ -368,9 +366,6 @@ class UEMainWindow(QMainWindow):
 
         layout.addStretch()
 
-        # 授权状态标签 + 激活按钮
-        self._create_license_status_widget(layout)
-
         # 检查更新按钮容器（用于添加小红点）
         update_btn_container = QWidget()
         update_btn_container.setFixedSize(UPDATE_BUTTON_WIDTH, UPDATE_BUTTON_HEIGHT)
@@ -438,11 +433,6 @@ class UEMainWindow(QMainWindow):
         
         # 启动 UE 连接状态轮询
         self._start_ue_connection_check()
-
-    def _create_license_status_widget(self, parent_layout):
-        """在标题栏创建授权状态（已移除，所有模块免费开放）"""
-        # ⚡ 不再显示授权状态，所有功能免费开放
-        pass
 
     def create_left_panel(self, parent_layout):
         """创建左侧导航面板（文字按钮形式）"""
@@ -1555,12 +1545,6 @@ class UEMainWindow(QMainWindow):
         except Exception as e:
             self.logger.error(f"保存退出状态失败: {e}", exc_info=True)
     
-    def _save_current_module_on_exit(self):
-        """退出时保存当前模块状态（已合并到 _save_window_state，此方法保留为空以兼容旧代码）"""
-        # 注意：此方法已废弃，保存逻辑已合并到 _save_window_state() 中
-        # 保留此方法是为了避免其他地方的调用出错
-        pass
-    
     def _restore_window_state(self) -> None:
         """从配置文件恢复窗口位置
         
@@ -1775,9 +1759,6 @@ class UEMainWindow(QMainWindow):
         """
         # 保存窗口状态
         self._save_window_state()
-        
-        # 保存当前模块状态（退出时统一保存，避免运行时频繁保存）
-        self._save_current_module_on_exit()
         
         # 如果已经在关闭过程中，直接接受事件
         if hasattr(self, '_is_closing') and self._is_closing:
@@ -2178,9 +2159,6 @@ class UEMainWindow(QMainWindow):
                 "warning",
                 parent=self
             ).exec()
-    
-    # ⚡ 已移除 _start_license_preload 方法
-    # 所有模块现在免费开放，无需授权预加载
     
     def _on_manual_update_available(self, version_info: dict, app):
         """手动检查发现新版本"""

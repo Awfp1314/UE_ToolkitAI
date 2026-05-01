@@ -314,14 +314,14 @@ class StreamingAPIClient(QObject):
     
     def start(self):
         """启动流式请求（使用 ThreadManager）"""
-        from core.utils.thread_utils import get_thread_manager
+        from core.utils.thread_manager import get_thread_manager
         thread_manager = get_thread_manager()
 
         try:
             _, _, task_id = thread_manager.run_in_thread(
+                func=self._execute_request,
                 module_name="ai_assistant",
-                task_name="streaming_api_request",
-                func=self._execute_request
+                task_name="streaming_api_request"
             )
             self._task_id = task_id
             print(f"[7.0-P8] 任务已提交，task_id: {task_id}")
@@ -332,7 +332,7 @@ class StreamingAPIClient(QObject):
     def stop(self):
         """停止请求"""
         if self._task_id:
-            from core.utils.thread_utils import get_thread_manager
+            from core.utils.thread_manager import get_thread_manager
             thread_manager = get_thread_manager()
             thread_manager.cancel_task(self._task_id)
             print(f"[7.0-P8] 任务已取消，task_id: {self._task_id}")

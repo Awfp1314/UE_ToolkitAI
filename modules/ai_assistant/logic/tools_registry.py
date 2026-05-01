@@ -284,22 +284,6 @@ class ToolsRegistry:
             requires_confirmation=False
         ))
         
-        # 4. 对比配置
-        self.register_tool(ToolDefinition(
-            name="diff_config",
-            description="对比两个配置模板的差异",
-            parameters={
-                "type": "object",
-                "properties": {
-                    "config1": {"type": "string", "description": "第一个配置名称"},
-                    "config2": {"type": "string", "description": "第二个配置名称"}
-                },
-                "required": ["config1", "config2"]
-            },
-            function=self._tool_diff_config,
-            requires_confirmation=False
-        ))
-        
         # 5. 查询工具箱功能说明
         self.register_tool(ToolDefinition(
             name="query_toolkit_help",
@@ -321,43 +305,6 @@ class ToolsRegistry:
             function=self._tool_query_toolkit_help,
             requires_confirmation=False
         ))
-
-        # 日志搜索和文档搜索功能已禁用
-        # # 5. 搜索日志
-        # self.register_tool(ToolDefinition(
-        #     name="search_logs",
-        #     description="搜索日志文件中的特定内容",
-        #     parameters={
-        #         "type": "object",
-        #         "properties": {
-        #             "keyword": {
-        #                 "type": "string",
-        #                 "description": "搜索关键词"
-        #             }
-        #         },
-        #         "required": ["keyword"]
-        #     },
-        #     function=self._tool_search_logs,
-        #     requires_confirmation=False
-        # ))
-        
-        # # 6. 搜索文档
-        # self.register_tool(ToolDefinition(
-        #     name="search_docs",
-        #     description="搜索项目文档和使用说明",
-        #     parameters={
-        #         "type": "object",
-        #         "properties": {
-        #             "keyword": {
-        #                 "type": "string",
-        #                 "description": "搜索关键词"
-        #             }
-        #         },
-        #         "required": ["keyword"]
-        #     },
-        #     function=self._tool_search_docs,
-        #     requires_confirmation=False
-        # ))
     
     def register_tool(self, tool: ToolDefinition):
         """注册工具"""
@@ -735,23 +682,6 @@ class ToolsRegistry:
         if self.config_reader:
             return self.config_reader.search_configs(keyword)
         return "[错误] 配置读取器未初始化"
-    
-    def _tool_diff_config(self, config1: str, config2: str) -> str:
-        """配置对比工具实现（暂时返回占位符）"""
-        # TODO: 实现配置对比逻辑
-        return f"[配置对比] {config1} vs {config2}\n（功能待实现）"
-    
-    def _tool_search_logs(self, keyword: str) -> str:
-        """搜索日志工具实现"""
-        if self.log_analyzer:
-            return self.log_analyzer.search_in_logs(keyword)
-        return "[错误] 日志分析器未初始化"
-    
-    def _tool_search_docs(self, keyword: str) -> str:
-        """搜索文档工具实现"""
-        if self.document_reader:
-            return self.document_reader.search_in_documents(keyword)
-        return "[错误] 文档读取器未初始化"
 
     def _tool_query_toolkit_help(self, keyword: str = "", section: str = "") -> str:
         """查询工具箱功能说明工具实现
@@ -1235,53 +1165,8 @@ class ToolsRegistry:
     
     def _register_experimental_tools(self):
         """注册实验性功能工具（测试版）"""
+        pass  # 当前无实验性工具
         
-        # 资产导入功能已禁用
-        # # 1. 导入资产到UE项目
-        # self.register_tool(ToolDefinition(
-        #     name="import_asset_to_ue",
-        #     description="将资产自动导入到当前正在运行的虚幻引擎项目（测试功能）。此工具会自动检测正在运行的UE项目，无需用户提供路径。",
-        #     parameters={
-        #         "type": "object",
-        #         "properties": {
-        #             "asset_name": {
-        #                 "type": "string",
-        #                 "description": "要导入的资产名称"
-        #             }
-        #         },
-        #         "required": ["asset_name"]
-        #     },
-        #     function=self._tool_import_asset,
-        #     requires_confirmation=False  # 测试功能，简化流程
-        # ))
-        
-        # # 2. 列出可导入的资产
-        # self.register_tool(ToolDefinition(
-        #     name="list_importable_assets",
-        #     description="列出所有可以导入到UE项目的资产",
-        #     parameters={
-        #         "type": "object",
-        #         "properties": {}
-        #     },
-        #     function=self._tool_list_importable_assets,
-        #     requires_confirmation=False
-        # ))
-        
-        pass  # 占位符，保持方法结构
-        
-    
-    def _tool_import_asset(self, asset_name: str) -> str:
-        """导入资产工具实现（自动检测正在运行的UE项目）"""
-        if self.asset_importer:
-            result = self.asset_importer.import_asset_to_ue(asset_name)
-            return result.get('message', '[错误] 导入失败')
-        return "[错误] 资产导入器未初始化"
-    
-    def _tool_list_importable_assets(self) -> str:
-        """列出可导入资产工具实现"""
-        if self.asset_importer:
-            return self.asset_importer.list_importable_assets()
-        return "[错误] 资产导入器未初始化"
     
     def _tool_list_themes(self) -> str:
         """列出主题工具实现"""

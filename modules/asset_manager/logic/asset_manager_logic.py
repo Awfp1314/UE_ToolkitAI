@@ -769,14 +769,6 @@ class AssetManagerLogic(QObject):
             perf_steps[step_name] = elapsed
             logger.info(f"⏱️ [{step_name}] 耗时: {elapsed:.3f}秒")
 
-        # 暂时禁用自动检测器，避免在添加资产期间触发重复检测
-        auto_detector_was_enabled = False
-        if hasattr(self, '_auto_detector') and self._auto_detector:
-            auto_detector_was_enabled = self._auto_detector._enabled
-            if auto_detector_was_enabled:
-                logger.info("暂时禁用自动检测器（添加资产期间）")
-                self._auto_detector.stop()
-
         try:
             if progress_callback:
                 progress_callback(0, 100, "准备添加资产...")
@@ -1033,11 +1025,6 @@ class AssetManagerLogic(QObject):
             logger.error(error_msg, exc_info=True)
             self.error_occurred.emit(error_msg)
             return None
-        finally:
-            # 恢复自动检测器
-            if auto_detector_was_enabled and hasattr(self, '_auto_detector') and self._auto_detector:
-                logger.info("恢复自动检测器")
-                self._auto_detector.start()
 
 
     def _move_contents_to_folder(self, source_path: Path, target_folder: Path,
@@ -2514,20 +2501,3 @@ class AssetManagerLogic(QObject):
 
         logger.info(f"已加载 {len(self.assets)} 个资产")
         self.assets_loaded.emit(self.assets)
-
-    # ─── 资产自动检测 ──────────────────────────────────────
-
-    def start_auto_detect(self) -> bool:
-        """启动资产自动检测（监控资产库 Content 文件夹）"""
-        # 自动检测功能已移除
-        return False
-
-    def stop_auto_detect(self):
-        """停止资产自动检测"""
-        # 自动检测功能已移除
-        pass
-
-    def refresh_auto_detect(self):
-        """刷新 Content 目录快照（资产增删后调用）"""
-        # 自动检测功能已移除
-        pass

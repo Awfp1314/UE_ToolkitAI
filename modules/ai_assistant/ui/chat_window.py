@@ -506,16 +506,8 @@ class ChatWindow(BaseModuleWidget):
         """
         self.sidebar_toggle_btn.setStyleSheet(btn_style)
 
-    def _update_session_title_label(self):
-        """更新工具栏上的当前会话标题（已废弃，标题显示在主窗口）"""
-        pass
-
     def _on_session_title_updated(self, session_id: str, new_title: str):
         """AI 生成标题后更新 UI（从后台线程通过信号调用，线程安全）"""
-        # 更新工具栏标题
-        if session_id == self.controller.session_manager.current_session_id:
-            self._update_session_title_label()
-
         # 如果侧边栏可见，刷新列表
         if self._sidebar_visible:
             sessions = self.controller.session_manager.get_sessions()
@@ -605,7 +597,6 @@ class ChatWindow(BaseModuleWidget):
         self.controller.message_manager.switch_session(new_id)
 
         self._clear_all_bubbles()
-        self._update_session_title_label()
 
         # 刷新侧边栏高亮
         if self._sidebar_visible:
@@ -623,7 +614,6 @@ class ChatWindow(BaseModuleWidget):
 
         self._clear_all_bubbles()
         self._restore_chat_history()
-        self._update_session_title_label()
 
         # 更新侧边栏高亮
         self.session_sidebar.set_active_session(session_id)
@@ -639,7 +629,6 @@ class ChatWindow(BaseModuleWidget):
             self.controller.message_manager.switch_session(new_id)
             self._clear_all_bubbles()
             self._restore_chat_history()
-            self._update_session_title_label()
 
         # 刷新侧边栏列表
         sessions = self.controller.session_manager.get_sessions()
@@ -649,7 +638,6 @@ class ChatWindow(BaseModuleWidget):
     def _on_session_renamed(self, session_id: str, new_title: str):
         """重命名会话"""
         self.controller.session_manager.rename_session(session_id, new_title)
-        self._update_session_title_label()
 
     def _clear_all_bubbles(self):
         """清空所有消息气泡"""
@@ -709,9 +697,6 @@ class ChatWindow(BaseModuleWidget):
 
         # 业务逻辑：发送消息（控制器处理历史、API 调用等）
         self.controller.send_message(full_message)
-
-        # 更新会话标题（第一条消息时会自动生成标题）
-        self._update_session_title_label()
 
     # ------------------------------------------------------------------
     # 思考动画

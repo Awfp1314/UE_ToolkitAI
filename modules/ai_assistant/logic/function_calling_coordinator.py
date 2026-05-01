@@ -675,17 +675,17 @@ class FunctionCallingCoordinator(QObject):
 
     def start(self):
         """启动协调器（使用 ThreadManager）"""
-        from core.utils.thread_utils import get_thread_manager
+        from core.utils.thread_manager import get_thread_manager
         thread_manager = get_thread_manager()
 
         try:
-            # run_in_thread 返回 (QThread, Worker) 两个值
-            thread, worker = thread_manager.run_in_thread(
-                func=self._execute_coordination
+            _, _, task_id = thread_manager.run_in_thread(
+                func=self._execute_coordination,
+                module_name="ai_assistant",
+                task_name="function_calling_coordinator"
             )
-            self._thread = thread
-            self._worker = worker
-            self.logger.info(f"[COORDINATOR] 任务已提交")
+            self._task_id = task_id
+            self.logger.info(f"[COORDINATOR] 任务已提交，task_id: {task_id}")
         except Exception as e:
             self.logger.error(f"[COORDINATOR] 提交任务失败: {e}")
             import traceback
@@ -696,7 +696,7 @@ class FunctionCallingCoordinator(QObject):
         """停止协调器"""
         self._should_stop = True  # 设置停止标志
         if self._task_id:
-            from core.utils.thread_utils import get_thread_manager
+            from core.utils.thread_manager import get_thread_manager
             thread_manager = get_thread_manager()
             thread_manager.cancel_task(self._task_id)
             self.logger.info(f"[COORDINATOR] 任务已取消，task_id: {self._task_id}")

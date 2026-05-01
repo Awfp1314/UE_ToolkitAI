@@ -9,7 +9,7 @@ from typing import Optional, Callable
 from PIL import Image, ImageDraw, ImageFont
 
 from core.logger import get_logger
-from core.utils.thread_utils import get_thread_manager
+from core.utils.thread_manager import get_thread_manager
 
 logger = get_logger(__name__)
 
@@ -28,7 +28,7 @@ class ThumbnailGenerator:
     
     @classmethod
     def _get_thread_manager(cls):
-        """获取线程管理器单例"""
+        """获取线程管理器单例（EnhancedThreadManager）"""
         if cls._thread_manager is None:
             cls._thread_manager = get_thread_manager()
         return cls._thread_manager
@@ -102,11 +102,11 @@ class ThumbnailGenerator:
             return cls.generate_thumbnail(asset_path, output_path, asset_type_name)
         
         thread_manager = cls._get_thread_manager()
-        # v5.2.1: 使用 EnhancedThreadManager API
+        # v5.3.0: 使用原生 EnhancedThreadManager API（高频任务优化）
         thread_manager.run_in_thread(
-            func=generate_task,
             module_name="asset_manager",
             task_name="thumbnail_generation",
+            func=generate_task,
             on_result=on_complete,
             on_error=on_error
         )

@@ -431,14 +431,14 @@ class AsyncTemplateGeneratorThread(QObject):
 
     def start(self):
         """启动模板生成（使用 ThreadManager）"""
-        from core.utils.thread_utils import get_thread_manager
+        from core.utils.thread_manager import get_thread_manager
         thread_manager = get_thread_manager()
 
         try:
             _, _, task_id = thread_manager.run_in_thread(
+                func=self._execute_generation,
                 module_name="ai_assistant",
-                task_name="template_generation",
-                func=self._execute_generation
+                task_name="template_generation"
             )
             self._task_id = task_id
             print(f"[AsyncTemplateGenerator] 任务已提交，task_id: {task_id}")

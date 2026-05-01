@@ -12,13 +12,18 @@ from core.utils.thread_models import CancellationToken
 logger = get_logger(__name__)
 
 
-def _load_assets_task(asset_manager_logic, on_complete: Callable[[bool, str], None], cancel_token: CancellationToken):
+def _load_assets_task(asset_manager_logic, cancel_token: CancellationToken):
     """资产加载任务函数（在后台线程中执行）
 
     Args:
         asset_manager_logic: AssetManagerLogic 实例
-        on_complete: 完成回调 (success: bool, error_message: str)
         cancel_token: 取消令牌
+        
+    Returns:
+        bool: 加载是否成功
+        
+    Raises:
+        Exception: 加载失败时抛出异常
     """
     try:
         logger.info("开始在后台线程加载资产...")
@@ -26,8 +31,7 @@ def _load_assets_task(asset_manager_logic, on_complete: Callable[[bool, str], No
         # 检查是否被取消
         if cancel_token.is_cancelled():
             logger.info("资产加载被取消")
-            on_complete(False, "加载被取消")
-            return
+            raise RuntimeError("加载被取消")
 
         # 执行加载
         asset_manager_logic.get_all_assets()
@@ -35,16 +39,15 @@ def _load_assets_task(asset_manager_logic, on_complete: Callable[[bool, str], No
         # 再次检查是否被取消
         if cancel_token.is_cancelled():
             logger.info("资产加载被取消")
-            on_complete(False, "加载被取消")
-            return
+            raise RuntimeError("加载被取消")
 
         logger.info("资产加载成功")
-        on_complete(True, "")
+        return True
 
     except Exception as e:
         error_msg = str(e)
         logger.error(f"资产加载失败: {error_msg}", exc_info=True)
-        on_complete(False, error_msg)
+        raise
 
 
 class LazyAssetLoader:
@@ -61,7 +64,7 @@ class LazyAssetLoader:
     - 用户首次打开资产管理器时才加载
     - 加载失败后允许用户重试
 
-    ✨ 使用 ThreadManager 进行线程管理
+    ✨ v5.3.0: 使用原生 EnhancedThreadManager API
     """
 
     def __init__(self, asset_manager_logic):
@@ -82,7 +85,7 @@ class LazyAssetLoader:
         # 回调列表（支持多个并发调用）
         self._pending_callbacks: List[Callable[[bool, str], None]] = []
 
-        self.logger.info("LazyAssetLoader 已初始化（使用 ThreadManager）")
+        self.logger.info("LazyAssetLoader 已初始化（使用 EnhancedThreadManager）")
     
     def ensure_loaded(self, on_complete: Optional[Callable[[bool, str], None]] = None) -> None:
         """确保资产已加载（异步）
@@ -114,20 +117,21 @@ class LazyAssetLoader:
             return
 
         # 开始加载
-        self.logger.info("开始异步加载资产（使用 ThreadManager）")
+        self.logger.info("开始异步加载资产（使用 EnhancedThreadManager）")
         self._loading = True
 
-        # 使用 ThreadManager 运行任务
-        from core.utils.thread_utils import get_thread_manager
+        # 使用原生 EnhancedThreadManager API
+        from core.utils.thread_manager import get_thread_manager
         thread_manager = get_thread_manager()
 
         try:
-            _, _, task_id = thread_manager.run_in_thread(
+            task_id = thread_manager.run_in_thread(
                 module_name="asset_manager",
                 task_name="load_assets",
                 func=_load_assets_task,
-                asset_manager_logic=self.asset_manager_logic,
-                on_complete=self._on_load_complete
+                on_result=lambda success: self._on_load_complete(True, ""),
+                on_error=lambda error_msg: self._on_load_complete(False, error_msg),
+                asset_manager_logic=self.asset_manager_logic
             )
             self._task_id = task_id
             self.logger.debug(f"资产加载任务已提交，task_id: {task_id}")
@@ -198,7 +202,7 @@ class LazyAssetLoader:
         # 如果有正在运行的任务，取消它
         if self._task_id and self._loading:
             self.logger.warning("重置时任务仍在运行，尝试取消任务")
-            from core.utils.thread_utils import get_thread_manager
+            from core.utils.thread_manager import get_thread_manager
             thread_manager = get_thread_manager()
             thread_manager.cancel_task(self._task_id)
 

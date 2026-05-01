@@ -4,6 +4,7 @@ UE版本检测工具类
 提供检测UE资产和工程版本的功能
 """
 
+import os
 import struct
 from pathlib import Path
 from typing import List, Optional, Tuple
@@ -131,12 +132,22 @@ class UEVersionDetector:
                     self._log_debug(f"[版本] .uproject 来源: {asset_path.name} -> UE {version}")
                     return version
 
-            # --- 优先级 2：.uplugin（递归，考虑子目录插件）---
-            uplugin_files = list(asset_path.rglob("*.uplugin"))
-            if uplugin_files:
-                # 取最浅层的
-                uplugin_files.sort(key=lambda p: len(p.parts))
-                version = self._read_uplugin_version(uplugin_files[0])
+            # --- 优先级 2：.uplugin（限深度扫描，最多 2 层）---
+            uplugin_file = None
+            for root, dirnames, filenames in os.walk(asset_path):
+                depth = len(Path(root).relative_to(asset_path).parts)
+                if depth >= 2:
+                    dirnames.clear()  # 截断深度
+                    continue
+                for filename in filenames:
+                    if filename.endswith('.uplugin'):
+                        uplugin_file = Path(root) / filename
+                        break
+                if uplugin_file:
+                    break
+            
+            if uplugin_file:
+                version = self._read_uplugin_version(uplugin_file)
                 if version:
                     self._log_debug(f"[版本] .uplugin 来源: {asset_path.name} -> UE {version}")
                     return version
@@ -205,15 +216,30 @@ class UEVersionDetector:
                 return [asset_path]
             return []
 
-        # 收集所有 .umap（全量，地图文件通常较少）
-        umap_files = list(asset_path.rglob("*.umap"))
-
-        # 收集所有 .uasset，按大小降序
-        uasset_files = sorted(
-            asset_path.rglob("*.uasset"),
-            key=lambda p: p.stat().st_size if p.exists() else 0,
-            reverse=True
-        )
+        # 使用 os.walk 采样收集，避免全量 rglob
+        umap_files: List[Path] = []
+        uasset_candidates: List[Tuple[Path, int]] = []  # (path, size)
+        collect_limit = 200  # 收集上限，确保有足够样本用于排序
+        
+        for root, dirnames, filenames in os.walk(asset_path):
+            for filename in filenames:
+                if filename.endswith('.umap'):
+                    umap_files.append(Path(root) / filename)
+                elif filename.endswith('.uasset'):
+                    file_path = Path(root) / filename
+                    try:
+                        size = file_path.stat().st_size
+                        uasset_candidates.append((file_path, size))
+                    except OSError:
+                        continue
+            
+            # 收集够了就提前终止
+            if len(umap_files) + len(uasset_candidates) >= collect_limit:
+                break
+        
+        # 按大小降序排序 uasset
+        uasset_candidates.sort(key=lambda x: x[1], reverse=True)
+        uasset_files = [path for path, _ in uasset_candidates]
 
         # 合并：umap 优先，总量不超过 _SAMPLE_LIMIT
         samples: List[Path] = []
@@ -396,10 +422,21 @@ class UEVersionDetector:
             if asset_path.is_file():
                 search_files = [asset_path]
             else:
-                # umap 优先，最多扫 5 个；uasset 补充最多 10 个
-                umap_files = list(asset_path.rglob('*.umap'))[:5]
-                uasset_files = list(asset_path.rglob('*.uasset'))[:10]
-                search_files = umap_files + uasset_files
+                # 使用 os.walk 采样，避免全量 rglob
+                umap_count = 0
+                uasset_count = 0
+                for root, dirnames, filenames in os.walk(asset_path):
+                    for filename in filenames:
+                        if filename.endswith('.umap') and umap_count < 5:
+                            search_files.append(Path(root) / filename)
+                            umap_count += 1
+                        elif filename.endswith('.uasset') and uasset_count < 10:
+                            search_files.append(Path(root) / filename)
+                            uasset_count += 1
+                    
+                    # 收集够了就提前终止
+                    if umap_count >= 5 and uasset_count >= 10:
+                        break
 
             for file_path in search_files:
                 try:

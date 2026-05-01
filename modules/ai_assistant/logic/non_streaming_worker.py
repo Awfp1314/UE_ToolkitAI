@@ -100,14 +100,14 @@ class NonStreamingWorker(QObject):
 
     def start(self):
         """启动 API 调用（使用 ThreadManager）"""
-        from core.utils.thread_utils import get_thread_manager
+        from core.utils.thread_manager import get_thread_manager
         thread_manager = get_thread_manager()
 
         try:
             _, _, task_id = thread_manager.run_in_thread(
+                func=self._execute_api_call,
                 module_name="ai_assistant",
-                task_name="non_streaming_api_call",
-                func=self._execute_api_call
+                task_name="non_streaming_api_call"
             )
             self._task_id = task_id
             print(f"[NonStreamingWorker] 任务已提交，task_id: {task_id}")

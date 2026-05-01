@@ -73,15 +73,26 @@ class SettingsSection(QWidget):
 class AIAssistantSection(SettingsSection):
     """AI助手设置区块"""
     
-    # API Key 验证信号
-    _api_key_validated = pyqtSignal(dict)  # 验证结果 {'valid': bool, 'error': str}
+    # 信号定义 - 所有异步操作结果通过信号传递到主线程
+    _api_key_validated = pyqtSignal(dict)  # API Key验证结果 {'valid': bool, 'error': str, 'models': list}
+    _api_models_fetched = pyqtSignal(list)  # API模型列表获取成功
+    _api_models_error = pyqtSignal(str)  # API模型列表获取失败
+    _model_validated = pyqtSignal(dict)  # 模型验证结果 {'valid': bool, 'error': str, 'model': str}
     
     def __init__(self, parent=None):
         super().__init__("AI助手设置", "🤖", parent)
         self._loading_config = False  # 加载配置标志
+        self._active_tasks = {}  # 跟踪活动任务ID，用于取消
         
-        # 连接 API Key 验证信号
-        self._api_key_validated.connect(self._on_api_key_validation_result)
+        # 获取线程管理器实例
+        from core.utils.thread_manager import get_thread_manager
+        self._thread_manager = get_thread_manager()
+        
+        # 连接信号（使用QueuedConnection确保线程安全）
+        self._api_key_validated.connect(self._on_api_key_validation_result, Qt.ConnectionType.QueuedConnection)
+        self._api_models_fetched.connect(self._update_api_models_ui, Qt.ConnectionType.QueuedConnection)
+        self._api_models_error.connect(self._on_fetch_models_error, Qt.ConnectionType.QueuedConnection)
+        self._model_validated.connect(self._on_model_validated, Qt.ConnectionType.QueuedConnection)
         
         self.setup_content()
         
@@ -213,15 +224,6 @@ class AIAssistantSection(SettingsSection):
         spacer3.setFixedHeight(8)
         self.content_layout.addWidget(spacer3)
         
-        # AI资源管理部分已移除（不再使用语义模型功能）
-        # ai_resource_label = QLabel("AI 资源管理")
-        # ai_resource_label.setObjectName("SubSectionLabel")
-        # self.content_layout.addWidget(ai_resource_label)
-        
-        # AI资源下载按钮行（已禁用 - 当前未使用语义模型功能）
-        # download_row = self.create_ai_download_row()
-        # self.add_setting_row("AI 模型", download_row, "下载或检查AI助手所需的语义搜索模型")
-        
         # 初始状态：显示API设置，隐藏Ollama设置和URL输入
         self.api_widget.setVisible(True)
         self.ollama_widget.setVisible(False)
@@ -251,9 +253,6 @@ class AIAssistantSection(SettingsSection):
             }
         """)
         self.content_layout.addWidget(save_btn, alignment=Qt.AlignmentFlag.AlignCenter)
-        
-        # 不再自动扫描Ollama模型，只在用户切换到Ollama或点击测试连接时才扫描
-        # QTimer.singleShot(200, self._auto_refresh_ollama_models)  # 已移除
     
     def _add_row_to_layout(self, layout, label_text, widget, description=""):
         """添加设置行到指定布局"""
@@ -395,7 +394,10 @@ class AIAssistantSection(SettingsSection):
         self._fetch_models_btn.setEnabled(False)
         self.api_model_status_label.setText("正在获取模型列表...")
         
-        from threading import Thread
+        # 取消之前的任务（如果存在）
+        old_task_id = self._active_tasks.get('fetch_models')
+        if old_task_id:
+            self._thread_manager.cancel_task(old_task_id)
         
         def fetch_in_background():
             try:
@@ -403,14 +405,31 @@ class AIAssistantSection(SettingsSection):
                 logger.info(f"[获取模型] 开始请求，URL: {api_url}")
                 models = ApiLLMClient.fetch_available_models(api_url, api_key, timeout=10)
                 logger.info(f"[获取模型] 成功，找到 {len(models)} 个模型")
-                self._api_models_fetched.emit(models)
+                return ('success', models)
             except Exception as e:
                 error_str = str(e)
                 logger.error(f"[获取模型] 失败: {error_str}")
-                self._api_models_error.emit(error_str)
+                return ('error', error_str)
         
-        thread = Thread(target=fetch_in_background, daemon=True)
-        thread.start()
+        def on_result(result):
+            # 清理任务ID
+            self._active_tasks.pop('fetch_models', None)
+            self._fetch_models_btn.setEnabled(True)
+            
+            status, data = result
+            if status == 'success':
+                self._api_models_fetched.emit(data)
+            else:
+                self._api_models_error.emit(data)
+        
+        # 使用EnhancedThreadManager执行
+        task_id = self._thread_manager.run_in_thread(
+            fetch_in_background,
+            on_result=on_result,
+            module_name="settings",
+            task_name="fetch_api_models"
+        )
+        self._active_tasks['fetch_models'] = task_id
     
     @staticmethod
     def _format_model_display_name(model_id: str) -> str:
@@ -566,19 +585,33 @@ class AIAssistantSection(SettingsSection):
         self._validate_model_btn.setEnabled(False)
         self.api_model_status_label.setText(f"正在验证 {model} ...")
         
-        from threading import Thread
+        # 取消之前的验证任务
+        old_task_id = self._active_tasks.get('validate_model')
+        if old_task_id:
+            self._thread_manager.cancel_task(old_task_id)
         
         def validate_in_background():
             try:
                 from modules.ai_assistant.clients.api_llm_client import ApiLLMClient
                 result = ApiLLMClient.validate_model(api_url, api_key, model, timeout=15)
                 result['model'] = model
-                self._model_validated.emit(result)
+                return result
             except Exception as e:
-                self._model_validated.emit({'valid': False, 'error': str(e), 'model': model})
+                return {'valid': False, 'error': str(e), 'model': model}
         
-        thread = Thread(target=validate_in_background, daemon=True)
-        thread.start()
+        def on_result(result):
+            # 清理任务ID
+            self._active_tasks.pop('validate_model', None)
+            self._model_validated.emit(result)
+        
+        # 使用EnhancedThreadManager执行
+        task_id = self._thread_manager.run_in_thread(
+            validate_in_background,
+            on_result=on_result,
+            module_name="settings",
+            task_name="validate_api_model"
+        )
+        self._active_tasks['validate_model'] = task_id
     
     def _on_model_validated(self, result):
         """模型验证结果回调（主线程）"""
@@ -663,7 +696,10 @@ class AIAssistantSection(SettingsSection):
         self._ollama_launch_btn.setEnabled(False)
         self._ollama_launch_status.setText("正在检查 Ollama 状态...")
         
-        from threading import Thread
+        # 取消之前的启动任务
+        old_task_id = self._active_tasks.get('launch_ollama')
+        if old_task_id:
+            self._thread_manager.cancel_task(old_task_id)
         
         def check_and_launch():
             try:
@@ -689,40 +725,16 @@ class AIAssistantSection(SettingsSection):
                             )
                             if "ollama app.exe" not in result.stdout.lower():
                                 # 当前是 CLI 模式运行，重启为 GUI 模式
-                                self._ollama_launch_status_signal("正在切换到 GUI 模式...")
-                                try:
-                                    startupinfo_kill = subprocess.STARTUPINFO()
-                                    startupinfo_kill.dwFlags |= subprocess.STARTF_USESHOWWINDOW
-                                    startupinfo_kill.wShowWindow = 0
-                                    subprocess.run(
-                                        ["taskkill", "/F", "/IM", "ollama.exe"],
-                                        startupinfo=startupinfo_kill,
-                                        creationflags=subprocess.CREATE_NO_WINDOW,
-                                        stdout=subprocess.DEVNULL,
-                                        stderr=subprocess.DEVNULL,
-                                        timeout=5,
-                                    )
-                                    import time
-                                    time.sleep(1)
-                                except Exception:
-                                    pass
-                                # 不 return，继续走下面的启动逻辑
+                                return ('status', "正在切换到 GUI 模式...")
                             else:
-                                self.ollama_status_label.setText("✓ Ollama 已在运行")
-                                self._ollama_launch_status_signal("✓ Ollama 已在运行（GUI 模式）")
-                                self._ollama_launch_btn_enable(True)
-                                return
+                                return ('success', "✓ Ollama 已在运行（GUI 模式）")
                         else:
-                            self.ollama_status_label.setText("✓ Ollama 已在运行")
-                            self._ollama_launch_status_signal("✓ Ollama 已在运行")
-                            self._ollama_launch_btn_enable(True)
-                            return
+                            return ('success', "✓ Ollama 已在运行")
                 except Exception:
                     pass
                 
                 # 未运行，启动它
                 # 先清理可能残留的 ollama 进程（避免旧的 CLI 进程的 runner 弹黑窗口）
-                self._ollama_launch_status_signal("正在启动 Ollama...")
                 import subprocess
                 try:
                     startupinfo_kill = subprocess.STARTUPINFO()
@@ -765,39 +777,35 @@ class AIAssistantSection(SettingsSection):
                     try:
                         resp = session.get(f"{ollama_url}/api/version", timeout=2)
                         if resp.status_code == 200:
-                            self._ollama_launch_status_signal(f"✓ Ollama 启动成功")
-                            self._ollama_launch_btn_enable(True)
-                            return
+                            return ('success', "✓ Ollama 启动成功")
                     except Exception:
                         continue
                 
-                self._ollama_launch_status_signal("⚠ 启动超时，请手动检查")
-                self._ollama_launch_btn_enable(True)
+                return ('warning', "⚠ 启动超时，请手动检查")
                 
             except Exception as e:
-                self._ollama_launch_status_signal(f"✗ 启动失败: {str(e)}")
-                self._ollama_launch_btn_enable(True)
+                return ('error', f"✗ 启动失败: {str(e)}")
         
-        thread = Thread(target=check_and_launch, daemon=True)
-        thread.start()
-    
-    def _ollama_launch_status_signal(self, text):
-        """线程安全地更新启动状态标签"""
-        from PyQt6.QtCore import QMetaObject, Qt as QtCore_Qt, Q_ARG
-        QMetaObject.invokeMethod(
-            self._ollama_launch_status, "setText",
-            QtCore_Qt.ConnectionType.QueuedConnection,
-            Q_ARG(str, text)
+        def on_result(result):
+            # 清理任务ID
+            self._active_tasks.pop('launch_ollama', None)
+            self._ollama_launch_btn.setEnabled(True)
+            
+            status, message = result
+            self._ollama_launch_status.setText(message)
+            
+            # 如果成功，更新状态标签
+            if status == 'success':
+                self.ollama_status_label.setText("✓ Ollama 已在运行")
+        
+        # 使用EnhancedThreadManager执行
+        task_id = self._thread_manager.run_in_thread(
+            check_and_launch,
+            on_result=on_result,
+            module_name="settings",
+            task_name="launch_ollama"
         )
-    
-    def _ollama_launch_btn_enable(self, enabled):
-        """线程安全地启用/禁用按钮"""
-        from PyQt6.QtCore import QMetaObject, Qt as QtCore_Qt, Q_ARG
-        QMetaObject.invokeMethod(
-            self._ollama_launch_btn, "setEnabled",
-            QtCore_Qt.ConnectionType.QueuedConnection,
-            Q_ARG(bool, enabled)
-        )
+        self._active_tasks['launch_ollama'] = task_id
     
     def create_ai_download_row(self):
         """创建AI资源下载行"""
@@ -1045,11 +1053,14 @@ class AIAssistantSection(SettingsSection):
     
     def _fetch_ollama_models_and_save(self):
         """获取Ollama模型列表并保存配置"""
-        from threading import Thread
-        
         # 显示加载状态
         self.ollama_status_label.setText("🔄 正在获取模型列表...")
         self.ollama_status_label.setStyleSheet("color: #3498db;")
+        
+        # 取消之前的任务
+        old_task_id = self._active_tasks.get('fetch_ollama_models')
+        if old_task_id:
+            self._thread_manager.cancel_task(old_task_id)
         
         def fetch_in_background():
             try:
@@ -1067,44 +1078,35 @@ class AIAssistantSection(SettingsSection):
                     data = response.json()
                     models = [m.get("name", "") for m in data.get("models", []) if m.get("name")]
                     logger.info(f"[配置保存] 成功获取 {len(models)} 个 Ollama 模型")
-                    
-                    # 通过信号发送结果到主线程
-                    from PyQt6.QtCore import QMetaObject, Qt
-                    QMetaObject.invokeMethod(
-                        self,
-                        "_on_ollama_models_fetched",
-                        Qt.ConnectionType.QueuedConnection,
-                        models
-                    )
+                    return ('success', models)
                 else:
                     logger.error(f"[配置保存] Ollama 请求失败，状态码: {response.status_code}")
-                    QMetaObject.invokeMethod(
-                        self,
-                        "_on_ollama_fetch_error",
-                        Qt.ConnectionType.QueuedConnection,
-                        f"连接失败 (HTTP {response.status_code})"
-                    )
+                    return ('error', f"连接失败 (HTTP {response.status_code})")
             except requests.exceptions.ConnectionError as e:
                 logger.error(f"[配置保存] Ollama 连接失败: {e}")
-                from PyQt6.QtCore import QMetaObject, Qt
-                QMetaObject.invokeMethod(
-                    self,
-                    "_on_ollama_fetch_error",
-                    Qt.ConnectionType.QueuedConnection,
-                    "无法连接到 Ollama 服务，请确保 Ollama 正在运行"
-                )
+                return ('error', "无法连接到 Ollama 服务，请确保 Ollama 正在运行")
             except Exception as e:
                 logger.error(f"[配置保存] 获取 Ollama 模型失败: {e}")
-                from PyQt6.QtCore import QMetaObject, Qt
-                QMetaObject.invokeMethod(
-                    self,
-                    "_on_ollama_fetch_error",
-                    Qt.ConnectionType.QueuedConnection,
-                    str(e)
-                )
+                return ('error', str(e))
         
-        thread = Thread(target=fetch_in_background, daemon=True)
-        thread.start()
+        def on_result(result):
+            # 清理任务ID
+            self._active_tasks.pop('fetch_ollama_models', None)
+            
+            status, data = result
+            if status == 'success':
+                self._on_ollama_models_fetched(data)
+            else:
+                self._on_ollama_fetch_error(data)
+        
+        # 使用EnhancedThreadManager执行
+        task_id = self._thread_manager.run_in_thread(
+            fetch_in_background,
+            on_result=on_result,
+            module_name="settings",
+            task_name="fetch_ollama_models"
+        )
+        self._active_tasks['fetch_ollama_models'] = task_id
     
     @pyqtSlot(list)
     def _on_ollama_models_fetched(self, models):
@@ -1162,11 +1164,14 @@ class AIAssistantSection(SettingsSection):
     
     def _validate_and_save_config(self, api_key: str, api_url: str):
         """验证 API Key 并保存配置"""
-        from threading import Thread
-        
         # 显示验证中状态
         self.api_model_status_label.setText("🔄 正在验证 API Key...")
         self.api_model_status_label.setStyleSheet("color: #3498db;")
+        
+        # 取消之前的验证任务
+        old_task_id = self._active_tasks.get('validate_api_key')
+        if old_task_id:
+            self._thread_manager.cancel_task(old_task_id)
         
         def validate_in_background():
             try:
@@ -1183,9 +1188,7 @@ class AIAssistantSection(SettingsSection):
                     'models': models
                 }
                 logger.info(f"[配置保存] 验证成功，获取到 {len(models)} 个模型")
-                
-                # 通过信号发送结果到主线程
-                self._api_key_validated.emit(result)
+                return result
                     
             except Exception as e:
                 error_msg = str(e)
@@ -1199,10 +1202,21 @@ class AIAssistantSection(SettingsSection):
                 elif 'timeout' in error_msg.lower():
                     error_msg = '连接超时，请检查网络或 API URL'
                 
-                self._api_key_validated.emit({'valid': False, 'error': f"验证失败: {error_msg}", 'models': []})
+                return {'valid': False, 'error': f"验证失败: {error_msg}", 'models': []}
         
-        thread = Thread(target=validate_in_background, daemon=True)
-        thread.start()
+        def on_result(result):
+            # 清理任务ID
+            self._active_tasks.pop('validate_api_key', None)
+            self._api_key_validated.emit(result)
+        
+        # 使用EnhancedThreadManager执行
+        task_id = self._thread_manager.run_in_thread(
+            validate_in_background,
+            on_result=on_result,
+            module_name="settings",
+            task_name="validate_api_key"
+        )
+        self._active_tasks['validate_api_key'] = task_id
     
     def _on_api_key_validation_result(self, result: dict):
         """处理 API Key 验证结果（主线程）"""
@@ -1374,7 +1388,11 @@ class AIAssistantSection(SettingsSection):
         
         self.ollama_status_label.setText("正在测试连接...")
         
-        # 使用线程避免阻塞UI
+        # 取消之前的测试任务
+        old_task_id = self._active_tasks.get('test_ollama')
+        if old_task_id:
+            self._thread_manager.cancel_task(old_task_id)
+        
         def test_connection():
             try:
                 import requests
@@ -1382,11 +1400,14 @@ class AIAssistantSection(SettingsSection):
                 session.trust_env = False
                 session.proxies = {'http': None, 'https': None}
                 response = session.get(f"{ollama_url}/api/version", timeout=5)
-                return response.status_code == 200, response.status_code
+                return (response.status_code == 200, response.status_code)
             except Exception as e:
-                return False, str(e)
+                return (False, str(e))
         
         def on_result(result):
+            # 清理任务ID
+            self._active_tasks.pop('test_ollama', None)
+            
             success, info = result
             if success:
                 self.ollama_status_label.setText("✓ 连接成功！Ollama 服务正常运行")
@@ -1396,21 +1417,32 @@ class AIAssistantSection(SettingsSection):
                 else:
                     self.ollama_status_label.setText(f"✗ 连接失败: {info}")
         
-        # 在后台线程执行
-        from core.utils.thread_utils import get_thread_manager
-        thread_manager = get_thread_manager()
-        thread_manager.run_in_thread(test_connection, on_result=on_result)
+        # 使用EnhancedThreadManager执行
+        task_id = self._thread_manager.run_in_thread(
+            test_connection,
+            on_result=on_result,
+            module_name="settings",
+            task_name="test_ollama_connection"
+        )
+        self._active_tasks['test_ollama'] = task_id
     
     def _check_ai_model_status(self):
         """检查AI模型状态"""
         try:
             from modules.ai_assistant.logic.ai_model_manager import AIModelManager
             
-            # 在后台线程检查
+            # 取消之前的检查任务
+            old_task_id = self._active_tasks.get('check_ai_model')
+            if old_task_id:
+                self._thread_manager.cancel_task(old_task_id)
+            
             def check_status():
                 return AIModelManager.check_model_integrity()
             
             def on_result(available):
+                # 清理任务ID
+                self._active_tasks.pop('check_ai_model', None)
+                
                 if available:
                     self.ai_model_status_label.setText("✓ AI模型已就绪")
                     self.ai_model_status_label.setStyleSheet("color: #4CAF50;")
@@ -1418,9 +1450,14 @@ class AIAssistantSection(SettingsSection):
                     self.ai_model_status_label.setText("✗ AI模型未下载")
                     self.ai_model_status_label.setStyleSheet("color: #FF9800;")
             
-            from core.utils.thread_utils import get_thread_manager
-            thread_manager = get_thread_manager()
-            thread_manager.run_in_thread(check_status, on_result=on_result)
+            # 使用EnhancedThreadManager执行
+            task_id = self._thread_manager.run_in_thread(
+                check_status,
+                on_result=on_result,
+                module_name="settings",
+                task_name="check_ai_model_status"
+            )
+            self._active_tasks['check_ai_model'] = task_id
         except Exception as e:
             logger.error(f"检查AI模型状态失败: {e}", exc_info=True)
             self.ai_model_status_label.setText("✗ 检查失败")
@@ -1463,6 +1500,14 @@ class AIAssistantSection(SettingsSection):
                 "error",
                 parent=self
             ).exec()
+    
+    def cancel_all_tasks(self):
+        """取消所有活动任务（在切换标签页或关闭窗口时调用）"""
+        logger.info(f"[设置] 取消 {len(self._active_tasks)} 个活动任务")
+        for task_name, task_id in list(self._active_tasks.items()):
+            logger.debug(f"[设置] 取消任务: {task_name} (ID: {task_id})")
+            self._thread_manager.cancel_task(task_id)
+        self._active_tasks.clear()
 
 
 class GeneralSection(SettingsSection):
@@ -2246,6 +2291,12 @@ class SettingsWidget(QWidget):
             index: 当前标签页索引
             tab_widget: QTabWidget 实例
         """
+        # 取消 AI 助手标签页的所有活动任务（防止残留任务影响 UI）
+        if self.ai_assistant_section and index != 2:
+            # 切换离开 AI 助手标签页时，取消所有活动任务
+            logger.info("[设置界面] 切换离开 AI 助手标签页，取消所有活动任务")
+            self.ai_assistant_section.cancel_all_tasks()
+        
         # AI 助手标签页的索引是 2（常规=0, 资产设置=1, AI助手=2）
         if index == 2 and self.ai_assistant_section:
             # 切换到 AI 助手标签页时，重新加载配置（丢弃未保存的修改）
