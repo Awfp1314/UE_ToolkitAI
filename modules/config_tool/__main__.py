@@ -15,7 +15,7 @@ class ConfigToolModule:
     
     def __init__(self, parent=None):
         self.parent = parent
-        self.ui: Optional[QWidget] = None  # 延迟初始化UI  # TODO: 改为具体的 UI 类型
+        self.ui: Optional['ConfigToolUI'] = None  # 延迟初始化UI
         self.logic: Optional[ConfigToolLogic] = None
         logger.info("ConfigToolModule 初始化")
     

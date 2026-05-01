@@ -2085,8 +2085,7 @@ class AssetSection(SettingsSection):
         )
         
         if folder:
-            # TODO: 弹出命名对话框
-            # 暂时使用文件夹名作为项目名
+            # 使用文件夹名作为项目名
             from pathlib import Path
             name = Path(folder).name
             self._save_preview_project(folder, name)

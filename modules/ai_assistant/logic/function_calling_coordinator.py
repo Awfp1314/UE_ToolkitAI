@@ -168,6 +168,15 @@ class FunctionCallingCoordinator(QObject):
                 # 获取工具定义
                 tools = self.tools_registry.openai_tool_schemas() if self.tools_registry else None
                 
+                # ⚡ 调试：打印当前消息状态
+                print(f"\n[COORDINATOR] 第 {iteration + 1} 轮迭代")
+                print(f"[COORDINATOR] 当前消息数量: {len(self.messages)}")
+                for i, msg in enumerate(self.messages):
+                    role = msg.get('role', 'unknown')
+                    has_reasoning = 'reasoning_content' in msg
+                    has_tool_calls = 'tool_calls' in msg
+                    print(f"[COORDINATOR]   消息 {i+1}: role={role}, has_reasoning={has_reasoning}, has_tool_calls={has_tool_calls}")
+                
                 # 所有轮次都使用流式请求，这样用户可以看到实时输出
                 # 避免在工具调用后等待 API 响应时 UI 看起来卡住
                 response_data = self._call_llm_streaming_with_tools(self.messages, tools, cancel_token)
@@ -215,7 +224,17 @@ class FunctionCallingCoordinator(QObject):
                         "content": streamed_prefix if streamed_prefix else None,
                         "tool_calls": tool_calls
                     }
+                    # ⚡ DeepSeek thinking mode: 添加 reasoning_content
+                    reasoning_content = response_data.get('reasoning_content')
+                    if reasoning_content:
+                        assistant_message['reasoning_content'] = reasoning_content
+                        self.logger.info(f"[COORDINATOR] ✅ 已添加 reasoning_content 到 assistant_message (长度: {len(reasoning_content)})")
+                    else:
+                        self.logger.warning(f"[COORDINATOR] ⚠️ response_data 中没有 reasoning_content")
+                    
+                    self.logger.info(f"[COORDINATOR] assistant_message 键: {list(assistant_message.keys())}")
                     self.messages.append(assistant_message)
+                    self.logger.info(f"[COORDINATOR] 已将 assistant_message 添加到 self.messages (当前总数: {len(self.messages)})")
 
                     # 执行每个工具
                     for tool_call in tool_calls:
@@ -333,12 +352,19 @@ class FunctionCallingCoordinator(QObject):
                         got_tool_calls = True
                         elapsed = time.time() - start_time
                         self.logger.info(f"[API调用 #{self.api_call_count}] 流式检测到tool_calls - 耗时: {elapsed:.2f}s")
+                        
+                        # ⚡ DeepSeek thinking mode: 从 chunk 中提取 reasoning_content
+                        reasoning_content = chunk.get('reasoning_content')
+                        if reasoning_content:
+                            self.logger.info(f"[COORDINATOR] ✅ 从 chunk 中提取到 reasoning_content (长度: {len(reasoning_content)})")
+                        
                         return {
                             'type': 'tool_calls',
                             'tool_calls': chunk.get('tool_calls'),
                             'content': accumulated_content or None,  # 保留已输出的前置文本
                             'usage': accumulated_usage,
                             'has_streamed_prefix': bool(accumulated_content),  # 标记有前置文本
+                            'reasoning_content': reasoning_content,  # ⚡ 传递 reasoning_content
                         }
 
                     elif chunk_type == 'content':

@@ -105,10 +105,6 @@ class ContextManager:
         # v0.1 新增：远程检索器（延迟加载）
         self.remote_retriever = RemoteRetriever() if V01_AVAILABLE and RemoteRetriever else None
         
-        # 上下文缓存（避免重复计算）
-        self._context_cache = {}
-        self._cache_ttl = 60  # 缓存有效期（秒）
-        
         # Token 控制
         self.max_context_tokens = max_context_tokens
         

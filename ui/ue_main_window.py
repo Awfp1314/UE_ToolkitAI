@@ -865,6 +865,12 @@ class UEMainWindow(QMainWindow):
                 print(f"[ERROR] 无法获取模块: {module_key}")
                 return
 
+            # 提前注入 parent，确保模块在创建 UI 时有正确的父窗口引用
+            if hasattr(module, 'parent') and module.parent is None:
+                module.parent = self
+                self.logger.info(f"提前注入 parent 到模块 {module_key}")
+                print(f"[DEBUG] 提前注入 parent 到模块 {module_key}")
+
             widget = module.get_widget()
             print(f"[DEBUG] module.get_widget() 返回: {widget}")
             if not widget:

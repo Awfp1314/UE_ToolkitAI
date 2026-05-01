@@ -24,7 +24,7 @@ class SiteRecommendationsModule:
             parent: 父组件（可选）
         """
         self.parent = parent
-        self.ui: Optional[QWidget] = None  # TODO: 改为具体的 UI 类型
+        self.ui: Optional['SiteRecommendationsUI'] = None
         self.logic: Optional[SiteRecommendationsLogic] = None
         logger.info("SiteRecommendationsModule 初始化")
     

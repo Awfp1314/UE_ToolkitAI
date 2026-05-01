@@ -99,6 +99,10 @@ class ApiLLMClient(BaseLLMClient):
         
         # Tool calls 累积缓冲区
         self._tool_calls_buffer = []
+        
+        # 初始化 logger
+        from core.logger import get_logger
+        self.logger = get_logger(__name__)
     
     def generate_response(
         self,
@@ -145,6 +149,18 @@ class ApiLLMClient(BaseLLMClient):
                     "messages": context_messages,
                     "temperature": temperature if temperature is not None else self.default_temperature,
                 }
+                
+                # ⚡ 调试：打印消息内容，检查 reasoning_content
+                print(f"[DEBUG] 发送的消息数量: {len(context_messages)}")
+                for i, msg in enumerate(context_messages):
+                    role = msg.get('role', 'unknown')
+                    has_reasoning = 'reasoning_content' in msg
+                    has_tool_calls = 'tool_calls' in msg
+                    content_preview = str(msg.get('content', ''))[:50]
+                    print(f"[DEBUG]   消息 {i+1}: role={role}, has_reasoning={has_reasoning}, has_tool_calls={has_tool_calls}, content={content_preview}...")
+                    if has_reasoning:
+                        reasoning_preview = msg['reasoning_content'][:100]
+                        print(f"[DEBUG]     reasoning_content: {reasoning_preview}...")
                 
                 # 检查 API 是否为 Gemini 后端
                 # 方法1: 检查 URL 中是否包含 gemini/google 关键词
@@ -283,10 +299,15 @@ class ApiLLMClient(BaseLLMClient):
                                 # ⚡ 关键修复：[DONE] 前检查是否有未 yield 的 tool_calls
                                 if self._tool_calls_buffer:
                                     print(f"[DEBUG] [流式] [DONE] 时发现未yield的tool_calls，数量: {len(self._tool_calls_buffer)}")
-                                    yield {
+                                    result = {
                                         'type': 'tool_calls',
                                         'tool_calls': self._get_accumulated_tool_calls()
                                     }
+                                    # ⚡ DeepSeek thinking mode: 附加 reasoning_content
+                                    if hasattr(self, '_reasoning_buffer') and self._reasoning_buffer:
+                                        result['reasoning_content'] = self._reasoning_buffer
+                                        self._reasoning_buffer = ''
+                                    yield result
                                 return
                             
                             # 解析并提取内容
@@ -309,6 +330,17 @@ class ApiLLMClient(BaseLLMClient):
                                     choice = data['choices'][0]
                                     delta = choice.get('delta', {})
                                     
+                                    # ⚡ DeepSeek thinking mode: 捕获 reasoning_content
+                                    reasoning_content = delta.get('reasoning_content')
+                                    if reasoning_content:
+                                        # 累积 reasoning_content（可能分多个 chunk）
+                                        if not hasattr(self, '_reasoning_buffer'):
+                                            self._reasoning_buffer = ''
+                                        self._reasoning_buffer += reasoning_content
+                                        self.logger.info(f"[API_CLIENT] 捕获 reasoning_content chunk (长度: {len(reasoning_content)}, 总长度: {len(self._reasoning_buffer)})")
+                                        # 不 yield reasoning_content，只在内部累积
+                                        continue
+                                    
                                     # 检测 tool_calls（优先级更高）
                                     tool_calls = delta.get('tool_calls')
                                     if tool_calls:
@@ -319,21 +351,34 @@ class ApiLLMClient(BaseLLMClient):
                                     # 检测 finish_reason
                                     finish_reason = choice.get('finish_reason')
                                     if finish_reason == 'tool_calls' or finish_reason == 'function_call':
-                                        # 返回完整的 tool_calls
-                                        yield {
+                                        # 返回完整的 tool_calls（包含 reasoning_content）
+                                        result = {
                                             'type': 'tool_calls',
                                             'tool_calls': self._get_accumulated_tool_calls()
                                         }
+                                        # ⚡ DeepSeek thinking mode: 附加 reasoning_content
+                                        if hasattr(self, '_reasoning_buffer') and self._reasoning_buffer:
+                                            result['reasoning_content'] = self._reasoning_buffer
+                                            self.logger.info(f"[API_CLIENT] ✅ 附加 reasoning_content 到结果 (长度: {len(self._reasoning_buffer)})")
+                                            self._reasoning_buffer = ''  # 清空缓冲区
+                                        else:
+                                            self.logger.warning(f"[API_CLIENT] ⚠️ finish_reason={finish_reason} 但没有 reasoning_content")
+                                        yield result
                                         return
                                     
                                     # ⚡ 关键修复：任何 finish_reason（如 'stop'）时，
                                     # 检查是否有累积的 tool_calls 未 yield
                                     if finish_reason and self._tool_calls_buffer:
                                         print(f"[DEBUG] [流式] finish_reason='{finish_reason}' 但有累积的tool_calls，数量: {len(self._tool_calls_buffer)}")
-                                        yield {
+                                        result = {
                                             'type': 'tool_calls',
                                             'tool_calls': self._get_accumulated_tool_calls()
                                         }
+                                        # ⚡ DeepSeek thinking mode: 附加 reasoning_content
+                                        if hasattr(self, '_reasoning_buffer') and self._reasoning_buffer:
+                                            result['reasoning_content'] = self._reasoning_buffer
+                                            self._reasoning_buffer = ''
+                                        yield result
                                         return
                                     
                                     # 正常的文本内容
@@ -360,10 +405,15 @@ class ApiLLMClient(BaseLLMClient):
                 # ⚡ 关键修复：流结束后（连接关闭/无 [DONE]），检查未 yield 的 tool_calls
                 if self._tool_calls_buffer:
                     print(f"[DEBUG] [流式] 流结束时发现未yield的tool_calls，数量: {len(self._tool_calls_buffer)}")
-                    yield {
+                    result = {
                         'type': 'tool_calls',
                         'tool_calls': self._get_accumulated_tool_calls()
                     }
+                    # ⚡ DeepSeek thinking mode: 附加 reasoning_content
+                    if hasattr(self, '_reasoning_buffer') and self._reasoning_buffer:
+                        result['reasoning_content'] = self._reasoning_buffer
+                        self._reasoning_buffer = ''
+                    yield result
                     return
             else:
                 # 非流式响应

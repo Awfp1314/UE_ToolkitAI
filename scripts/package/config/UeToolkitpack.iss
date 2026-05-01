@@ -111,7 +111,7 @@ Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: de
 
 [Run]
 ; 打开在线文档（默认勾选）
-Filename: "https://www.unrealenginetookit.top/docs"; Description: "查看在线文档"; Flags: shellexec postinstall skipifsilent
+Filename: "https://www.unrealenginetookit.top/docs"; Description: "查看在线文档"; Flags: shellexec postinstall skipifsilent unchecked
 
 [Code]
 
@@ -378,6 +378,20 @@ begin
   end;
 end;
 
+// 刷新桌面图标（不重启资源管理器）
+procedure RefreshDesktopIcons();
+var
+  ResultCode: Integer;
+begin
+  // 使用 PowerShell 刷新桌面图标缓存（不重启 explorer）
+  Exec('powershell.exe', 
+       '-NoProfile -Command "' +
+       '$code = ''[DllImport(\"shell32.dll\", CharSet = CharSet.Auto)] public static extern void SHChangeNotify(int wEventId, int uFlags, IntPtr dwItem1, IntPtr dwItem2);''; ' +
+       '$type = Add-Type -MemberDefinition $code -Name ShellNotify -Namespace Win32 -PassThru; ' +
+       '$type::SHChangeNotify(0x8000000, 0, [IntPtr]::Zero, [IntPtr]::Zero)"',
+       '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+end;
+
 // 安装完成后的操作
 procedure CurStepChanged(CurStep: TSetupStep);
 var
@@ -440,5 +454,20 @@ begin
         WizardForm.ProgressGauge.Style := npbstNormal;
       end;
     end;
+    
+    // 刷新桌面图标（解决图标缓存问题）
+    RefreshDesktopIcons();
+  end;
+end;
+
+// 安装完成后显示提示
+procedure DeinitializeSetup();
+begin
+  // 如果创建了桌面图标，提示用户刷新
+  if WizardIsTaskSelected('desktopicon') then
+  begin
+    MsgBox('安装完成！' + #13#10#13#10 +
+           '提示：如果桌面图标显示不正确，请按 F5 刷新桌面。',
+           mbInformation, MB_OK);
   end;
 end;

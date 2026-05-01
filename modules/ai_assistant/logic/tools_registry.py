@@ -160,10 +160,6 @@ class ToolsRegistry:
         # 使用 Remote Control API (HTTP)
         ue_base_url = "http://127.0.0.1:30010"
         
-        # TODO: 未来可以从配置管理器读取这些设置
-        # if config_reader:
-        #     ue_base_url = config_reader.get('ue_remote_control_url', 'http://127.0.0.1:30010')
-        
         self.ue_client = UEToolClient(base_url=ue_base_url)
         self.blueprint_analyzer_client = BlueprintAnalyzerClient(base_url=ue_base_url)
         self.logger.info(f"UE HTTP客户端已初始化 (目标: {ue_base_url})")
@@ -1045,7 +1041,11 @@ class ToolsRegistry:
             result = self.blueprint_analyzer_client.get_editor_context()
             
             if result.get("status") == "error":
-                return f"[错误] {result.get('message', '未知错误')}"
+                error_msg = result.get('message', '未知错误')
+                # 友好的错误提示，不要吓到用户
+                if "无法连接" in error_msg or "连接被拒绝" in error_msg:
+                    return "[提示] UE 编辑器未连接。如需使用蓝图分析功能，请先启动 UE 编辑器并确保 Blueprint Extractor 插件已启用。"
+                return f"[错误] {error_msg}"
             
             # 解析 JSON 响应
             import json

@@ -45,7 +45,7 @@ class AIAssistantModule:
             parent: 父组件（可选）
         """
         self.parent = parent
-        self.chat_window: Optional[QWidget] = None  # TODO: 改为具体的 ChatWindow 类型
+        self.chat_window: Optional['ChatWindow'] = None
         self.asset_manager_logic = None  # 存储asset_manager逻辑层引用
         self.config_tool_logic = None  # 存储config_tool逻辑层引用
         self.site_recommendations_logic = None  # 存储site_recommendations逻辑层引用
@@ -384,11 +384,26 @@ class AIAssistantModule:
             logger.info("创建 AI 助手聊天窗口")
             from modules.ai_assistant.ui import ChatWindow
             from modules.ai_assistant.ui.session_list_widget import SessionListWidget
-            from PyQt6.QtWidgets import QWidget, QHBoxLayout
+            from PyQt6.QtWidgets import QWidget, QHBoxLayout, QApplication
             
-            # 创建包装容器（设置 parent 为模块的 parent，防止成为独立窗口）
+            # 动态获取正确的 parent（防止首次启动时 self.parent 为 None）
+            parent = self.parent
+            if parent is None:
+                logger.warning("self.parent 为 None，尝试动态获取主窗口")
+                app = QApplication.instance()
+                if app:
+                    main_windows = [w for w in app.topLevelWidgets() if w.__class__.__name__ == 'UEMainWindow']
+                    if main_windows:
+                        parent = main_windows[0]
+                        logger.info(f"动态获取到主窗口: {parent}")
+                    else:
+                        logger.error("未找到 UEMainWindow 实例")
+                else:
+                    logger.error("QApplication 实例不存在")
+            
+            # 创建包装容器（设置 parent 为正确的主窗口，防止成为独立窗口）
             # 结构: VBox[ HBox[ sidebar | left_spacer | ChatWindow | stretch ] ]
-            wrapper = QWidget(self.parent)
+            wrapper = QWidget(parent)
             # 设置窗口标志，确保不会被当作独立窗口
             from PyQt6.QtCore import Qt
             wrapper.setWindowFlags(Qt.WindowType.Widget)

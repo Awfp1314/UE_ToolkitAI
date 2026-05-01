@@ -150,6 +150,11 @@ class ProjectRegistry:
                 added += 1
 
         if added:
+            # 从新增工程中提取分类，合并到现有分类列表
+            new_categories = {proj.get("category", "默认") for proj in projects}
+            existing_categories = set(data.get("categories", ["默认"]))
+            data["categories"] = sorted(existing_categories | new_categories)
+            
             data["last_updated"] = datetime.now().isoformat()
             self.save_registry(data)
             logger.info(f"新增 {added} 个工程到注册表")
@@ -180,9 +185,13 @@ class ProjectRegistry:
                 proj["category"] = existing_proj.get("category", proj.get("category", "默认"))
             merged_projects.append(proj)
         
+        # 从工程中提取所有分类，合并到现有分类列表
+        scanned_categories = {proj.get("category", "默认") for proj in merged_projects}
+        merged_categories = sorted(set(existing_categories) | scanned_categories)
+        
         data = self._empty_registry()
         data["projects"] = merged_projects
-        data["categories"] = existing_categories  # 保留现有分类
+        data["categories"] = merged_categories  # 合并现有分类和扫描到的分类
         data["last_full_scan"] = datetime.now().isoformat()
         data["last_updated"] = datetime.now().isoformat()
         self.save_registry(data)
